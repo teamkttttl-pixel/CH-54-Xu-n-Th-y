@@ -1417,32 +1417,39 @@ function ReceiptsModule({ employee }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Đếm số hình thức thanh toán trong cùng 1 đơn để biết khi nào nên "in gộp"
-  const countByOrder = rows.reduce((m, r) => {
-    const key = r.sales_orders?.order_code;
-    m[key] = (m[key] || 0) + 1;
-    return m;
-  }, {});
+  // Gộp các phiếu cùng 1 đơn thành 1 nhóm — mỗi đơn chỉ hiện 1 dòng trong bảng,
+  // dù có bao nhiêu hình thức thanh toán, tránh lặp lại và nhầm lẫn.
+  const groups = [];
+  const groupIndexByOrder = {};
+  for (const r of rows) {
+    const key = r.sales_orders?.order_code || r.id;
+    if (groupIndexByOrder[key] === undefined) {
+      groupIndexByOrder[key] = groups.length;
+      groups.push({ orderCode: key, sales_orders: r.sales_orders, payments: [r] });
+    } else {
+      groups[groupIndexByOrder[key]].payments.push(r);
+    }
+  }
 
-  const openPrint = async (row, mergeOrder) => {
-    const orderPayments = mergeOrder ? rows.filter((r) => r.sales_orders?.order_code === row.sales_orders?.order_code) : [row];
+  const openPrint = async (group) => {
+    const first = group.payments[0];
     const [{ data: customer }, { data: device }] = await Promise.all([
-      supabase.from("customers").select("*").eq("id", row.sales_orders.customer_id).maybeSingle(),
-      supabase.from("devices").select("*").eq("id", row.sales_orders.device_id).maybeSingle(),
+      supabase.from("customers").select("*").eq("id", first.sales_orders.customer_id).maybeSingle(),
+      supabase.from("devices").select("*").eq("id", first.sales_orders.device_id).maybeSingle(),
     ]);
-    setPrintData({ row, customer, device, payments: orderPayments });
+    setPrintData({ row: first, customer, device, payments: group.payments });
   };
 
   return (
     <div>
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-800">Phiếu thu/chi</h2>
-        <p className="text-xs text-slate-400">Toàn bộ phiếu thu phát sinh từ đơn hàng bán — đơn có nhiều hình thức thanh toán có thể in gộp thành 1 phiếu</p>
+        <p className="text-xs text-slate-400">Mỗi đơn hàng 1 dòng — đơn có nhiều hình thức thanh toán in ra sẽ gộp thành 1 phiếu duy nhất</p>
       </div>
       <Card className="p-0 overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
-        ) : rows.length === 0 ? (
+        ) : groups.length === 0 ? (
           <EmptyState icon={Receipt} text="Chưa có phiếu thu/chi nào." />
         ) : (
           <div className="overflow-x-auto">
@@ -1456,26 +1463,21 @@ function ReceiptsModule({ employee }) {
                 <th className="px-3 py-2"></th>
               </tr></thead>
               <tbody>
-                {rows.map((r) => {
-                  const orderCode = r.sales_orders?.order_code;
-                  const siblingCount = countByOrder[orderCode] || 1;
+                {groups.map((g) => {
+                  const total = g.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+                  const methods = g.payments.map((p) => PAYMENT_METHOD_LABELS[p.method]).join(" + ");
+                  const codes = g.payments.map((p) => p.payment_code).join(", ");
                   return (
-                    <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                      <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{r.payment_code}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{orderCode}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{PAYMENT_METHOD_LABELS[r.method]}</td>
-                      <td className="px-3 py-2.5 text-slate-600">{fmtVND(r.amount)}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{fmtDate(r.created_at)}</td>
+                    <tr key={g.orderCode} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                      <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{codes}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{g.orderCode}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{methods}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{fmtVND(total)}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{fmtDate(g.payments[0].created_at)}</td>
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        {siblingCount > 1 ? (
-                          <button onClick={() => openPrint(r, true)} className="text-brand-600 hover:underline text-xs flex items-center gap-1 ml-auto">
-                            <Printer size={12} /> In gộp ({siblingCount} hình thức)
-                          </button>
-                        ) : (
-                          <button onClick={() => openPrint(r, false)} className="text-brand-600 hover:underline text-xs flex items-center gap-1 ml-auto">
-                            <Printer size={12} /> In
-                          </button>
-                        )}
+                        <button onClick={() => openPrint(g)} className="text-brand-600 hover:underline text-xs flex items-center gap-1 ml-auto">
+                          <Printer size={12} /> {g.payments.length > 1 ? `In gộp (${g.payments.length} hình thức)` : "In"}
+                        </button>
                       </td>
                     </tr>
                   );
