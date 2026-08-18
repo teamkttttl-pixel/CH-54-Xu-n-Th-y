@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Smartphone, ShoppingCart, Receipt, FileText,
   BarChart3, UserCog, ScrollText, Settings, LogOut, Search, Plus, X,
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
-  History,
+  History, Printer, Wallet, Landmark, CalendarClock, ChevronDown,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -63,6 +63,17 @@ const DEVICE_STATUS_STYLES = {
 const DEVICE_CONDITION_LABELS = {
   new: "Máy mới",
   used: "Máy cũ",
+};
+
+const PAYMENT_METHOD_LABELS = {
+  cash: "Tiền mặt",
+  bank_transfer: "Chuyển khoản",
+  installment: "Trả góp",
+};
+const PAYMENT_METHOD_ICONS = {
+  cash: Wallet,
+  bank_transfer: Landmark,
+  installment: CalendarClock,
 };
 
 /* ---------------------------------------------------------------------- */
@@ -220,6 +231,26 @@ function StatCard({ label, value, icon: Icon, comingSoon }) {
 }
 
 function DashboardModule({ employee, customerCount, inStockCount }) {
+  const [todayStats, setTodayStats] = useState({ orders: 0, revenue: 0 });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    supabase
+      .from("sales_orders")
+      .select("total_amount")
+      .eq("status", "completed")
+      .gte("created_at", startOfDay.toISOString())
+      .then(({ data }) => {
+        if (!active) return;
+        const revenue = (data || []).reduce((s, o) => s + Number(o.total_amount || 0), 0);
+        setTodayStats({ orders: (data || []).length, revenue });
+        setLoadingStats(false);
+      });
+    return () => { active = false; };
+  }, []);
+
   return (
     <div>
       <div className="mb-5">
@@ -229,14 +260,15 @@ function DashboardModule({ employee, customerCount, inStockCount }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Tổng khách hàng" value={customerCount} icon={Users} />
         <StatCard label="Tồn kho (IMEI)" value={inStockCount} icon={Smartphone} />
-        <StatCard label="Đơn hàng hôm nay" icon={ShoppingCart} comingSoon />
-        <StatCard label="Doanh thu hôm nay" icon={BarChart3} comingSoon />
+        <StatCard label="Đơn hàng hôm nay" value={loadingStats ? "…" : todayStats.orders} icon={ShoppingCart} />
+        <StatCard label="Doanh thu hôm nay" value={loadingStats ? "…" : fmtVND(todayStats.revenue)} icon={BarChart3} />
       </div>
       <Card className="p-5 mt-4">
         <p className="text-sm font-medium text-slate-700 mb-1">Tiến độ triển khai</p>
         <p className="text-xs text-slate-400 leading-relaxed">
-          Phase 1 (Đăng nhập, phân quyền, Khách hàng) và Phase 2 (Kho hàng theo IMEI) đang hoạt động.
-          Đơn hàng bán + Phiếu thu/chi + Hợp đồng (Phase 3) sẽ được bổ sung ở lần cập nhật tiếp theo.
+          Phase 1 (Đăng nhập, phân quyền, Khách hàng), Phase 2 (Kho hàng theo IMEI) và Phase 3
+          (Đơn hàng bán, Phiếu thu/chi, Hợp đồng) đang hoạt động. Hóa đơn thuế + Báo cáo + Audit Log
+          sẽ được bổ sung ở các lần cập nhật tiếp theo.
         </p>
       </Card>
     </div>
@@ -773,6 +805,676 @@ function InventoryModule({ employee, onCountChange }) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Print-friendly document modal — Phiếu thu & Hợp đồng                  */
+/* ---------------------------------------------------------------------- */
+
+function PrintDocModal({ type, order, customer, device, payments, contract, onClose }) {
+  const today = fmtDate(new Date());
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-start sm:items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0">
+      <div className="bg-white rounded-2xl print:rounded-none shadow-xl w-full max-w-2xl p-6 sm:p-10 my-6 print:my-0 print:shadow-none print:max-w-none">
+        <div className="flex items-center justify-end gap-2 mb-4 print:hidden">
+          <button onClick={() => window.print()} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Printer size={15} /> In
+          </button>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600 rounded-xl px-3 py-2 text-sm">Đóng</button>
+        </div>
+
+        <div className="text-center mb-6">
+          <p className="text-xs text-slate-400">CH 54 Xuân Thủy — Quản lý mua bán điện thoại</p>
+          <h2 className="text-lg font-bold text-slate-800 mt-1">
+            {type === "contract" ? "HỢP ĐỒNG MUA BÁN ĐIỆN THOẠI" : "PHIẾU THU TIỀN"}
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Số: {type === "contract" ? contract?.contract_code : payments?.[0]?.payment_code} — Ngày {today}
+          </p>
+        </div>
+
+        <div className="text-sm text-slate-700 space-y-1 mb-4">
+          <p><span className="text-slate-400">Mã đơn hàng:</span> {order?.order_code}</p>
+          <p><span className="text-slate-400">Khách hàng:</span> {customer?.full_name}</p>
+          {customer?.phone && <p><span className="text-slate-400">SĐT:</span> {customer.phone}</p>}
+          {customer?.cccd && <p><span className="text-slate-400">CCCD:</span> {customer.cccd} {customer.cccd_issue_date && `— cấp ${fmtDate(customer.cccd_issue_date)}`} {customer.cccd_issue_place}</p>}
+          {customer?.address && <p><span className="text-slate-400">Địa chỉ:</span> {customer.address}</p>}
+        </div>
+
+        <div className="text-sm text-slate-700 space-y-1 mb-4 border-t border-dashed border-slate-200 pt-4">
+          <p className="font-medium text-slate-800">Thông tin máy</p>
+          <p>{device?.model} {[device?.storage, device?.color].filter(Boolean).join(" · ")} — {DEVICE_CONDITION_LABELS[device?.condition]}</p>
+          <p><span className="text-slate-400">IMEI:</span> {device?.imei}</p>
+        </div>
+
+        <div className="text-sm text-slate-700 space-y-1 mb-4 border-t border-dashed border-slate-200 pt-4">
+          <div className="flex justify-between"><span className="text-slate-400">Giá bán</span><span>{fmtVND(order?.sale_price)}</span></div>
+          {order?.discount > 0 && <div className="flex justify-between"><span className="text-slate-400">Giảm giá</span><span>-{fmtVND(order.discount)}</span></div>}
+          <div className="flex justify-between font-semibold text-slate-800"><span>Tổng tiền</span><span>{fmtVND(order?.total_amount)}</span></div>
+        </div>
+
+        <div className="text-sm text-slate-700 space-y-1.5 mb-6 border-t border-dashed border-slate-200 pt-4">
+          <p className="font-medium text-slate-800 mb-1">
+            {type === "contract" ? "Hình thức thanh toán" : "Chi tiết thu tiền"}
+          </p>
+          {payments?.map((p) => (
+            <div key={p.id} className="flex justify-between">
+              <span className="text-slate-500">
+                {PAYMENT_METHOD_LABELS[p.method]}
+                {p.method === "installment" && p.installment_provider ? ` (${p.installment_provider}${p.installment_contract_code ? " · " + p.installment_contract_code : ""})` : ""}
+              </span>
+              <span>{fmtVND(p.amount)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-center text-sm text-slate-600 mt-10">
+          <div>
+            <p className="font-medium text-slate-700 mb-12">Khách hàng</p>
+            <p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
+          </div>
+          <div>
+            <p className="font-medium text-slate-700 mb-12">Đại diện cửa hàng</p>
+            <p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Orders module — sales order + multi-method payments + auto contract   */
+/* ---------------------------------------------------------------------- */
+
+function CustomerPicker({ value, onSelect }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!query.trim()) { setResults([]); return; }
+    let active = true;
+    setLoading(true);
+    const t = setTimeout(async () => {
+      const q = query.trim();
+      const { data } = await supabase
+        .from("customers")
+        .select("*")
+        .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,cccd.ilike.%${q}%`)
+        .limit(8);
+      if (active) { setResults(data || []); setLoading(false); }
+    }, 300);
+    return () => { active = false; clearTimeout(t); };
+  }, [query]);
+
+  if (value) {
+    return (
+      <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-slate-700">{value.full_name}</p>
+          <p className="text-xs text-slate-400">{value.phone || value.cccd || "—"}</p>
+        </div>
+        <button type="button" onClick={() => onSelect(null)} className="text-xs text-brand-600 hover:underline">Đổi</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Tìm khách hàng theo tên, SĐT, CCCD..."
+          className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+        />
+      </div>
+      {open && query.trim() && (
+        <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
+          {loading ? (
+            <div className="p-3 text-xs text-slate-400 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
+          ) : results.length === 0 ? (
+            <div className="p-3 text-xs text-slate-400">Không tìm thấy — kiểm tra lại tên/SĐT/CCCD.</div>
+          ) : (
+            results.map((c) => (
+              <button
+                type="button"
+                key={c.id}
+                onClick={() => { onSelect(c); setOpen(false); setQuery(""); }}
+                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
+              >
+                <p className="font-medium text-slate-700">{c.full_name}</p>
+                <p className="text-xs text-slate-400">{c.phone || "—"} {c.cccd ? `· CCCD ${c.cccd}` : ""}</p>
+              </button>
+            ))
+          )}
+          <p className="px-3 py-2 text-xs text-slate-400 border-t border-slate-50">
+            Không thấy khách? Vào mục Khách hàng để thêm mới trước.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DevicePicker({ value, onSelect }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    const t = setTimeout(async () => {
+      let req = supabase.from("devices").select("*").eq("status", "in_stock").order("created_at", { ascending: false }).limit(8);
+      if (query.trim()) req = req.or(`imei.ilike.%${query.trim()}%,model.ilike.%${query.trim()}%`);
+      const { data } = await req;
+      if (active) { setResults(data || []); setLoading(false); }
+    }, 300);
+    return () => { active = false; clearTimeout(t); };
+  }, [query]);
+
+  if (value) {
+    return (
+      <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-slate-700">{value.model} {[value.storage, value.color].filter(Boolean).join(" · ")}</p>
+          <p className="text-xs text-slate-400">IMEI {value.imei}</p>
+        </div>
+        <button type="button" onClick={() => onSelect(null)} className="text-xs text-brand-600 hover:underline">Đổi</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Tìm máy còn hàng theo IMEI, model..."
+          className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+        />
+      </div>
+      {open && (
+        <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
+          {loading ? (
+            <div className="p-3 text-xs text-slate-400 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
+          ) : results.length === 0 ? (
+            <div className="p-3 text-xs text-slate-400">Không có máy còn hàng khớp tìm kiếm.</div>
+          ) : (
+            results.map((d) => (
+              <button
+                type="button"
+                key={d.id}
+                onClick={() => { onSelect(d); setOpen(false); setQuery(""); }}
+                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
+              >
+                <p className="font-medium text-slate-700">{d.model} {[d.storage, d.color].filter(Boolean).join(" · ")}</p>
+                <p className="text-xs text-slate-400">IMEI {d.imei} · Giá đề xuất {fmtVND(d.sale_price)}</p>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaymentRows({ rows, setRows, total }) {
+  const paid = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const remaining = total - paid;
+
+  const update = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((rs) => [...rs, { method: "cash", amount: remaining > 0 ? remaining : "", installment_provider: "", installment_contract_code: "", note: "" }]);
+  const removeRow = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="space-y-2">
+      {rows.map((r, i) => {
+        const Icon = PAYMENT_METHOD_ICONS[r.method] || Wallet;
+        return (
+          <div key={i} className="bg-slate-50 rounded-xl p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Icon size={15} className="text-slate-400 shrink-0" />
+              <select
+                value={r.method}
+                onChange={(e) => update(i, { method: e.target.value })}
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm flex-1"
+              >
+                <option value="cash">Tiền mặt</option>
+                <option value="bank_transfer">Chuyển khoản</option>
+                <option value="installment">Trả góp</option>
+              </select>
+              <input
+                type="number"
+                value={r.amount}
+                onChange={(e) => update(i, { amount: e.target.value })}
+                placeholder="Số tiền"
+                className="w-32 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              />
+              {rows.length > 1 && (
+                <button type="button" onClick={() => removeRow(i)} className="text-rose-400 hover:text-rose-600"><X size={15} /></button>
+              )}
+            </div>
+            {r.method === "installment" && (
+              <div className="grid grid-cols-2 gap-2 pl-6">
+                <input
+                  value={r.installment_provider}
+                  onChange={(e) => update(i, { installment_provider: e.target.value })}
+                  placeholder="Đơn vị hỗ trợ (Mira...)"
+                  className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                />
+                <input
+                  value={r.installment_contract_code}
+                  onChange={(e) => update(i, { installment_contract_code: e.target.value })}
+                  placeholder="Mã hồ sơ trả góp"
+                  className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <button type="button" onClick={addRow} className="text-xs text-brand-600 hover:underline flex items-center gap-1">
+        <Plus size={13} /> Thêm hình thức thanh toán
+      </button>
+      <div className={classNames(
+        "text-xs px-3 py-2 rounded-lg",
+        remaining === 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+      )}>
+        Đã phân bổ {fmtVND(paid)} / {fmtVND(total)} {remaining !== 0 && `— còn thiếu ${fmtVND(remaining)}`}
+      </div>
+    </div>
+  );
+}
+
+function OrderForm({ onCancel, onSaved, employee }) {
+  const [customer, setCustomer] = useState(null);
+  const [device, setDevice] = useState(null);
+  const [salePrice, setSalePrice] = useState("");
+  const [discount, setDiscount] = useState("0");
+  const [notes, setNotes] = useState("");
+  const [payments, setPayments] = useState([{ method: "cash", amount: "", installment_provider: "", installment_contract_code: "", note: "" }]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (device && !salePrice) setSalePrice(device.sale_price ?? "");
+  }, [device]); // eslint-disable-line
+
+  const total = Math.max(0, (Number(salePrice) || 0) - (Number(discount) || 0));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!customer) { setError("Vui lòng chọn khách hàng."); return; }
+    if (!device) { setError("Vui lòng chọn máy bán (còn hàng)."); return; }
+    if (!salePrice || Number(salePrice) <= 0) { setError("Vui lòng nhập giá bán hợp lệ."); return; }
+    const paidTotal = payments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    if (Math.round(paidTotal) !== Math.round(total)) { setError("Tổng các hình thức thanh toán phải bằng tổng tiền đơn hàng."); return; }
+    if (payments.some((r) => !r.amount || Number(r.amount) <= 0)) { setError("Mỗi hình thức thanh toán cần nhập số tiền hợp lệ."); return; }
+
+    setSaving(true);
+    try {
+      const orderPayload = {
+        customer_id: customer.id,
+        device_id: device.id,
+        sale_price: Number(salePrice),
+        discount: Number(discount) || 0,
+        total_amount: total,
+        notes: notes.trim() || null,
+        created_by: employee.id,
+        updated_by: employee.id,
+      };
+      const { data: order, error: orderErr } = await supabase.from("sales_orders").insert(orderPayload).select().maybeSingle();
+      if (orderErr) throw orderErr;
+
+      const paymentRows = payments.map((r) => ({
+        order_id: order.id,
+        method: r.method,
+        amount: Number(r.amount),
+        installment_provider: r.method === "installment" ? (r.installment_provider.trim() || null) : null,
+        installment_contract_code: r.method === "installment" ? (r.installment_contract_code.trim() || null) : null,
+        note: r.note?.trim() || null,
+        created_by: employee.id,
+      }));
+      const { error: payErr } = await supabase.from("order_payments").insert(paymentRows);
+      if (payErr) throw payErr;
+
+      const { error: contractErr } = await supabase.from("contracts").insert({ order_id: order.id, created_by: employee.id });
+      if (contractErr) throw contractErr;
+
+      const { data: soldDevice, error: devErr } = await supabase
+        .from("devices").update({ status: "sold", updated_by: employee.id }).eq("id", device.id).select().maybeSingle();
+      if (devErr) throw devErr;
+
+      await supabase.from("audit_logs").insert([
+        { table_name: "sales_orders", record_id: order.id, action: "create", new_data: order, performed_by: employee.id },
+        { table_name: "devices", record_id: device.id, action: "update", old_data: device, new_data: soldDevice, performed_by: employee.id },
+      ]);
+
+      onSaved();
+    } catch (err) {
+      setError(err.message || "Không tạo được đơn hàng, vui lòng thử lại.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-4 sm:p-5 mb-5">
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-semibold text-slate-800 text-sm">Tạo đơn hàng bán</p>
+        <button onClick={onCancel} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+      </div>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Khách hàng *</span>
+          <CustomerPicker value={customer} onSelect={setCustomer} />
+        </div>
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Máy bán (IMEI) *</span>
+          <DevicePicker value={device} onSelect={setDevice} />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <TextField label="Giá bán (đ) *" type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} />
+          <TextField label="Giảm giá (đ)" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+        </div>
+        <div className="flex justify-between items-center bg-brand-50 rounded-xl px-3 py-2.5 text-sm">
+          <span className="text-slate-500">Tổng tiền đơn hàng</span>
+          <span className="font-semibold text-brand-700">{fmtVND(total)}</span>
+        </div>
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức thanh toán *</span>
+          <PaymentRows rows={payments} setRows={setPayments} total={total} />
+        </div>
+        <TextField label="Ghi chú" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex gap-2">
+          <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
+            {saving && <Loader2 size={14} className="animate-spin" />} Hoàn tất đơn hàng
+          </button>
+          <button type="button" onClick={onCancel} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function OrderRow({ order, employee, onDeleted }) {
+  const [expanded, setExpanded] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [printType, setPrintType] = useState(null);
+  const canDelete = employee.role === "quan_ly";
+
+  const loadDetail = async () => {
+    if (detail) { setExpanded((s) => !s); return; }
+    setLoadingDetail(true);
+    const [{ data: customer }, { data: device }, { data: payments }, { data: contract }] = await Promise.all([
+      supabase.from("customers").select("*").eq("id", order.customer_id).maybeSingle(),
+      supabase.from("devices").select("*").eq("id", order.device_id).maybeSingle(),
+      supabase.from("order_payments").select("*").eq("order_id", order.id).order("created_at", { ascending: true }),
+      supabase.from("contracts").select("*").eq("order_id", order.id).maybeSingle(),
+    ]);
+    setDetail({ customer, device, payments: payments || [], contract });
+    setLoadingDetail(false);
+    setExpanded(true);
+  };
+
+  const remove = async () => {
+    if (!confirm(`Xóa đơn hàng "${order.order_code}"? Máy sẽ không tự động chuyển lại trạng thái Còn hàng.`)) return;
+    const { error } = await supabase.from("sales_orders").delete().eq("id", order.id);
+    if (error) { alert(error.message); return; }
+    await supabase.from("audit_logs").insert({ table_name: "sales_orders", record_id: order.id, action: "delete", old_data: order, performed_by: employee.id });
+    onDeleted();
+  };
+
+  return (
+    <>
+      <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 cursor-pointer" onClick={loadDetail}>
+        <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{order.order_code}</td>
+        <td className="px-3 py-2.5 text-slate-500">{fmtDate(order.created_at)}</td>
+        <td className="px-3 py-2.5 text-slate-600">{fmtVND(order.total_amount)}</td>
+        <td className="px-3 py-2.5">
+          <span className={classNames("text-xs px-2 py-0.5 rounded-full", order.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600")}>
+            {order.status === "completed" ? "Hoàn tất" : "Đã hủy"}
+          </span>
+        </td>
+        <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+          {loadingDetail ? <Loader2 size={14} className="animate-spin inline text-slate-300" /> : (
+            <ChevronDown size={15} className={classNames("inline text-slate-300 transition-transform", expanded && "rotate-180")} onClick={loadDetail} />
+          )}
+        </td>
+      </tr>
+      {expanded && detail && (
+        <tr>
+          <td colSpan={5} className="bg-slate-50/70 px-4 py-4">
+            <div className="grid sm:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-xs text-slate-400 mb-1">Khách hàng</p>
+                <p className="font-medium text-slate-700">{detail.customer?.full_name}</p>
+                <p className="text-xs text-slate-400">{detail.customer?.phone}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 mb-1">Máy đã bán</p>
+                <p className="font-medium text-slate-700">{detail.device?.model} {[detail.device?.storage, detail.device?.color].filter(Boolean).join(" · ")}</p>
+                <p className="text-xs text-slate-400">IMEI {detail.device?.imei}</p>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1">
+              <p className="text-xs text-slate-400 mb-1">Thanh toán</p>
+              {detail.payments.map((p) => (
+                <div key={p.id} className="flex items-center justify-between text-sm bg-white rounded-lg px-3 py-2">
+                  <span className="text-slate-600">{p.payment_code} · {PAYMENT_METHOD_LABELS[p.method]}</span>
+                  <span className="flex items-center gap-3">
+                    {fmtVND(p.amount)}
+                    <button onClick={() => setPrintType({ kind: "receipt", payment: p })} className="text-brand-600 hover:underline text-xs flex items-center gap-1">
+                      <Printer size={12} /> In phiếu thu
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+            {order.notes && <p className="text-xs text-slate-400 mt-2">Ghi chú: {order.notes}</p>}
+            <div className="flex gap-3 mt-3">
+              <button onClick={() => setPrintType({ kind: "contract" })} className="text-brand-600 hover:underline text-xs flex items-center gap-1">
+                <Printer size={12} /> In hợp đồng
+              </button>
+              {canDelete && (
+                <button onClick={remove} className="text-rose-500 hover:underline text-xs flex items-center gap-1">
+                  <Trash2 size={12} /> Xóa đơn
+                </button>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+      {printType && detail && (
+        <PrintDocModal
+          type={printType.kind}
+          order={order}
+          customer={detail.customer}
+          device={detail.device}
+          payments={printType.kind === "receipt" ? [printType.payment] : detail.payments}
+          contract={detail.contract}
+          onClose={() => setPrintType(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function OrdersModule({ employee }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [showForm, setShowForm] = useState(false);
+
+  const canCreate = employee.role !== "ke_toan";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("sales_orders").select("*").order("created_at", { ascending: false }).limit(1000);
+    if (!error) setOrders(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = orders.filter((o) => {
+    if (!search.trim()) return true;
+    return o.order_code?.toLowerCase().includes(search.trim().toLowerCase());
+  });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Đơn hàng bán</h2>
+          <p className="text-xs text-slate-400">{orders.length} đơn hàng</p>
+        </div>
+        {canCreate && (
+          <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Plus size={15} /> Tạo đơn hàng
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <OrderForm employee={employee} onCancel={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />
+      )}
+
+      <Card className="p-0 overflow-hidden">
+        <div className="p-3 border-b border-slate-100">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm theo mã đơn hàng..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={ShoppingCart} text="Chưa có đơn hàng nào." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã đơn</th>
+                <th className="px-3 py-2">Ngày tạo</th>
+                <th className="px-3 py-2">Tổng tiền</th>
+                <th className="px-3 py-2">Trạng thái</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {filtered.map((o) => <OrderRow key={o.id} order={o} employee={employee} onDeleted={load} />)}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Receipts module — global ledger of all phiếu thu/chi                  */
+/* ---------------------------------------------------------------------- */
+
+function ReceiptsModule({ employee }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [printPayment, setPrintPayment] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("order_payments")
+      .select("*, sales_orders(order_code, customer_id, device_id, sale_price, discount, total_amount, notes, created_at)")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openPrint = async (row) => {
+    const [{ data: customer }, { data: device }] = await Promise.all([
+      supabase.from("customers").select("*").eq("id", row.sales_orders.customer_id).maybeSingle(),
+      supabase.from("devices").select("*").eq("id", row.sales_orders.device_id).maybeSingle(),
+    ]);
+    setPrintPayment({ row, customer, device });
+  };
+
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-slate-800">Phiếu thu/chi</h2>
+        <p className="text-xs text-slate-400">Toàn bộ phiếu thu phát sinh từ đơn hàng bán</p>
+      </div>
+      <Card className="p-0 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : rows.length === 0 ? (
+          <EmptyState icon={Receipt} text="Chưa có phiếu thu/chi nào." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã phiếu</th>
+                <th className="px-3 py-2">Đơn hàng</th>
+                <th className="px-3 py-2">Hình thức</th>
+                <th className="px-3 py-2">Số tiền</th>
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{r.payment_code}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{r.sales_orders?.order_code}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{PAYMENT_METHOD_LABELS[r.method]}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{fmtVND(r.amount)}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{fmtDate(r.created_at)}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button onClick={() => openPrint(r)} className="text-brand-600 hover:underline text-xs flex items-center gap-1 ml-auto">
+                        <Printer size={12} /> In
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+      {printPayment && (
+        <PrintDocModal
+          type="receipt"
+          order={printPayment.row.sales_orders}
+          customer={printPayment.customer}
+          device={printPayment.device}
+          payments={[printPayment.row]}
+          onClose={() => setPrintPayment(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* Employees module (quan_ly only) — invite by email                     */
 /* ---------------------------------------------------------------------- */
 
@@ -915,9 +1617,9 @@ const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "customers", label: "Khách hàng", icon: Users },
   { key: "inventory", label: "Kho hàng", icon: Smartphone },
-  { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart, phase: "Phase 3" },
-  { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 3" },
-  { key: "receipts", label: "Phiếu thu/chi", icon: Receipt, phase: "Phase 3" },
+  { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart },
+  { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 4" },
+  { key: "receipts", label: "Phiếu thu/chi", icon: Receipt },
   { key: "reports", label: "Báo cáo", icon: BarChart3, phase: "Phase 4" },
   { key: "employees", label: "Nhân viên", icon: UserCog, managerOnly: true },
   { key: "audit", label: "Audit Log", icon: ScrollText, phase: "Phase 4" },
@@ -939,6 +1641,10 @@ function AppShell({ employee, onSignOut }) {
         return <CustomersModule employee={employee} onCountChange={setCustomerCount} />;
       case "inventory":
         return <InventoryModule employee={employee} onCountChange={setInStockCount} />;
+      case "orders":
+        return <OrdersModule employee={employee} />;
+      case "receipts":
+        return <ReceiptsModule employee={employee} />;
       case "employees":
         return employee.role === "quan_ly" ? <EmployeesModule employee={employee} /> : null;
       default: {
@@ -951,7 +1657,7 @@ function AppShell({ employee, onSignOut }) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-50 to-white lg:flex">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-slate-100 bg-white/70 p-4">
+      <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-slate-100 bg-white/70 p-4 print:hidden">
         <div className="flex items-center gap-2 px-2 mb-6">
           <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center">
             <Smartphone className="text-white" size={18} />
@@ -983,7 +1689,7 @@ function AppShell({ employee, onSignOut }) {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100 sticky top-0 z-10">
+      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100 sticky top-0 z-10 print:hidden">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
             <Smartphone className="text-white" size={16} />
