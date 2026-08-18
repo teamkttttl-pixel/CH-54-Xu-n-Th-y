@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "./supabaseClient";
+import * as XLSX from "xlsx";
 import {
   LayoutDashboard, Users, Smartphone, ShoppingCart, Receipt, FileText,
   BarChart3, UserCog, ScrollText, Settings, LogOut, Search, Plus, X,
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
-  History, Printer, Wallet, Landmark, CalendarClock, ChevronDown,
+  History, Printer, Wallet, Landmark, CalendarClock, ChevronDown, FileSpreadsheet,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -75,6 +76,16 @@ const PAYMENT_METHOD_ICONS = {
   bank_transfer: Landmark,
   installment: CalendarClock,
 };
+
+// Tạo "Mã hàng" KiotViet từ model+dung lượng+màu (gom các máy cùng loại về
+// chung 1 mã sản phẩm, còn Serial/IMEI phân biệt từng máy cụ thể trong đó).
+function toKiotVietProductCode(device) {
+  const raw = [device.model, device.storage, device.color].filter(Boolean).join(" ");
+  const noDiacritics = raw
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d");
+  return noDiacritics.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 30) || "SP";
+}
 
 /* ---------------------------------------------------------------------- */
 /* Shared UI bits                                                        */
@@ -1318,11 +1329,90 @@ function OrderRow({ order, employee, onDeleted }) {
   );
 }
 
+function KiotVietExportModal({ onClose }) {
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+
+  const runExport = async () => {
+    setError(""); setExporting(true);
+    try {
+      let query = supabase
+        .from("sales_orders")
+        .select("*, customers(customer_code, full_name, phone, address), devices(imei, model, storage, color)")
+        .eq("status", "completed")
+        .order("created_at", { ascending: true });
+      if (fromDate) query = query.gte("created_at", `${fromDate}T00:00:00`);
+      if (toDate) query = query.lte("created_at", `${toDate}T23:59:59`);
+      const { data, error: err } = await query;
+      if (err) throw err;
+      if (!data || data.length === 0) { setError("Không có đơn hàng nào trong khoảng ngày đã chọn."); setExporting(false); return; }
+
+      const rows = data.map((o) => ({
+        "Mã hàng": o.devices ? toKiotVietProductCode(o.devices) : "",
+        "Tên hàng": o.devices ? [o.devices.model, o.devices.storage, o.devices.color].filter(Boolean).join(" ") : "",
+        "Đơn giá": Number(o.sale_price) || 0,
+        "Giảm giá": Number(o.discount) || 0,
+        "Giảm giá (%)": "",
+        "Số lượng": 1,
+        "Serial/IMEI": o.devices?.imei || "",
+        "Mã khách hàng": o.customers?.customer_code || "",
+        "Tên khách hàng": o.customers?.full_name || "",
+        "Số điện thoại": o.customers?.phone || "",
+        "Loại khách": "Individual",
+        "Địa chỉ": o.customers?.address || "",
+        "Khu vực": "",
+        "Phường xã": "",
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows, {
+        header: ["Mã hàng", "Tên hàng", "Đơn giá", "Giảm giá", "Giảm giá (%)", "Số lượng", "Serial/IMEI", "Mã khách hàng", "Tên khách hàng", "Số điện thoại", "Loại khách", "Địa chỉ", "Khu vực", "Phường xã"],
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "ImportProductTemplate");
+      const stamp = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `KiotViet-DonHang-${stamp}.xlsx`);
+      onClose();
+    } catch (err) {
+      setError(err.message || "Không xuất được file, vui lòng thử lại.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Xuất Excel KiotViet</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-slate-400 mb-3">
+          Xuất danh sách đơn hàng đã hoàn tất theo đúng cấu trúc file mẫu import KiotViet (để trống ngày = xuất toàn bộ).
+        </p>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <TextField label="Từ ngày" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          <TextField label="Đến ngày" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+        </div>
+        {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={runExport} disabled={exporting} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
+            {exporting && <Loader2 size={14} className="animate-spin" />} Xuất file
+          </button>
+          <button onClick={onClose} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function OrdersModule({ employee }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [showExport, setShowExport] = useState(false);
 
   const canCreate = employee.role !== "ke_toan";
 
@@ -1347,12 +1437,19 @@ function OrdersModule({ employee }) {
           <h2 className="text-lg font-semibold text-slate-800">Đơn hàng bán</h2>
           <p className="text-xs text-slate-400">{orders.length} đơn hàng</p>
         </div>
-        {canCreate && (
-          <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-            <Plus size={15} /> Tạo đơn hàng
+        <div className="flex gap-2">
+          <button onClick={() => setShowExport(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <FileSpreadsheet size={15} /> Xuất Excel KiotViet
           </button>
-        )}
+          {canCreate && (
+            <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+              <Plus size={15} /> Tạo đơn hàng
+            </button>
+          )}
+        </div>
       </div>
+
+      {showExport && <KiotVietExportModal onClose={() => setShowExport(false)} />}
 
       {showForm && (
         <OrderForm employee={employee} onCancel={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />
