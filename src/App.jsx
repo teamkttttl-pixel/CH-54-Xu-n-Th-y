@@ -827,7 +827,7 @@ function PrintDocModal({ type, order, customer, device, payments, contract, onCl
             {type === "contract" ? "HỢP ĐỒNG MUA BÁN ĐIỆN THOẠI" : "PHIẾU THU TIỀN"}
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Số: {type === "contract" ? contract?.contract_code : payments?.[0]?.payment_code} — Ngày {today}
+            Số: {type === "contract" ? contract?.contract_code : (payments || []).map((p) => p.payment_code).join(", ")} — Ngày {today}
           </p>
         </div>
 
@@ -1269,14 +1269,21 @@ function OrderRow({ order, employee, onDeleted }) {
               </div>
             </div>
             <div className="mt-3 space-y-1">
-              <p className="text-xs text-slate-400 mb-1">Thanh toán</p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-slate-400">Thanh toán ({detail.payments.length} hình thức)</p>
+                {detail.payments.length > 1 && (
+                  <button onClick={() => setPrintType({ kind: "receipt", payments: detail.payments })} className="text-brand-600 hover:underline text-xs flex items-center gap-1">
+                    <Printer size={12} /> In phiếu thu gộp ({detail.payments.length} hình thức)
+                  </button>
+                )}
+              </div>
               {detail.payments.map((p) => (
                 <div key={p.id} className="flex items-center justify-between text-sm bg-white rounded-lg px-3 py-2">
                   <span className="text-slate-600">{p.payment_code} · {PAYMENT_METHOD_LABELS[p.method]}</span>
                   <span className="flex items-center gap-3">
                     {fmtVND(p.amount)}
-                    <button onClick={() => setPrintType({ kind: "receipt", payment: p })} className="text-brand-600 hover:underline text-xs flex items-center gap-1">
-                      <Printer size={12} /> In phiếu thu
+                    <button onClick={() => setPrintType({ kind: "receipt", payments: [p] })} className="text-slate-400 hover:text-brand-600 hover:underline text-xs flex items-center gap-1">
+                      <Printer size={12} /> In riêng
                     </button>
                   </span>
                 </div>
@@ -1302,7 +1309,7 @@ function OrderRow({ order, employee, onDeleted }) {
           order={order}
           customer={detail.customer}
           device={detail.device}
-          payments={printType.kind === "receipt" ? [printType.payment] : detail.payments}
+          payments={printType.kind === "receipt" ? printType.payments : detail.payments}
           contract={detail.contract}
           onClose={() => setPrintType(null)}
         />
@@ -1395,7 +1402,7 @@ function OrdersModule({ employee }) {
 function ReceiptsModule({ employee }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [printPayment, setPrintPayment] = useState(null);
+  const [printData, setPrintData] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1410,19 +1417,27 @@ function ReceiptsModule({ employee }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const openPrint = async (row) => {
+  // Đếm số hình thức thanh toán trong cùng 1 đơn để biết khi nào nên "in gộp"
+  const countByOrder = rows.reduce((m, r) => {
+    const key = r.sales_orders?.order_code;
+    m[key] = (m[key] || 0) + 1;
+    return m;
+  }, {});
+
+  const openPrint = async (row, mergeOrder) => {
+    const orderPayments = mergeOrder ? rows.filter((r) => r.sales_orders?.order_code === row.sales_orders?.order_code) : [row];
     const [{ data: customer }, { data: device }] = await Promise.all([
       supabase.from("customers").select("*").eq("id", row.sales_orders.customer_id).maybeSingle(),
       supabase.from("devices").select("*").eq("id", row.sales_orders.device_id).maybeSingle(),
     ]);
-    setPrintPayment({ row, customer, device });
+    setPrintData({ row, customer, device, payments: orderPayments });
   };
 
   return (
     <div>
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-800">Phiếu thu/chi</h2>
-        <p className="text-xs text-slate-400">Toàn bộ phiếu thu phát sinh từ đơn hàng bán</p>
+        <p className="text-xs text-slate-400">Toàn bộ phiếu thu phát sinh từ đơn hàng bán — đơn có nhiều hình thức thanh toán có thể in gộp thành 1 phiếu</p>
       </div>
       <Card className="p-0 overflow-hidden">
         {loading ? (
@@ -1441,33 +1456,43 @@ function ReceiptsModule({ employee }) {
                 <th className="px-3 py-2"></th>
               </tr></thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                    <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{r.payment_code}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{r.sales_orders?.order_code}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{PAYMENT_METHOD_LABELS[r.method]}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{fmtVND(r.amount)}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{fmtDate(r.created_at)}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <button onClick={() => openPrint(r)} className="text-brand-600 hover:underline text-xs flex items-center gap-1 ml-auto">
-                        <Printer size={12} /> In
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const orderCode = r.sales_orders?.order_code;
+                  const siblingCount = countByOrder[orderCode] || 1;
+                  return (
+                    <tr key={r.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                      <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{r.payment_code}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{orderCode}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{PAYMENT_METHOD_LABELS[r.method]}</td>
+                      <td className="px-3 py-2.5 text-slate-600">{fmtVND(r.amount)}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{fmtDate(r.created_at)}</td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        {siblingCount > 1 ? (
+                          <button onClick={() => openPrint(r, true)} className="text-brand-600 hover:underline text-xs flex items-center gap-1 ml-auto">
+                            <Printer size={12} /> In gộp ({siblingCount} hình thức)
+                          </button>
+                        ) : (
+                          <button onClick={() => openPrint(r, false)} className="text-brand-600 hover:underline text-xs flex items-center gap-1 ml-auto">
+                            <Printer size={12} /> In
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </Card>
-      {printPayment && (
+      {printData && (
         <PrintDocModal
           type="receipt"
-          order={printPayment.row.sales_orders}
-          customer={printPayment.customer}
-          device={printPayment.device}
-          payments={[printPayment.row]}
-          onClose={() => setPrintPayment(null)}
+          order={printData.row.sales_orders}
+          customer={printData.customer}
+          device={printData.device}
+          payments={printData.payments}
+          onClose={() => setPrintData(null)}
         />
       )}
     </div>
