@@ -3,7 +3,8 @@ import { supabase } from "./supabaseClient";
 import {
   LayoutDashboard, Users, Smartphone, ShoppingCart, Receipt, FileText,
   BarChart3, UserCog, ScrollText, Settings, LogOut, Search, Plus, X,
-  Loader2, ChevronRight, Menu, ShieldAlert,
+  Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
+  History,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -41,6 +42,28 @@ function fmtDate(d) {
     return d;
   }
 }
+
+function fmtVND(n) {
+  if (n === null || n === undefined || n === "") return "—";
+  const num = Number(n);
+  if (Number.isNaN(num)) return "—";
+  return num.toLocaleString("vi-VN") + "đ";
+}
+
+const DEVICE_STATUS_LABELS = {
+  in_stock: "Còn hàng",
+  reserved: "Đang giữ chỗ",
+  sold: "Đã bán",
+};
+const DEVICE_STATUS_STYLES = {
+  in_stock: "bg-emerald-50 text-emerald-700",
+  reserved: "bg-amber-50 text-amber-700",
+  sold: "bg-slate-100 text-slate-500",
+};
+const DEVICE_CONDITION_LABELS = {
+  new: "Máy mới",
+  used: "Máy cũ",
+};
 
 /* ---------------------------------------------------------------------- */
 /* Shared UI bits                                                        */
@@ -196,7 +219,7 @@ function StatCard({ label, value, icon: Icon, comingSoon }) {
   );
 }
 
-function DashboardModule({ employee, customerCount }) {
+function DashboardModule({ employee, customerCount, inStockCount }) {
   return (
     <div>
       <div className="mb-5">
@@ -205,15 +228,15 @@ function DashboardModule({ employee, customerCount }) {
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Tổng khách hàng" value={customerCount} icon={Users} />
+        <StatCard label="Tồn kho (IMEI)" value={inStockCount} icon={Smartphone} />
         <StatCard label="Đơn hàng hôm nay" icon={ShoppingCart} comingSoon />
         <StatCard label="Doanh thu hôm nay" icon={BarChart3} comingSoon />
-        <StatCard label="Tồn kho (IMEI)" icon={Smartphone} comingSoon />
       </div>
       <Card className="p-5 mt-4">
         <p className="text-sm font-medium text-slate-700 mb-1">Tiến độ triển khai</p>
         <p className="text-xs text-slate-400 leading-relaxed">
-          Phase 1 (Đăng nhập, phân quyền, Khách hàng) đang hoạt động. Kho hàng theo IMEI (Phase 2) và
-          Đơn hàng bán + Phiếu thu/chi + Hợp đồng (Phase 3) sẽ được bổ sung ở các lần cập nhật tiếp theo.
+          Phase 1 (Đăng nhập, phân quyền, Khách hàng) và Phase 2 (Kho hàng theo IMEI) đang hoạt động.
+          Đơn hàng bán + Phiếu thu/chi + Hợp đồng (Phase 3) sẽ được bổ sung ở lần cập nhật tiếp theo.
         </p>
       </Card>
     </div>
@@ -425,6 +448,331 @@ function CustomersModule({ employee, onCountChange }) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Inventory module — devices tracked by IMEI                            */
+/* ---------------------------------------------------------------------- */
+
+function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
+  const [form, setForm] = useState(initial || {
+    imei: "", model: "", storage: "", color: "", condition: "used",
+    cost_price: "", sale_price: "", supplier: "", import_date: "", notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.imei.trim()) { setError("Vui lòng nhập IMEI."); return; }
+    if (!form.model.trim()) { setError("Vui lòng nhập tên model máy."); return; }
+    setError(""); setSaving(true);
+    try {
+      const payload = {
+        imei: form.imei.trim(),
+        model: form.model.trim(),
+        storage: form.storage.trim() || null,
+        color: form.color.trim() || null,
+        condition: form.condition,
+        cost_price: form.cost_price === "" ? null : Number(form.cost_price),
+        sale_price: form.sale_price === "" ? null : Number(form.sale_price),
+        supplier: form.supplier.trim() || null,
+        import_date: form.import_date || null,
+        notes: form.notes.trim() || null,
+        updated_by: employee.id,
+      };
+      if (initial?.id) {
+        const { data: updated, error: err } = await supabase.from("devices").update(payload).eq("id", initial.id).select().maybeSingle();
+        if (err) throw err;
+        await supabase.from("audit_logs").insert({
+          table_name: "devices", record_id: initial.id, action: "update",
+          old_data: initial, new_data: updated, performed_by: employee.id,
+        });
+      } else {
+        payload.status = "in_stock";
+        payload.created_by = employee.id;
+        const { data: created, error: err } = await supabase.from("devices").insert(payload).select().maybeSingle();
+        if (err) throw err;
+        await supabase.from("audit_logs").insert({
+          table_name: "devices", record_id: created?.id, action: "create",
+          new_data: created, performed_by: employee.id,
+        });
+      }
+      onSaved();
+    } catch (err) {
+      if (err.code === "23505" || /duplicate/i.test(err.message || "")) {
+        setError("IMEI này đã tồn tại trong kho — không được nhập trùng.");
+      } else {
+        setError(err.message || "Không lưu được, vui lòng thử lại.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-4 sm:p-5 mb-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-semibold text-slate-800 text-sm">{initial?.id ? "Sửa thông tin máy" : "Nhập máy mới"}</p>
+        <button onClick={onCancel} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+      </div>
+
+      {duplicateImei && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-rose-700">
+          IMEI <span className="font-medium">{duplicateImei.imei}</span> đã có trong kho ({DEVICE_STATUS_LABELS[duplicateImei.status]}) — kiểm tra lại trước khi lưu.
+        </div>
+      )}
+
+      <form onSubmit={submit} className="grid sm:grid-cols-2 gap-3">
+        <TextField label="Số IMEI *" value={form.imei} onChange={set("imei")} disabled={!!initial?.id} />
+        <TextField label="Model máy *" value={form.model} onChange={set("model")} placeholder="iPhone 14 Pro Max" />
+        <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="256GB" />
+        <TextField label="Màu sắc" value={form.color} onChange={set("color")} placeholder="Tím" />
+        <label className="block">
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
+          <select value={form.condition} onChange={set("condition")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            <option value="new">Máy mới</option>
+            <option value="used">Máy cũ</option>
+          </select>
+        </label>
+        <TextField label="Nhà cung cấp / nguồn nhập" value={form.supplier} onChange={set("supplier")} />
+        <TextField label="Giá vốn (đ)" type="number" value={form.cost_price} onChange={set("cost_price")} />
+        <TextField label="Giá bán đề xuất (đ)" type="number" value={form.sale_price} onChange={set("sale_price")} />
+        <TextField label="Ngày nhập" type="date" value={form.import_date || ""} onChange={set("import_date")} />
+        <TextField label="Ghi chú" value={form.notes} onChange={set("notes")} className="sm:col-span-2" />
+        {error && <p className="text-xs text-rose-600 sm:col-span-2">{error}</p>}
+        <div className="sm:col-span-2 flex gap-2 mt-1">
+          <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
+            {saving && <Loader2 size={14} className="animate-spin" />} Lưu
+          </button>
+          <button type="button" onClick={onCancel} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function ImeiHistoryPanel({ imei, onClose }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    supabase
+      .from("audit_logs")
+      .select("*")
+      .eq("table_name", "devices")
+      .or(`new_data->>imei.eq.${imei},old_data->>imei.eq.${imei}`)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => { if (active) { setLogs(data || []); setLoading(false); } });
+    return () => { active = false; };
+  }, [imei]);
+
+  const ACTION_LABELS = { create: "Nhập kho", update: "Cập nhật", delete: "Xóa khỏi kho" };
+
+  return (
+    <Card className="p-4 sm:p-5 mb-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-semibold text-slate-800 text-sm">Lịch sử tra cứu IMEI {imei}</p>
+        <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+      </div>
+      {loading ? (
+        <div className="flex justify-center py-6"><Loader2 className="animate-spin text-slate-300" /></div>
+      ) : logs.length === 0 ? (
+        <p className="text-xs text-slate-400">Chưa có lịch sử ghi nhận cho máy này.</p>
+      ) : (
+        <ul className="space-y-2">
+          {logs.map((l) => (
+            <li key={l.id} className="text-xs text-slate-500 border-b border-slate-50 pb-2 last:border-0">
+              <span className="font-medium text-slate-700">{ACTION_LABELS[l.action] || l.action}</span> — {fmtDate(l.created_at)}
+              {l.action === "update" && l.old_data?.status !== l.new_data?.status && (
+                <span> · {DEVICE_STATUS_LABELS[l.old_data?.status]} → {DEVICE_STATUS_LABELS[l.new_data?.status]}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function InventoryModule({ employee, onCountChange }) {
+  const [devices, setDevices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [duplicateImei, setDuplicateImei] = useState(null);
+  const [historyImei, setHistoryImei] = useState(null);
+
+  const canDelete = employee.role === "quan_ly";
+  const canSeeCost = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("devices").select("*").order("created_at", { ascending: false }).limit(2000);
+    if (!error) {
+      setDevices(data || []);
+      onCountChange?.((data || []).filter((d) => d.status === "in_stock").length);
+    }
+    setLoading(false);
+  }, [onCountChange]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = devices.filter((d) => {
+    if (statusFilter !== "all" && d.status !== statusFilter) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      d.imei?.toLowerCase().includes(q) ||
+      d.model?.toLowerCase().includes(q) ||
+      d.color?.toLowerCase().includes(q)
+    );
+  });
+
+  const checkImei = async (imei) => {
+    if (!imei.trim()) { setDuplicateImei(null); return; }
+    const { data } = await supabase.from("devices").select("*").eq("imei", imei.trim()).maybeSingle();
+    setDuplicateImei(data || null);
+  };
+
+  const openNew = () => { setEditing(null); setDuplicateImei(null); setShowForm(true); };
+  const openEdit = (d) => { setEditing(d); setDuplicateImei(null); setShowForm(true); };
+
+  const remove = async (d) => {
+    if (!confirm(`Xóa máy IMEI "${d.imei}" khỏi kho?`)) return;
+    const { error } = await supabase.from("devices").delete().eq("id", d.id);
+    if (error) { alert(error.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "devices", record_id: d.id, action: "delete",
+      old_data: d, performed_by: employee.id,
+    });
+    load();
+  };
+
+  const cycleStatus = async (d) => {
+    const order = ["in_stock", "reserved", "sold"];
+    const next = order[(order.indexOf(d.status) + 1) % order.length];
+    const { data: updated, error } = await supabase.from("devices").update({ status: next, updated_by: employee.id }).eq("id", d.id).select().maybeSingle();
+    if (error) { alert(error.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "devices", record_id: d.id, action: "update",
+      old_data: d, new_data: updated, performed_by: employee.id,
+    });
+    load();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Kho hàng (IMEI)</h2>
+          <p className="text-xs text-slate-400">
+            {devices.length} máy · {devices.filter((d) => d.status === "in_stock").length} còn hàng
+          </p>
+        </div>
+        <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+          <Plus size={15} /> Nhập máy
+        </button>
+      </div>
+
+      {showForm && (
+        <DeviceForm
+          initial={editing}
+          employee={employee}
+          duplicateImei={!editing ? duplicateImei : null}
+          onCancel={() => setShowForm(false)}
+          onSaved={() => { setShowForm(false); load(); }}
+        />
+      )}
+
+      {historyImei && <ImeiHistoryPanel imei={historyImei} onClose={() => setHistoryImei(null)} />}
+
+      <Card className="p-0 overflow-hidden">
+        <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); if (!editing) checkImei(e.target.value); }}
+              placeholder="Tìm theo IMEI, model, màu..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="all">Tất cả trạng thái</option>
+            <option value="in_stock">Còn hàng</option>
+            <option value="reserved">Đang giữ chỗ</option>
+            <option value="sold">Đã bán</option>
+          </select>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={PackageSearch} text="Chưa có máy nào trong kho." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">IMEI</th>
+                <th className="px-3 py-2">Model</th>
+                <th className="px-3 py-2">Tình trạng</th>
+                {canSeeCost && <th className="px-3 py-2">Giá vốn</th>}
+                <th className="px-3 py-2">Giá bán</th>
+                <th className="px-3 py-2">Trạng thái</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {filtered.map((d) => (
+                  <tr key={d.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{d.imei}</td>
+                    <td className="px-3 py-2.5 text-slate-600">
+                      {d.model}
+                      <span className="text-slate-400"> {[d.storage, d.color].filter(Boolean).join(" · ")}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-500">{DEVICE_CONDITION_LABELS[d.condition] || "—"}</td>
+                    {canSeeCost && <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.cost_price)}</td>}
+                    <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.sale_price)}</td>
+                    <td className="px-3 py-2.5">
+                      <button
+                        onClick={() => cycleStatus(d)}
+                        className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])}
+                        title="Bấm để chuyển trạng thái"
+                      >
+                        {DEVICE_STATUS_LABELS[d.status] || d.status}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <button onClick={() => setHistoryImei(d.imei)} className="text-slate-400 hover:text-brand-600 mr-3" title="Lịch sử IMEI">
+                        <History size={14} className="inline" />
+                      </button>
+                      <button onClick={() => openEdit(d)} className="text-brand-600 hover:underline text-xs mr-3">
+                        <Pencil size={12} className="inline mr-0.5" />Sửa
+                      </button>
+                      {canDelete && (
+                        <button onClick={() => remove(d)} className="text-rose-500 hover:underline text-xs">
+                          <Trash2 size={12} className="inline mr-0.5" />Xóa
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* Employees module (quan_ly only) — invite by email                     */
 /* ---------------------------------------------------------------------- */
 
@@ -566,7 +914,7 @@ function ComingSoonModule({ title, icon: Icon, phase }) {
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "customers", label: "Khách hàng", icon: Users },
-  { key: "inventory", label: "Kho hàng", icon: Smartphone, phase: "Phase 2" },
+  { key: "inventory", label: "Kho hàng", icon: Smartphone },
   { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart, phase: "Phase 3" },
   { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 3" },
   { key: "receipts", label: "Phiếu thu/chi", icon: Receipt, phase: "Phase 3" },
@@ -578,6 +926,7 @@ const NAV_ITEMS = [
 function AppShell({ employee, onSignOut }) {
   const [tab, setTab] = useState("dashboard");
   const [customerCount, setCustomerCount] = useState(0);
+  const [inStockCount, setInStockCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const visibleNav = NAV_ITEMS.filter((n) => !n.managerOnly || employee.role === "quan_ly");
@@ -585,9 +934,11 @@ function AppShell({ employee, onSignOut }) {
   const renderModule = () => {
     switch (tab) {
       case "dashboard":
-        return <DashboardModule employee={employee} customerCount={customerCount} />;
+        return <DashboardModule employee={employee} customerCount={customerCount} inStockCount={inStockCount} />;
       case "customers":
         return <CustomersModule employee={employee} onCountChange={setCustomerCount} />;
+      case "inventory":
+        return <InventoryModule employee={employee} onCountChange={setInStockCount} />;
       case "employees":
         return employee.role === "quan_ly" ? <EmployeesModule employee={employee} /> : null;
       default: {
