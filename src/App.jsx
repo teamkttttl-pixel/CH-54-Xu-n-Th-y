@@ -2,10 +2,14 @@ import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import * as XLSX from "xlsx";
 import {
+  BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
+} from "recharts";
+import {
   LayoutDashboard, Users, Smartphone, ShoppingCart, Receipt, FileText,
   BarChart3, UserCog, ScrollText, Settings, LogOut, Search, Plus, X,
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
   History, Printer, Wallet, Landmark, CalendarClock, ChevronDown, FileSpreadsheet,
+  Filter, TrendingUp, Package, Award,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -1599,6 +1603,307 @@ function ReceiptsModule({ employee }) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Audit Log module — lịch sử thao tác toàn hệ thống (quan_ly + ke_toan)  */
+/* ---------------------------------------------------------------------- */
+
+const AUDIT_TABLE_LABELS = {
+  devices: "Kho hàng",
+  sales_orders: "Đơn hàng bán",
+  customers: "Khách hàng",
+};
+const AUDIT_ACTION_LABELS = { create: "Tạo mới", update: "Cập nhật", delete: "Xóa" };
+const AUDIT_ACTION_STYLES = {
+  create: "bg-emerald-50 text-emerald-700",
+  update: "bg-amber-50 text-amber-700",
+  delete: "bg-rose-50 text-rose-600",
+};
+
+// Vài trường đáng chú ý để tóm tắt thay đổi (nếu có), tránh dump cả object JSON khó đọc
+const AUDIT_FIELD_LABELS = {
+  imei: "IMEI", model: "Model", status: "Trạng thái", cost_price: "Giá vốn", sale_price: "Giá bán",
+  full_name: "Họ tên", phone: "SĐT", order_code: "Mã đơn", total_amount: "Tổng tiền",
+};
+
+function summarizeAuditChange(log) {
+  if (log.action === "delete") {
+    const d = log.old_data || {};
+    return d.imei ? `IMEI ${d.imei}` : d.order_code || d.full_name || d.id || "";
+  }
+  if (log.action === "create") {
+    const d = log.new_data || {};
+    return d.imei ? `IMEI ${d.imei} — ${d.model || ""}` : d.order_code || d.full_name || "";
+  }
+  // update: liệt kê các trường thay đổi
+  const oldD = log.old_data || {};
+  const newD = log.new_data || {};
+  const changes = [];
+  for (const key of Object.keys(AUDIT_FIELD_LABELS)) {
+    if (key in newD && String(oldD[key]) !== String(newD[key])) {
+      const label = AUDIT_FIELD_LABELS[key];
+      const isMoney = key.includes("price") || key === "total_amount";
+      const fmt = isMoney ? fmtVND : (v) => (key === "status" ? (DEVICE_STATUS_LABELS[v] || v) : v);
+      changes.push(`${label}: ${fmt(oldD[key])} → ${fmt(newD[key])}`);
+    }
+  }
+  return changes.length ? changes.join(" · ") : "Cập nhật thông tin";
+}
+
+function AuditLogModule() {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tableFilter, setTableFilter] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("audit_logs")
+      .select("*, employees(full_name)")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (!error) setLogs(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = logs.filter((l) => {
+    if (tableFilter !== "all" && l.table_name !== tableFilter) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    const summary = summarizeAuditChange(l).toLowerCase();
+    const performer = (l.employees?.full_name || "").toLowerCase();
+    return summary.includes(q) || performer.includes(q);
+  });
+
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-slate-800">Audit Log</h2>
+        <p className="text-xs text-slate-400">Lịch sử thao tác trên toàn hệ thống — chỉ Quản lý & Kế toán xem được</p>
+      </div>
+      <Card className="p-0 overflow-hidden">
+        <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm theo nội dung thay đổi, người thực hiện..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+          <select value={tableFilter} onChange={(e) => setTableFilter(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            <option value="all">Tất cả</option>
+            <option value="devices">Kho hàng</option>
+            <option value="sales_orders">Đơn hàng bán</option>
+            <option value="customers">Khách hàng</option>
+          </select>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={ScrollText} text="Chưa có nhật ký thao tác nào." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Thời gian</th>
+                <th className="px-3 py-2">Bảng</th>
+                <th className="px-3 py-2">Hành động</th>
+                <th className="px-3 py-2">Nội dung</th>
+                <th className="px-3 py-2">Người thực hiện</th>
+              </tr></thead>
+              <tbody>
+                {filtered.map((l) => (
+                  <tr key={l.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(l.created_at)} {new Date(l.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{AUDIT_TABLE_LABELS[l.table_name] || l.table_name}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={classNames("text-xs px-2 py-0.5 rounded-full", AUDIT_ACTION_STYLES[l.action])}>
+                        {AUDIT_ACTION_LABELS[l.action] || l.action}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-500 max-w-[320px] truncate" title={summarizeAuditChange(l)}>{summarizeAuditChange(l)}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{l.employees?.full_name || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Reports module — doanh thu/lợi nhuận (quan_ly + ke_toan)               */
+/* ---------------------------------------------------------------------- */
+
+function startOfMonth() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+}
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function ReportKpiCard({ label, value, icon: Icon, sub }) {
+  return (
+    <Card className="p-4 sm:p-5">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-slate-400">{label}</span>
+        <Icon size={16} className="text-slate-300" />
+      </div>
+      <p className="text-xl font-semibold text-slate-800">{value}</p>
+      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+    </Card>
+  );
+}
+
+function ReportsModule({ employee }) {
+  const [fromDate, setFromDate] = useState(startOfMonth());
+  const [toDate, setToDate] = useState(todayStr());
+  const [orders, setOrders] = useState([]);
+  const [inventoryValue, setInventoryValue] = useState(0);
+  const [inStockCount, setInStockCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const canSeeProfit = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: orderData }, { data: deviceData }] = await Promise.all([
+      supabase
+        .from("sales_orders")
+        .select("*, devices(model, storage, color, cost_price), employees:created_by(full_name)")
+        .eq("status", "completed")
+        .gte("created_at", `${fromDate}T00:00:00`)
+        .lte("created_at", `${toDate}T23:59:59`)
+        .order("created_at", { ascending: true }),
+      supabase.from("devices").select("cost_price, status"),
+    ]);
+    setOrders(orderData || []);
+    const inStock = (deviceData || []).filter((d) => d.status === "in_stock");
+    setInventoryValue(inStock.reduce((s, d) => s + Number(d.cost_price || 0), 0));
+    setInStockCount(inStock.length);
+    setLoading(false);
+  }, [fromDate, toDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totalRevenue = orders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+  const totalProfit = orders.reduce((s, o) => s + (Number(o.total_amount || 0) - Number(o.devices?.cost_price || 0)), 0);
+  const totalOrders = orders.length;
+  const avgOrderValue = totalOrders ? totalRevenue / totalOrders : 0;
+
+  // Doanh thu theo ngày cho biểu đồ
+  const byDay = {};
+  for (const o of orders) {
+    const day = fmtDate(o.created_at);
+    byDay[day] = (byDay[day] || 0) + Number(o.total_amount || 0);
+  }
+  const chartData = Object.entries(byDay).map(([day, revenue]) => ({ day, revenue }));
+
+  // Top nhân viên theo doanh số
+  const byEmployee = {};
+  for (const o of orders) {
+    const name = o.employees?.full_name || "Không rõ";
+    if (!byEmployee[name]) byEmployee[name] = { revenue: 0, count: 0 };
+    byEmployee[name].revenue += Number(o.total_amount || 0);
+    byEmployee[name].count += 1;
+  }
+  const topEmployees = Object.entries(byEmployee).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 5);
+
+  // Top model bán chạy
+  const byModel = {};
+  for (const o of orders) {
+    const name = o.devices ? [o.devices.model, o.devices.storage, o.devices.color].filter(Boolean).join(" ") : "—";
+    byModel[name] = (byModel[name] || 0) + 1;
+  }
+  const topModels = Object.entries(byModel).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Báo cáo</h2>
+          <p className="text-xs text-slate-400">Doanh thu, lợi nhuận và hiệu suất bán hàng</p>
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
+          <Filter size={14} className="text-slate-400" />
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="text-sm outline-none" />
+          <span className="text-slate-300">—</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="text-sm outline-none" />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
+            <ReportKpiCard label="Doanh thu" value={fmtVND(totalRevenue)} icon={TrendingUp} sub={`${totalOrders} đơn hàng`} />
+            {canSeeProfit && <ReportKpiCard label="Lợi nhuận gộp" value={fmtVND(totalProfit)} icon={Award} sub={totalRevenue ? `Biên LN ${((totalProfit / totalRevenue) * 100).toFixed(1)}%` : ""} />}
+            <ReportKpiCard label="Giá trị đơn TB" value={fmtVND(avgOrderValue)} icon={Receipt} />
+            {canSeeProfit && <ReportKpiCard label="Tồn kho hiện tại" value={fmtVND(inventoryValue)} icon={Package} sub={`${inStockCount} máy còn hàng`} />}
+          </div>
+
+          <Card className="p-4 sm:p-5 mb-4">
+            <p className="text-sm font-medium text-slate-700 mb-3">Doanh thu theo ngày</p>
+            {chartData.length === 0 ? (
+              <p className="text-xs text-slate-400 py-6 text-center">Không có dữ liệu trong khoảng ngày đã chọn.</p>
+            ) : (
+              <div style={{ width: "100%", height: 240 }}>
+                <ResponsiveContainer>
+                  <RBarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}tr`} />
+                    <RTooltip formatter={(v) => fmtVND(v)} />
+                    <Bar dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  </RBarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </Card>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Card className="p-4 sm:p-5">
+              <p className="text-sm font-medium text-slate-700 mb-3">Top nhân viên theo doanh số</p>
+              {topEmployees.length === 0 ? <p className="text-xs text-slate-400">Chưa có dữ liệu.</p> : (
+                <ul className="space-y-2">
+                  {topEmployees.map(([name, v], i) => (
+                    <li key={name} className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600">{i + 1}. {name} <span className="text-slate-400 text-xs">({v.count} đơn)</span></span>
+                      <span className="font-medium text-slate-700">{fmtVND(v.revenue)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+            <Card className="p-4 sm:p-5">
+              <p className="text-sm font-medium text-slate-700 mb-3">Model bán chạy</p>
+              {topModels.length === 0 ? <p className="text-xs text-slate-400">Chưa có dữ liệu.</p> : (
+                <ul className="space-y-2">
+                  {topModels.map(([name, count], i) => (
+                    <li key={name} className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600">{i + 1}. {name}</span>
+                      <span className="font-medium text-slate-700">{count} máy</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* Employees module (quan_ly only) — invite by email                     */
 /* ---------------------------------------------------------------------- */
 
@@ -1744,9 +2049,9 @@ const NAV_ITEMS = [
   { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart },
   { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 4" },
   { key: "receipts", label: "Phiếu thu/chi", icon: Receipt },
-  { key: "reports", label: "Báo cáo", icon: BarChart3, phase: "Phase 4" },
+  { key: "reports", label: "Báo cáo", icon: BarChart3, allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "employees", label: "Nhân viên", icon: UserCog, managerOnly: true },
-  { key: "audit", label: "Audit Log", icon: ScrollText, phase: "Phase 4" },
+  { key: "audit", label: "Audit Log", icon: ScrollText, allowedRoles: ["quan_ly", "ke_toan"] },
 ];
 
 function AppShell({ employee, onSignOut }) {
@@ -1755,7 +2060,11 @@ function AppShell({ employee, onSignOut }) {
   const [inStockCount, setInStockCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const visibleNav = NAV_ITEMS.filter((n) => !n.managerOnly || employee.role === "quan_ly");
+  const visibleNav = NAV_ITEMS.filter((n) => {
+    if (n.managerOnly && employee.role !== "quan_ly") return false;
+    if (n.allowedRoles && !n.allowedRoles.includes(employee.role)) return false;
+    return true;
+  });
 
   const renderModule = () => {
     switch (tab) {
@@ -1769,6 +2078,10 @@ function AppShell({ employee, onSignOut }) {
         return <OrdersModule employee={employee} />;
       case "receipts":
         return <ReceiptsModule employee={employee} />;
+      case "reports":
+        return ["quan_ly", "ke_toan"].includes(employee.role) ? <ReportsModule employee={employee} /> : null;
+      case "audit":
+        return ["quan_ly", "ke_toan"].includes(employee.role) ? <AuditLogModule /> : null;
       case "employees":
         return employee.role === "quan_ly" ? <EmployeesModule employee={employee} /> : null;
       default: {
