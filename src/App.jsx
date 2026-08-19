@@ -10,6 +10,7 @@ import {
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
   History, Printer, Wallet, Landmark, CalendarClock, ChevronDown, FileSpreadsheet,
   Filter, TrendingUp, Package, Award, ArrowLeftRight, Banknote, Camera,
+  Building2,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -69,6 +70,59 @@ const DEVICE_CONDITION_LABELS = {
   new: "Máy mới",
   used: "Máy cũ",
 };
+
+// Danh mục iPhone từ đời X (2017) trở lên + màu sắc chính hãng từng đời (cập
+// nhật tới iPhone 17 series 2025). Dùng làm gợi ý nhập liệu (datalist), vẫn
+// cho gõ tay tự do với các dòng máy/hãng khác không có trong danh sách.
+const IPHONE_COLOR_CATALOG = {
+  "iPhone X": ["Space Gray", "Silver"],
+  "iPhone XR": ["White", "Black", "Blue", "Yellow", "Coral", "(PRODUCT)RED"],
+  "iPhone XS": ["Silver", "Space Gray", "Gold"],
+  "iPhone XS Max": ["Silver", "Space Gray", "Gold"],
+  "iPhone 11": ["White", "Black", "Green", "Yellow", "Purple", "(PRODUCT)RED"],
+  "iPhone 11 Pro": ["Midnight Green", "Space Gray", "Silver", "Gold"],
+  "iPhone 11 Pro Max": ["Midnight Green", "Space Gray", "Silver", "Gold"],
+  "iPhone SE (2020)": ["White", "Black", "(PRODUCT)RED"],
+  "iPhone 12 mini": ["Black", "White", "Blue", "Green", "Purple", "(PRODUCT)RED"],
+  "iPhone 12": ["Black", "White", "Blue", "Green", "Purple", "(PRODUCT)RED"],
+  "iPhone 12 Pro": ["Graphite", "Silver", "Gold", "Pacific Blue"],
+  "iPhone 12 Pro Max": ["Graphite", "Silver", "Gold", "Pacific Blue"],
+  "iPhone 13 mini": ["Pink", "Blue", "Midnight", "Starlight", "(PRODUCT)RED", "Green"],
+  "iPhone 13": ["Pink", "Blue", "Midnight", "Starlight", "(PRODUCT)RED", "Green", "Alpine Green"],
+  "iPhone 13 Pro": ["Graphite", "Gold", "Silver", "Sierra Blue", "Alpine Green"],
+  "iPhone 13 Pro Max": ["Graphite", "Gold", "Silver", "Sierra Blue", "Alpine Green"],
+  "iPhone SE (2022)": ["Midnight", "Starlight", "(PRODUCT)RED"],
+  "iPhone 14": ["Blue", "Purple", "Midnight", "Starlight", "(PRODUCT)RED", "Yellow"],
+  "iPhone 14 Plus": ["Blue", "Purple", "Midnight", "Starlight", "(PRODUCT)RED", "Yellow"],
+  "iPhone 14 Pro": ["Space Black", "Silver", "Gold", "Deep Purple"],
+  "iPhone 14 Pro Max": ["Space Black", "Silver", "Gold", "Deep Purple"],
+  "iPhone 15": ["Pink", "Yellow", "Green", "Blue", "Black"],
+  "iPhone 15 Plus": ["Pink", "Yellow", "Green", "Blue", "Black"],
+  "iPhone 15 Pro": ["Black Titanium", "White Titanium", "Blue Titanium", "Natural Titanium"],
+  "iPhone 15 Pro Max": ["Black Titanium", "White Titanium", "Blue Titanium", "Natural Titanium"],
+  "iPhone 16": ["Black", "White", "Pink", "Teal", "Ultramarine"],
+  "iPhone 16 Plus": ["Black", "White", "Pink", "Teal", "Ultramarine"],
+  "iPhone 16 Pro": ["Black Titanium", "White Titanium", "Natural Titanium", "Desert Titanium"],
+  "iPhone 16 Pro Max": ["Black Titanium", "White Titanium", "Natural Titanium", "Desert Titanium"],
+  "iPhone 16e": ["Black", "White"],
+  "iPhone Air": ["Space Black", "Cloud White", "Light Gold", "Sky Blue"],
+  "iPhone 17e": ["Black", "White"],
+  "iPhone 17": ["Black", "White", "Lavender", "Mist Blue", "Sage"],
+  "iPhone 17 Pro": ["Silver", "Deep Blue", "Cosmic Orange"],
+  "iPhone 17 Pro Max": ["Silver", "Deep Blue", "Cosmic Orange"],
+};
+const IPHONE_MODEL_LIST = Object.keys(IPHONE_COLOR_CATALOG);
+const GENERIC_COLOR_LIST = ["Đen", "Trắng", "Bạc", "Vàng", "Xanh", "Xanh lá", "Tím", "Hồng", "Đỏ", "Vàng đồng"];
+
+function coloroptionsForModel(modelText) {
+  const trimmed = (modelText || "").trim();
+  const exact = IPHONE_COLOR_CATALOG[trimmed];
+  if (exact) return exact;
+  const key = Object.keys(IPHONE_COLOR_CATALOG).find(
+    (m) => trimmed.toLowerCase().startsWith(m.toLowerCase())
+  );
+  return key ? IPHONE_COLOR_CATALOG[key] : GENERIC_COLOR_LIST;
+}
 
 const PAYMENT_METHOD_LABELS = {
   cash: "Tiền mặt",
@@ -505,7 +559,7 @@ function CustomersModule({ employee, onCountChange }) {
 
 function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
   const [form, setForm] = useState(initial || {
-    imei: "", model: "", storage: "", color: "", condition: "used",
+    imei: "", model: "", storage: "", color: "", condition: "used", condition_percent: "",
     cost_price: "", sale_price: "", supplier: "", import_date: "", notes: "",
   });
   const [saving, setSaving] = useState(false);
@@ -525,6 +579,7 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
         storage: form.storage.trim() || null,
         color: form.color.trim() || null,
         condition: form.condition,
+        condition_percent: form.condition_percent === "" ? null : Number(form.condition_percent),
         cost_price: form.cost_price === "" ? null : Number(form.cost_price),
         sale_price: form.sale_price === "" ? null : Number(form.sale_price),
         supplier: form.supplier.trim() || null,
@@ -577,9 +632,14 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
 
       <form onSubmit={submit} className="grid sm:grid-cols-2 gap-3">
         <TextField label="Số IMEI *" value={form.imei} onChange={set("imei")} disabled={!!initial?.id} />
-        <TextField label="Model máy *" value={form.model} onChange={set("model")} placeholder="iPhone 14 Pro Max" />
-        <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="256GB" />
-        <TextField label="Màu sắc" value={form.color} onChange={set("color")} placeholder="Tím" />
+        <label className="block">
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
+          <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 14 Pro Max" />
+        </label>
+        <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="256GB" list="dl-storage" />
+        <TextField label="Màu sắc" value={form.color} onChange={set("color")} placeholder="Tím" list="dl-colors-device" />
+        <datalist id="dl-colors-device">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
+        <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
           <select value={form.condition} onChange={set("condition")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
@@ -587,6 +647,7 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
             <option value="used">Máy cũ</option>
           </select>
         </label>
+        <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} placeholder="99" />
         <TextField label="Nhà cung cấp / nguồn nhập" value={form.supplier} onChange={set("supplier")} />
         <TextField label="Giá vốn (đ)" type="number" value={form.cost_price} onChange={set("cost_price")} />
         <TextField label="Giá bán đề xuất (đ)" type="number" value={form.sale_price} onChange={set("sale_price")} />
@@ -789,7 +850,10 @@ function InventoryModule({ employee, onCountChange }) {
                       {d.model}
                       <span className="text-slate-400"> {[d.storage, d.color].filter(Boolean).join(" · ")}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-slate-500">{DEVICE_CONDITION_LABELS[d.condition] || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-500">
+                      {DEVICE_CONDITION_LABELS[d.condition] || "—"}
+                      {d.condition_percent != null && <span className="text-slate-400"> · {d.condition_percent}%</span>}
+                    </td>
                     {canSeeCost && <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.cost_price)}</td>}
                     <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.sale_price)}</td>
                     <td className="px-3 py-2.5">
@@ -1047,6 +1111,56 @@ function DevicePicker({ value, onSelect }) {
   );
 }
 
+function ModelPicker({ value, onSelect, placeholder }) {
+  const [query, setQuery] = useState(value || "");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const filtered = query.trim()
+    ? IPHONE_MODEL_LIST.filter((m) => m.toLowerCase().includes(query.trim().toLowerCase()))
+    : IPHONE_MODEL_LIST;
+
+  const choose = (m) => { onSelect(m); setQuery(m); setOpen(false); };
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); onSelect(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder || "Gõ hoặc chọn từ danh sách..."}
+          className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+        />
+        <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
+      </div>
+      {open && (
+        <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="p-3 text-xs text-slate-400">Không có trong danh mục — vẫn dùng được đúng tên bạn vừa gõ (máy hãng khác/đời cũ).</div>
+          ) : (
+            filtered.map((m) => (
+              <button
+                type="button"
+                key={m}
+                onClick={() => choose(m)}
+                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
+              >
+                {m}
+              </button>
+            ))
+          )}
+          <button type="button" onClick={() => setOpen(false)} className="w-full text-center px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-t border-slate-100">
+            Đóng danh sách
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PaymentRows({ rows, setRows, total }) {
   const paid = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const remaining = total - paid;
@@ -1118,20 +1232,25 @@ function PaymentRows({ rows, setRows, total }) {
                     value={r.trade_in_model}
                     onChange={(e) => update(i, { trade_in_model: e.target.value })}
                     placeholder="Model máy đổi *"
+                    list={`dl-models-tradein-${i}`}
                     className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
                   />
                   <input
                     value={r.trade_in_storage}
                     onChange={(e) => update(i, { trade_in_storage: e.target.value })}
                     placeholder="Dung lượng"
+                    list="dl-storage"
                     className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
                   />
                   <input
                     value={r.trade_in_color}
                     onChange={(e) => update(i, { trade_in_color: e.target.value })}
                     placeholder="Màu sắc"
+                    list={`dl-colors-tradein-${i}`}
                     className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
                   />
+                  <datalist id={`dl-models-tradein-${i}`}>{IPHONE_MODEL_LIST.map((m) => <option key={m} value={m} />)}</datalist>
+                  <datalist id={`dl-colors-tradein-${i}`}>{coloroptionsForModel(r.trade_in_model).map((c) => <option key={c} value={c} />)}</datalist>
                 </div>
               </div>
             )}
@@ -1746,11 +1865,113 @@ async function uploadCccdImage(file, purchaseCodeHint, side) {
   return data.publicUrl;
 }
 
+function SupplierPicker({ value, onSelect, employee }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    const t = setTimeout(async () => {
+      let req = supabase.from("suppliers").select("*").order("created_at", { ascending: false }).limit(8);
+      if (query.trim()) req = req.ilike("name", `%${query.trim()}%`);
+      const { data } = await req;
+      if (active) { setResults(data || []); setLoading(false); }
+    }, 250);
+    return () => { active = false; clearTimeout(t); };
+  }, [query]);
+
+  const createNew = async () => {
+    if (!newName.trim()) return;
+    setCreating(true);
+    const { data, error } = await supabase.from("suppliers").insert({
+      name: newName.trim(), phone: newPhone.trim() || null, store_id: employee.store_id, created_by: employee.id,
+    }).select().maybeSingle();
+    setCreating(false);
+    if (error) { alert(error.message); return; }
+    onSelect(data);
+    setShowNew(false);
+    setNewName(""); setNewPhone("");
+  };
+
+  if (value) {
+    return (
+      <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-slate-700">{value.name}</p>
+          <p className="text-xs text-slate-400">{value.phone || "—"}</p>
+        </div>
+        <button type="button" onClick={() => onSelect(null)} className="text-xs text-brand-600 hover:underline">Đổi</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="Tìm nhà cung cấp theo tên..."
+          className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+        />
+      </div>
+      {open && (
+        <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-72 overflow-y-auto">
+          {loading ? (
+            <div className="p-3 text-xs text-slate-400 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
+          ) : results.length === 0 && !showNew ? (
+            <div className="p-3 text-xs text-slate-400">Chưa có NCC nào khớp.</div>
+          ) : (
+            results.map((s) => (
+              <button
+                type="button" key={s.id}
+                onClick={() => { onSelect(s); setOpen(false); setQuery(""); }}
+                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
+              >
+                <p className="font-medium text-slate-700">{s.name}</p>
+                <p className="text-xs text-slate-400">{s.phone || "—"}</p>
+              </button>
+            ))
+          )}
+          {!showNew ? (
+            <button type="button" onClick={() => { setShowNew(true); setNewName(query); }} className="w-full text-left px-3 py-2.5 text-xs text-brand-600 hover:bg-slate-50 border-t border-slate-100 flex items-center gap-1">
+              <Plus size={13} /> Thêm nhà cung cấp mới
+            </button>
+          ) : (
+            <div className="p-3 border-t border-slate-100 space-y-2">
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Tên NCC *" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+              <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="SĐT" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+              <div className="flex gap-2">
+                <button type="button" onClick={createNew} disabled={creating || !newName.trim()} className="bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-50">
+                  {creating ? "Đang lưu..." : "Lưu NCC"}
+                </button>
+                <button type="button" onClick={() => setShowNew(false)} className="text-xs text-slate-400 px-3 py-1.5">Hủy</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PurchaseForm({ onCancel, onSaved, employee }) {
+  const [sourceType, setSourceType] = useState("customer"); // "customer" | "supplier"
   const [customer, setCustomer] = useState(null);
+  const [supplier, setSupplier] = useState(null);
   const [form, setForm] = useState({
-    imei: "", model: "", storage: "", color: "", condition: "used",
+    imei: "", model: "", storage: "", color: "", condition: "used", condition_percent: "",
     purchase_price: "", payment_method: "cash", notes: "",
+    paid_amount: "", due_date: "",
   });
   const [cccdFrontFile, setCccdFrontFile] = useState(null);
   const [cccdBackFile, setCccdBackFile] = useState(null);
@@ -1766,43 +1987,66 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
     setDuplicateImei(data || null);
   };
 
+  const price = Number(form.purchase_price) || 0;
+  const paid = form.paid_amount === "" ? price : Number(form.paid_amount);
+  const debt = Math.max(0, price - paid);
+
   const submit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!customer) { setError("Vui lòng chọn khách hàng bán máy."); return; }
+    if (sourceType === "customer" && !customer) { setError("Vui lòng chọn khách hàng bán máy."); return; }
+    if (sourceType === "supplier" && !supplier) { setError("Vui lòng chọn nhà cung cấp."); return; }
     if (!form.imei.trim() || !form.model.trim()) { setError("Vui lòng nhập đủ IMEI và model máy."); return; }
     if (!form.purchase_price || Number(form.purchase_price) <= 0) { setError("Vui lòng nhập giá thu mua hợp lệ."); return; }
     if (duplicateImei) { setError("IMEI này đã có trong kho, không thể thu mua trùng."); return; }
-    if (!customer.cccd) { setError("Khách hàng chưa có số CCCD — vào mục Khách hàng bổ sung CCCD trước khi lập hồ sơ thu mua (bắt buộc để hồ sơ hợp lệ)."); return; }
-    if (!cccdFrontFile || !cccdBackFile) { setError("Vui lòng chụp/tải đủ ảnh CCCD mặt trước và mặt sau để có bộ hồ sơ hợp lệ."); return; }
+    if (sourceType === "customer") {
+      if (!customer.cccd) { setError("Khách hàng chưa có số CCCD — vào mục Khách hàng bổ sung CCCD trước khi lập hồ sơ thu mua (bắt buộc để hồ sơ hợp lệ)."); return; }
+      if (!cccdFrontFile || !cccdBackFile) { setError("Vui lòng chụp/tải đủ ảnh CCCD mặt trước và mặt sau để có bộ hồ sơ hợp lệ."); return; }
+    }
+    if (sourceType === "supplier" && paid > price) { setError("Số tiền đã thanh toán không được lớn hơn giá thu mua."); return; }
 
     setSaving(true);
     try {
       const { data: newDevice, error: devErr } = await supabase.from("devices").insert({
         imei: form.imei.trim(), model: form.model.trim(),
         storage: form.storage.trim() || null, color: form.color.trim() || null,
-        condition: form.condition, status: "in_stock", cost_price: Number(form.purchase_price),
-        supplier: `Thu mua từ khách — ${customer.full_name}`, import_date: new Date().toISOString().slice(0, 10),
+        condition: form.condition, condition_percent: form.condition_percent === "" ? null : Number(form.condition_percent),
+        status: "in_stock", cost_price: Number(form.purchase_price),
+        supplier: sourceType === "supplier" ? supplier.name : `Thu mua từ khách — ${customer.full_name}`,
+        import_date: new Date().toISOString().slice(0, 10),
         created_by: employee.id, updated_by: employee.id, store_id: employee.store_id,
       }).select().maybeSingle();
       if (devErr) throw devErr;
 
-      const codeHint = `NM-${Date.now()}`;
-      const [cccdFrontUrl, cccdBackUrl] = await Promise.all([
-        uploadCccdImage(cccdFrontFile, codeHint, "truoc"),
-        uploadCccdImage(cccdBackFile, codeHint, "sau"),
-      ]);
+      let cccdFrontUrl = null, cccdBackUrl = null;
+      if (sourceType === "customer") {
+        const codeHint = `NM-${Date.now()}`;
+        [cccdFrontUrl, cccdBackUrl] = await Promise.all([
+          uploadCccdImage(cccdFrontFile, codeHint, "truoc"),
+          uploadCccdImage(cccdBackFile, codeHint, "sau"),
+        ]);
+      }
+
+      const debtStatus = sourceType === "supplier" ? (debt === 0 ? "paid" : (paid === 0 ? "unpaid" : "partial")) : "paid";
 
       const { data: purchase, error: poErr } = await supabase.from("purchase_orders").insert({
-        customer_id: customer.id, device_id: newDevice.id, linked_sale_order_id: null,
-        purchase_price: Number(form.purchase_price), payment_method: form.payment_method,
+        source_type: sourceType,
+        customer_id: sourceType === "customer" ? customer.id : null,
+        supplier_id: sourceType === "supplier" ? supplier.id : null,
+        device_id: newDevice.id, linked_sale_order_id: null,
+        purchase_price: price, payment_method: form.payment_method,
         notes: form.notes.trim() || null, created_by: employee.id,
         cccd_front_url: cccdFrontUrl, cccd_back_url: cccdBackUrl, store_id: employee.store_id,
+        paid_amount: sourceType === "supplier" ? paid : price,
+        debt_status: debtStatus,
+        due_date: sourceType === "supplier" && debt > 0 ? (form.due_date || null) : null,
       }).select().maybeSingle();
       if (poErr) throw poErr;
 
-      const { error: contractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id, store_id: employee.store_id });
-      if (contractErr) throw contractErr;
+      if (sourceType === "customer") {
+        const { error: contractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id, store_id: employee.store_id });
+        if (contractErr) throw contractErr;
+      }
 
       await supabase.from("audit_logs").insert([
         { table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id, store_id: employee.store_id },
@@ -1824,17 +2068,43 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
   return (
     <Card className="p-4 sm:p-5 mb-5">
       <div className="flex items-center justify-between mb-4">
-        <p className="font-semibold text-slate-800 text-sm">Thu mua máy cũ</p>
+        <p className="font-semibold text-slate-800 text-sm">Nhập máy mới</p>
         <button onClick={onCancel} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
       </div>
+
+      <div className="flex gap-2 mb-4">
+        {[
+          { key: "customer", label: "Khách lẻ", icon: Users },
+          { key: "supplier", label: "Nhà cung cấp", icon: Building2 },
+        ].map((opt) => (
+          <button
+            key={opt.key} type="button"
+            onClick={() => { setSourceType(opt.key); setCustomer(null); setSupplier(null); setError(""); }}
+            className={classNames(
+              "flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium border",
+              sourceType === opt.key ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200"
+            )}
+          >
+            <opt.icon size={14} /> {opt.label}
+          </button>
+        ))}
+      </div>
+
       <form onSubmit={submit} className="space-y-4">
-        <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Khách hàng (bên bán máy) *</span>
-          <CustomerPicker value={customer} onSelect={setCustomer} />
-          {customer && !customer.cccd && (
-            <p className="text-xs text-amber-600 mt-1.5">⚠ Khách này chưa có CCCD trong hồ sơ — cần vào mục Khách hàng bổ sung trước.</p>
-          )}
-        </div>
+        {sourceType === "customer" ? (
+          <div>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Khách hàng (bên bán máy) *</span>
+            <CustomerPicker value={customer} onSelect={setCustomer} />
+            {customer && !customer.cccd && (
+              <p className="text-xs text-amber-600 mt-1.5">⚠ Khách này chưa có CCCD trong hồ sơ — cần vào mục Khách hàng bổ sung trước.</p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Nhà cung cấp *</span>
+            <SupplierPicker value={supplier} onSelect={setSupplier} employee={employee} />
+          </div>
+        )}
 
         {duplicateImei && (
           <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 text-xs text-rose-700">
@@ -1844,9 +2114,14 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
 
         <div className="grid sm:grid-cols-2 gap-3">
           <TextField label="Số IMEI *" value={form.imei} onChange={(e) => { set("imei")(e); checkImei(e.target.value); }} />
-          <TextField label="Model máy *" value={form.model} onChange={set("model")} placeholder="iPhone 13 128GB" />
-          <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="128GB" />
-          <TextField label="Màu sắc" value={form.color} onChange={set("color")} />
+          <label className="block">
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
+            <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 13 128GB" />
+          </label>
+          <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="128GB" list="dl-storage" />
+          <TextField label="Màu sắc" value={form.color} onChange={set("color")} list="dl-colors-purchase" />
+          <datalist id="dl-colors-purchase">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
+          <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
           <label className="block">
             <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
             <select value={form.condition} onChange={set("condition")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
@@ -1854,30 +2129,47 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
               <option value="new">Máy mới</option>
             </select>
           </label>
+          <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} placeholder="99" />
           <TextField label="Giá thu mua (đ) *" type="number" value={form.purchase_price} onChange={set("purchase_price")} />
         </div>
 
-        <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Ảnh CCCD khách hàng * (bắt buộc để hồ sơ hợp lệ với khách lẻ)</span>
-          <div className="grid grid-cols-2 gap-3">
-            <CccdUploadField label="Mặt trước" file={cccdFrontFile} onFile={setCccdFrontFile} />
-            <CccdUploadField label="Mặt sau" file={cccdBackFile} onFile={setCccdBackFile} />
+        {sourceType === "customer" && (
+          <div>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Ảnh CCCD khách hàng * (bắt buộc để hồ sơ hợp lệ với khách lẻ)</span>
+            <div className="grid grid-cols-2 gap-3">
+              <CccdUploadField label="Mặt trước" file={cccdFrontFile} onFile={setCccdFrontFile} />
+              <CccdUploadField label="Mặt sau" file={cccdBackFile} onFile={setCccdBackFile} />
+            </div>
           </div>
-        </div>
+        )}
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi trả cho khách</span>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi trả</span>
           <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
             <option value="cash">Tiền mặt</option>
             <option value="bank_transfer">Chuyển khoản</option>
           </select>
         </label>
+
+        {sourceType === "supplier" && (
+          <div className="bg-slate-50 rounded-xl p-3 space-y-3">
+            <p className="text-xs font-medium text-slate-600">Công nợ NCC</p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <TextField label="Đã thanh toán (đ)" type="number" value={form.paid_amount} onChange={set("paid_amount")} placeholder={String(price)} />
+              {debt > 0 && <TextField label="Hạn thanh toán" type="date" value={form.due_date} onChange={set("due_date")} />}
+            </div>
+            <div className={classNames("text-xs px-3 py-2 rounded-lg", debt === 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+              {debt === 0 ? "Đã thanh toán đủ" : `Còn nợ NCC: ${fmtVND(debt)}`}
+            </div>
+          </div>
+        )}
+
         <TextField label="Ghi chú" value={form.notes} onChange={set("notes")} />
 
         {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
         <div className="flex gap-2">
           <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
-            {saving && <Loader2 size={14} className="animate-spin" />} Xác nhận thu mua
+            {saving && <Loader2 size={14} className="animate-spin" />} Xác nhận nhập máy
           </button>
           <button type="button" onClick={onCancel} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
         </div>
@@ -1892,6 +2184,8 @@ function PurchaseModule({ employee }) {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [printData, setPrintData] = useState(null);
+  const [payingDebt, setPayingDebt] = useState(null);
+  const [payAmount, setPayAmount] = useState("");
 
   const canCreate = employee.role !== "ke_toan";
   const canDelete = employee.role === "quan_ly";
@@ -1900,7 +2194,7 @@ function PurchaseModule({ employee }) {
     setLoading(true);
     const { data, error } = await supabase
       .from("purchase_orders")
-      .select("*, customers(full_name, phone, cccd, cccd_issue_date, cccd_issue_place, date_of_birth, address), devices(imei, model, storage, color, condition), sales_orders(order_code), contracts(contract_code)")
+      .select("*, customers(full_name, phone, cccd, cccd_issue_date, cccd_issue_place, date_of_birth, address), suppliers(name, phone), devices(imei, model, storage, color, condition), sales_orders(order_code), contracts(contract_code)")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (!error) setPurchases(data || []);
@@ -1912,8 +2206,11 @@ function PurchaseModule({ employee }) {
   const filtered = purchases.filter((p) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return p.purchase_code?.toLowerCase().includes(q) || p.devices?.imei?.toLowerCase().includes(q) || p.customers?.full_name?.toLowerCase().includes(q);
+    return p.purchase_code?.toLowerCase().includes(q) || p.devices?.imei?.toLowerCase().includes(q)
+      || p.customers?.full_name?.toLowerCase().includes(q) || p.suppliers?.name?.toLowerCase().includes(q);
   });
+
+  const totalDebt = purchases.reduce((s, p) => s + Math.max(0, Number(p.purchase_price || 0) - Number(p.paid_amount ?? p.purchase_price ?? 0)), 0);
 
   const remove = async (p) => {
     if (!confirm(`Xóa phiếu thu mua "${p.purchase_code}"? Máy đã nhập kho sẽ không tự động bị xóa.`)) return;
@@ -1923,16 +2220,43 @@ function PurchaseModule({ employee }) {
     load();
   };
 
+  const openPayDebt = (p) => {
+    const debt = Math.max(0, Number(p.purchase_price) - Number(p.paid_amount ?? 0));
+    setPayingDebt(p);
+    setPayAmount(String(debt));
+  };
+
+  const submitPayDebt = async () => {
+    const p = payingDebt;
+    const addAmount = Number(payAmount) || 0;
+    if (addAmount <= 0) return;
+    const newPaid = Math.min(Number(p.purchase_price), Number(p.paid_amount ?? 0) + addAmount);
+    const newDebt = Number(p.purchase_price) - newPaid;
+    const newStatus = newDebt === 0 ? "paid" : (newPaid === 0 ? "unpaid" : "partial");
+    const { data: updated, error } = await supabase.from("purchase_orders")
+      .update({ paid_amount: newPaid, debt_status: newStatus }).eq("id", p.id).select().maybeSingle();
+    if (error) { alert(error.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "purchase_orders", record_id: p.id, action: "update",
+      old_data: p, new_data: updated, performed_by: employee.id, store_id: employee.store_id,
+    });
+    setPayingDebt(null);
+    load();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Nhập máy / Thu cũ</h2>
-          <p className="text-xs text-slate-400">{purchases.length} phiếu — bao gồm cả thu mua độc lập và đổi trừ khi bán</p>
+          <p className="text-xs text-slate-400">
+            {purchases.length} phiếu — Khách lẻ / NCC / đổi trừ khi bán
+            {totalDebt > 0 && <span className="text-amber-600 font-medium"> · Tổng công nợ NCC: {fmtVND(totalDebt)}</span>}
+          </p>
         </div>
         {canCreate && (
           <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-            <Banknote size={15} /> Thu mua máy cũ
+            <Banknote size={15} /> Nhập máy mới
           </button>
         )}
       </div>
@@ -1948,7 +2272,7 @@ function PurchaseModule({ employee }) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo mã phiếu, IMEI, tên khách..."
+              placeholder="Tìm theo mã phiếu, IMEI, tên khách/NCC..."
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
             />
           </div>
@@ -1963,18 +2287,21 @@ function PurchaseModule({ employee }) {
               <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
                 <th className="px-3 py-2">Mã phiếu</th>
                 <th className="px-3 py-2">Ngày</th>
-                <th className="px-3 py-2">Khách hàng</th>
+                <th className="px-3 py-2">Đối tác</th>
                 <th className="px-3 py-2">Máy thu</th>
                 <th className="px-3 py-2">Giá thu mua</th>
-                <th className="px-3 py-2">Loại</th>
+                <th className="px-3 py-2">Nguồn</th>
+                <th className="px-3 py-2">Công nợ</th>
                 <th className="px-3 py-2"></th>
               </tr></thead>
               <tbody>
-                {filtered.map((p) => (
+                {filtered.map((p) => {
+                  const debt = Math.max(0, Number(p.purchase_price) - Number(p.paid_amount ?? p.purchase_price ?? 0));
+                  return (
                   <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{p.purchase_code}</td>
                     <td className="px-3 py-2.5 text-slate-500">{fmtDate(p.created_at)}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{p.customers?.full_name}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{p.customers?.full_name || p.suppliers?.name}</td>
                     <td className="px-3 py-2.5 text-slate-500">
                       {p.devices?.model} <span className="text-slate-400">· IMEI {p.devices?.imei}</span>
                     </td>
@@ -1982,19 +2309,34 @@ function PurchaseModule({ employee }) {
                     <td className="px-3 py-2.5">
                       {p.sales_orders ? (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-brand-50 text-brand-700">Đổi trừ đơn {p.sales_orders.order_code}</span>
+                      ) : p.source_type === "supplier" ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700">Nhà cung cấp</span>
                       ) : (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Mua độc lập</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Khách lẻ</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {p.source_type === "supplier" && debt > 0 ? (
+                        <button onClick={() => openPayDebt(p)} className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 hover:bg-amber-100">
+                          Còn nợ {fmtVND(debt)}
+                        </button>
+                      ) : p.source_type === "supplier" ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Đã thanh toán</span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      {!p.sales_orders && (
+                      {!p.sales_orders && p.source_type === "customer" && (
                         <button onClick={() => setPrintData({ p, kind: "receipt" })} className="text-brand-600 hover:underline text-xs mr-3">
                           <Printer size={12} className="inline mr-0.5" />Phiếu chi
                         </button>
                       )}
-                      <button onClick={() => setPrintData({ p, kind: "contract" })} className="text-brand-600 hover:underline text-xs mr-3">
-                        <Printer size={12} className="inline mr-0.5" />Hợp đồng
-                      </button>
+                      {p.source_type === "customer" && (
+                        <button onClick={() => setPrintData({ p, kind: "contract" })} className="text-brand-600 hover:underline text-xs mr-3">
+                          <Printer size={12} className="inline mr-0.5" />Hợp đồng
+                        </button>
+                      )}
                       {canDelete && (
                         <button onClick={() => remove(p)} className="text-rose-500 hover:underline text-xs">
                           <Trash2 size={12} className="inline mr-0.5" />Xóa
@@ -2002,12 +2344,32 @@ function PurchaseModule({ employee }) {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </Card>
+
+      {payingDebt && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="font-semibold text-slate-800 text-sm">Thanh toán công nợ — {payingDebt.purchase_code}</p>
+              <button onClick={() => setPayingDebt(null)} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">
+              NCC: {payingDebt.suppliers?.name} · Còn nợ: {fmtVND(Math.max(0, Number(payingDebt.purchase_price) - Number(payingDebt.paid_amount ?? 0)))}
+            </p>
+            <TextField label="Số tiền thanh toán thêm (đ)" type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+            <div className="flex gap-2 mt-4">
+              <button onClick={submitPayDebt} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium">Xác nhận thanh toán</button>
+              <button onClick={() => setPayingDebt(null)} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {printData && (
         <PrintPurchaseModal
