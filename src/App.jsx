@@ -9,7 +9,7 @@ import {
   BarChart3, UserCog, ScrollText, Settings, LogOut, Search, Plus, X,
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
   History, Printer, Wallet, Landmark, CalendarClock, ChevronDown, FileSpreadsheet,
-  Filter, TrendingUp, Package, Award,
+  Filter, TrendingUp, Package, Award, ArrowLeftRight, Banknote,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -74,11 +74,13 @@ const PAYMENT_METHOD_LABELS = {
   cash: "Tiền mặt",
   bank_transfer: "Chuyển khoản",
   installment: "Trả góp",
+  trade_in: "Đổi máy cũ",
 };
 const PAYMENT_METHOD_ICONS = {
   cash: Wallet,
   bank_transfer: Landmark,
   installment: CalendarClock,
+  trade_in: ArrowLeftRight,
 };
 
 // Tạo "Mã hàng" KiotViet từ model+dung lượng+màu (gom các máy cùng loại về
@@ -1046,7 +1048,11 @@ function PaymentRows({ rows, setRows, total }) {
   const remaining = total - paid;
 
   const update = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  const addRow = () => setRows((rs) => [...rs, { method: "cash", amount: remaining > 0 ? remaining : "", installment_provider: "", installment_contract_code: "", note: "" }]);
+  const addRow = () => setRows((rs) => [...rs, {
+    method: "cash", amount: remaining > 0 ? remaining : "",
+    installment_provider: "", installment_contract_code: "", note: "",
+    trade_in_imei: "", trade_in_model: "", trade_in_storage: "", trade_in_color: "", trade_in_condition: "used",
+  }]);
   const removeRow = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
   return (
@@ -1065,12 +1071,13 @@ function PaymentRows({ rows, setRows, total }) {
                 <option value="cash">Tiền mặt</option>
                 <option value="bank_transfer">Chuyển khoản</option>
                 <option value="installment">Trả góp</option>
+                <option value="trade_in">Đổi máy cũ</option>
               </select>
               <input
                 type="number"
                 value={r.amount}
                 onChange={(e) => update(i, { amount: e.target.value })}
-                placeholder="Số tiền"
+                placeholder={r.method === "trade_in" ? "Giá thu mua" : "Số tiền"}
                 className="w-32 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
               />
               {rows.length > 1 && (
@@ -1091,6 +1098,37 @@ function PaymentRows({ rows, setRows, total }) {
                   placeholder="Mã hồ sơ trả góp"
                   className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
                 />
+              </div>
+            )}
+            {r.method === "trade_in" && (
+              <div className="pl-6 space-y-2">
+                <p className="text-[11px] text-slate-400">Máy khách đổi sẽ tự động nhập vào Kho hàng (Còn hàng) khi hoàn tất đơn.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={r.trade_in_imei}
+                    onChange={(e) => update(i, { trade_in_imei: e.target.value })}
+                    placeholder="Số IMEI máy đổi *"
+                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    value={r.trade_in_model}
+                    onChange={(e) => update(i, { trade_in_model: e.target.value })}
+                    placeholder="Model máy đổi *"
+                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    value={r.trade_in_storage}
+                    onChange={(e) => update(i, { trade_in_storage: e.target.value })}
+                    placeholder="Dung lượng"
+                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    value={r.trade_in_color}
+                    onChange={(e) => update(i, { trade_in_color: e.target.value })}
+                    placeholder="Màu sắc"
+                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -1115,7 +1153,10 @@ function OrderForm({ onCancel, onSaved, employee }) {
   const [salePrice, setSalePrice] = useState("");
   const [discount, setDiscount] = useState("0");
   const [notes, setNotes] = useState("");
-  const [payments, setPayments] = useState([{ method: "cash", amount: "", installment_provider: "", installment_contract_code: "", note: "" }]);
+  const [payments, setPayments] = useState([{
+    method: "cash", amount: "", installment_provider: "", installment_contract_code: "", note: "",
+    trade_in_imei: "", trade_in_model: "", trade_in_storage: "", trade_in_color: "", trade_in_condition: "used",
+  }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -1134,6 +1175,23 @@ function OrderForm({ onCancel, onSaved, employee }) {
     const paidTotal = payments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
     if (Math.round(paidTotal) !== Math.round(total)) { setError("Tổng các hình thức thanh toán phải bằng tổng tiền đơn hàng."); return; }
     if (payments.some((r) => !r.amount || Number(r.amount) <= 0)) { setError("Mỗi hình thức thanh toán cần nhập số tiền hợp lệ."); return; }
+    const tradeInRows = payments.filter((r) => r.method === "trade_in");
+    for (const r of tradeInRows) {
+      if (!r.trade_in_imei?.trim() || !r.trade_in_model?.trim()) {
+        setError("Vui lòng nhập đủ IMEI và model cho máy khách đổi.");
+        return;
+      }
+    }
+    // Kiểm tra IMEI máy đổi không trùng với kho hiện có, không trùng nhau giữa các dòng
+    const imeis = tradeInRows.map((r) => r.trade_in_imei.trim());
+    if (new Set(imeis).size !== imeis.length) { setError("Các IMEI máy đổi bị trùng nhau."); return; }
+    if (tradeInRows.length > 0) {
+      const { data: dupCheck } = await supabase.from("devices").select("imei").in("imei", imeis);
+      if (dupCheck && dupCheck.length > 0) {
+        setError(`IMEI máy đổi "${dupCheck[0].imei}" đã tồn tại trong kho.`);
+        return;
+      }
+    }
 
     setSaving(true);
     try {
@@ -1150,12 +1208,40 @@ function OrderForm({ onCancel, onSaved, employee }) {
       const { data: order, error: orderErr } = await supabase.from("sales_orders").insert(orderPayload).select().maybeSingle();
       if (orderErr) throw orderErr;
 
+      // Với mỗi dòng "Đổi máy cũ": tạo máy mới vào Kho + phiếu thu mua liên kết đơn này
+      const tradeInDeviceIds = {};
+      for (const r of tradeInRows) {
+        const { data: newDevice, error: newDevErr } = await supabase.from("devices").insert({
+          imei: r.trade_in_imei.trim(), model: r.trade_in_model.trim(),
+          storage: r.trade_in_storage?.trim() || null, color: r.trade_in_color?.trim() || null,
+          condition: "used", status: "in_stock", cost_price: Number(r.amount),
+          supplier: `Thu đổi từ khách — đơn ${order.order_code}`, import_date: new Date().toISOString().slice(0, 10),
+          created_by: employee.id, updated_by: employee.id,
+        }).select().maybeSingle();
+        if (newDevErr) throw newDevErr;
+        tradeInDeviceIds[r.trade_in_imei.trim()] = newDevice.id;
+
+        const { data: purchase, error: poErr } = await supabase.from("purchase_orders").insert({
+          customer_id: customer.id, device_id: newDevice.id, linked_sale_order_id: order.id,
+          purchase_price: Number(r.amount), payment_method: "trade_in", created_by: employee.id,
+        }).select().maybeSingle();
+        if (poErr) throw poErr;
+
+        const { error: pcontractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id });
+        if (pcontractErr) throw pcontractErr;
+
+        await supabase.from("audit_logs").insert({
+          table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id,
+        });
+      }
+
       const paymentRows = payments.map((r) => ({
         order_id: order.id,
         method: r.method,
         amount: Number(r.amount),
         installment_provider: r.method === "installment" ? (r.installment_provider.trim() || null) : null,
         installment_contract_code: r.method === "installment" ? (r.installment_contract_code.trim() || null) : null,
+        trade_in_device_id: r.method === "trade_in" ? tradeInDeviceIds[r.trade_in_imei.trim()] : null,
         note: r.note?.trim() || null,
         created_by: employee.id,
       }));
@@ -1492,6 +1578,327 @@ function OrdersModule({ employee }) {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Purchase module — nhập máy/thu cũ độc lập (mua trả tiền khách)         */
+/* ---------------------------------------------------------------------- */
+
+function PrintPurchaseModal({ type, purchase, customer, device, contract, onClose }) {
+  const today = fmtDate(new Date());
+  const isContract = type === "contract";
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-start sm:items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0">
+      <div className="bg-white rounded-2xl print:rounded-none shadow-xl w-full max-w-2xl p-6 sm:p-10 my-6 print:my-0 print:shadow-none print:max-w-none">
+        <div className="flex items-center justify-end gap-2 mb-4 print:hidden">
+          <button onClick={() => window.print()} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Printer size={15} /> In
+          </button>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600 rounded-xl px-3 py-2 text-sm">Đóng</button>
+        </div>
+        <div className="text-center mb-6">
+          <p className="text-xs text-slate-400">CH 54 Xuân Thủy — Quản lý mua bán điện thoại</p>
+          <h2 className="text-lg font-bold text-slate-800 mt-1">
+            {isContract ? "HỢP ĐỒNG MUA BÁN ĐIỆN THOẠI (THU MUA)" : "PHIẾU CHI TIỀN (THU MUA MÁY CŨ)"}
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Số: {isContract ? contract?.contract_code : purchase.purchase_code} — Ngày {today}
+          </p>
+        </div>
+
+        {isContract && (
+          <div className="text-sm text-slate-700 space-y-3 mb-4">
+            <p><span className="font-medium text-slate-800">BÊN A (Bên mua):</span> CH 54 Xuân Thủy — Cửa hàng mua bán điện thoại</p>
+            <p><span className="font-medium text-slate-800">BÊN B (Bên bán):</span> {customer?.full_name}</p>
+          </div>
+        )}
+        <div className="text-sm text-slate-700 space-y-1 mb-4">
+          {!isContract && <p><span className="text-slate-400">Khách hàng (bên bán):</span> {customer?.full_name}</p>}
+          {customer?.phone && <p><span className="text-slate-400">SĐT:</span> {customer.phone}</p>}
+          {customer?.cccd && <p><span className="text-slate-400">CCCD:</span> {customer.cccd} {customer.cccd_issue_date && `— cấp ${fmtDate(customer.cccd_issue_date)}`} {customer.cccd_issue_place}</p>}
+          {customer?.address && <p><span className="text-slate-400">Địa chỉ:</span> {customer.address}</p>}
+        </div>
+        <div className="text-sm text-slate-700 space-y-1 mb-4 border-t border-dashed border-slate-200 pt-4">
+          <p className="font-medium text-slate-800">Thông tin máy thu mua</p>
+          <p>{device?.model} {[device?.storage, device?.color].filter(Boolean).join(" · ")} — {DEVICE_CONDITION_LABELS[device?.condition]}</p>
+          <p><span className="text-slate-400">IMEI:</span> {device?.imei}</p>
+        </div>
+        <div className="text-sm text-slate-700 space-y-1 mb-6 border-t border-dashed border-slate-200 pt-4">
+          <div className="flex justify-between"><span className="text-slate-400">Hình thức chi trả</span><span>{PAYMENT_METHOD_LABELS[purchase.payment_method]}</span></div>
+          <div className="flex justify-between font-semibold text-slate-800"><span>Số tiền {isContract ? "thu mua" : "chi"}</span><span>{fmtVND(purchase.purchase_price)}</span></div>
+        </div>
+
+        {isContract && (
+          <div className="text-xs text-slate-500 space-y-1.5 mb-6 border-t border-dashed border-slate-200 pt-4">
+            <p className="font-medium text-slate-700 mb-1">Điều khoản</p>
+            <p>1. Bên B cam kết máy nêu trên thuộc quyền sở hữu hợp pháp của mình, không có tranh chấp, không phải tài sản trộm cắp hay đang thế chấp.</p>
+            <p>2. Ngay khi nhận đủ số tiền trên, quyền sở hữu máy chuyển giao hoàn toàn cho Bên A.</p>
+            <p>3. Hai bên cam kết thực hiện đúng nội dung đã thỏa thuận trong hợp đồng này.</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4 text-center text-sm text-slate-600 mt-10">
+          <div><p className="font-medium text-slate-700 mb-12">{isContract ? "Bên B (Khách hàng)" : "Khách hàng"}</p><p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p></div>
+          <div><p className="font-medium text-slate-700 mb-12">{isContract ? "Bên A (Cửa hàng)" : "Đại diện cửa hàng"}</p><p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PurchaseForm({ onCancel, onSaved, employee }) {
+  const [customer, setCustomer] = useState(null);
+  const [form, setForm] = useState({
+    imei: "", model: "", storage: "", color: "", condition: "used",
+    purchase_price: "", payment_method: "cash", notes: "",
+  });
+  const [duplicateImei, setDuplicateImei] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const checkImei = async (imei) => {
+    if (!imei.trim()) { setDuplicateImei(null); return; }
+    const { data } = await supabase.from("devices").select("*").eq("imei", imei.trim()).maybeSingle();
+    setDuplicateImei(data || null);
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!customer) { setError("Vui lòng chọn khách hàng bán máy."); return; }
+    if (!form.imei.trim() || !form.model.trim()) { setError("Vui lòng nhập đủ IMEI và model máy."); return; }
+    if (!form.purchase_price || Number(form.purchase_price) <= 0) { setError("Vui lòng nhập giá thu mua hợp lệ."); return; }
+    if (duplicateImei) { setError("IMEI này đã có trong kho, không thể thu mua trùng."); return; }
+
+    setSaving(true);
+    try {
+      const { data: newDevice, error: devErr } = await supabase.from("devices").insert({
+        imei: form.imei.trim(), model: form.model.trim(),
+        storage: form.storage.trim() || null, color: form.color.trim() || null,
+        condition: form.condition, status: "in_stock", cost_price: Number(form.purchase_price),
+        supplier: `Thu mua từ khách — ${customer.full_name}`, import_date: new Date().toISOString().slice(0, 10),
+        created_by: employee.id, updated_by: employee.id,
+      }).select().maybeSingle();
+      if (devErr) throw devErr;
+
+      const { data: purchase, error: poErr } = await supabase.from("purchase_orders").insert({
+        customer_id: customer.id, device_id: newDevice.id, linked_sale_order_id: null,
+        purchase_price: Number(form.purchase_price), payment_method: form.payment_method,
+        notes: form.notes.trim() || null, created_by: employee.id,
+      }).select().maybeSingle();
+      if (poErr) throw poErr;
+
+      const { error: contractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id });
+      if (contractErr) throw contractErr;
+
+      await supabase.from("audit_logs").insert([
+        { table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id },
+        { table_name: "purchase_orders", record_id: purchase.id, action: "create", new_data: purchase, performed_by: employee.id },
+      ]);
+
+      onSaved();
+    } catch (err) {
+      if (err.code === "23505" || /duplicate/i.test(err.message || "")) {
+        setError("IMEI này đã tồn tại trong kho — không được nhập trùng.");
+      } else {
+        setError(err.message || "Không lưu được, vui lòng thử lại.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-4 sm:p-5 mb-5">
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-semibold text-slate-800 text-sm">Thu mua máy cũ</p>
+        <button onClick={onCancel} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+      </div>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Khách hàng (bên bán máy) *</span>
+          <CustomerPicker value={customer} onSelect={setCustomer} />
+        </div>
+
+        {duplicateImei && (
+          <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 text-xs text-rose-700">
+            IMEI <span className="font-medium">{duplicateImei.imei}</span> đã có trong kho ({DEVICE_STATUS_LABELS[duplicateImei.status]}).
+          </div>
+        )}
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <TextField label="Số IMEI *" value={form.imei} onChange={(e) => { set("imei")(e); checkImei(e.target.value); }} />
+          <TextField label="Model máy *" value={form.model} onChange={set("model")} placeholder="iPhone 13 128GB" />
+          <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="128GB" />
+          <TextField label="Màu sắc" value={form.color} onChange={set("color")} />
+          <label className="block">
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
+            <select value={form.condition} onChange={set("condition")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <option value="used">Máy cũ</option>
+              <option value="new">Máy mới</option>
+            </select>
+          </label>
+          <TextField label="Giá thu mua (đ) *" type="number" value={form.purchase_price} onChange={set("purchase_price")} />
+        </div>
+
+        <label className="block">
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi trả cho khách</span>
+          <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            <option value="cash">Tiền mặt</option>
+            <option value="bank_transfer">Chuyển khoản</option>
+          </select>
+        </label>
+        <TextField label="Ghi chú" value={form.notes} onChange={set("notes")} />
+
+        {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex gap-2">
+          <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
+            {saving && <Loader2 size={14} className="animate-spin" />} Xác nhận thu mua
+          </button>
+          <button type="button" onClick={onCancel} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function PurchaseModule({ employee }) {
+  const [purchases, setPurchases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [printData, setPrintData] = useState(null);
+
+  const canCreate = employee.role !== "ke_toan";
+  const canDelete = employee.role === "quan_ly";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("purchase_orders")
+      .select("*, customers(full_name, phone, cccd, cccd_issue_date, cccd_issue_place, address), devices(imei, model, storage, color, condition), sales_orders(order_code), contracts(contract_code)")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (!error) setPurchases(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = purchases.filter((p) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return p.purchase_code?.toLowerCase().includes(q) || p.devices?.imei?.toLowerCase().includes(q) || p.customers?.full_name?.toLowerCase().includes(q);
+  });
+
+  const remove = async (p) => {
+    if (!confirm(`Xóa phiếu thu mua "${p.purchase_code}"? Máy đã nhập kho sẽ không tự động bị xóa.`)) return;
+    const { error } = await supabase.from("purchase_orders").delete().eq("id", p.id);
+    if (error) { alert(error.message); return; }
+    await supabase.from("audit_logs").insert({ table_name: "purchase_orders", record_id: p.id, action: "delete", old_data: p, performed_by: employee.id });
+    load();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Nhập máy / Thu cũ</h2>
+          <p className="text-xs text-slate-400">{purchases.length} phiếu — bao gồm cả thu mua độc lập và đổi trừ khi bán</p>
+        </div>
+        {canCreate && (
+          <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Banknote size={15} /> Thu mua máy cũ
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <PurchaseForm employee={employee} onCancel={() => setShowForm(false)} onSaved={() => { setShowForm(false); load(); }} />
+      )}
+
+      <Card className="p-0 overflow-hidden">
+        <div className="p-3 border-b border-slate-100">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm theo mã phiếu, IMEI, tên khách..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={ArrowLeftRight} text="Chưa có phiếu thu mua nào." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã phiếu</th>
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2">Khách hàng</th>
+                <th className="px-3 py-2">Máy thu</th>
+                <th className="px-3 py-2">Giá thu mua</th>
+                <th className="px-3 py-2">Loại</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {filtered.map((p) => (
+                  <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{p.purchase_code}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{fmtDate(p.created_at)}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{p.customers?.full_name}</td>
+                    <td className="px-3 py-2.5 text-slate-500">
+                      {p.devices?.model} <span className="text-slate-400">· IMEI {p.devices?.imei}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600">{fmtVND(p.purchase_price)}</td>
+                    <td className="px-3 py-2.5">
+                      {p.sales_orders ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-brand-50 text-brand-700">Đổi trừ đơn {p.sales_orders.order_code}</span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Mua độc lập</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {!p.sales_orders && (
+                        <button onClick={() => setPrintData({ p, kind: "receipt" })} className="text-brand-600 hover:underline text-xs mr-3">
+                          <Printer size={12} className="inline mr-0.5" />Phiếu chi
+                        </button>
+                      )}
+                      <button onClick={() => setPrintData({ p, kind: "contract" })} className="text-brand-600 hover:underline text-xs mr-3">
+                        <Printer size={12} className="inline mr-0.5" />Hợp đồng
+                      </button>
+                      {canDelete && (
+                        <button onClick={() => remove(p)} className="text-rose-500 hover:underline text-xs">
+                          <Trash2 size={12} className="inline mr-0.5" />Xóa
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {printData && (
+        <PrintPurchaseModal
+          type={printData.kind}
+          purchase={printData.p}
+          customer={printData.p.customers}
+          device={printData.p.devices}
+          contract={Array.isArray(printData.p.contracts) ? printData.p.contracts[0] : printData.p.contracts}
+          onClose={() => setPrintData(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2047,6 +2454,7 @@ const NAV_ITEMS = [
   { key: "customers", label: "Khách hàng", icon: Users },
   { key: "inventory", label: "Kho hàng", icon: Smartphone },
   { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart },
+  { key: "purchases", label: "Nhập máy/Thu cũ", icon: ArrowLeftRight },
   { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 4" },
   { key: "receipts", label: "Phiếu thu/chi", icon: Receipt },
   { key: "reports", label: "Báo cáo", icon: BarChart3, allowedRoles: ["quan_ly", "ke_toan"] },
@@ -2076,6 +2484,8 @@ function AppShell({ employee, onSignOut }) {
         return <InventoryModule employee={employee} onCountChange={setInStockCount} />;
       case "orders":
         return <OrdersModule employee={employee} />;
+      case "purchases":
+        return <PurchaseModule employee={employee} />;
       case "receipts":
         return <ReceiptsModule employee={employee} />;
       case "reports":
