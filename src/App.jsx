@@ -176,7 +176,7 @@ function LoginPage({ onLoggedIn }) {
             <Smartphone className="text-white" size={26} />
           </div>
           <h1 className="text-lg font-semibold text-slate-800">Quản lý mua bán điện thoại</h1>
-          <p className="text-xs text-slate-400 mt-1">CH 54 Xuân Thủy</p>
+          <p className="text-xs text-slate-400 mt-1">Hệ thống dùng chung cho nhiều cửa hàng</p>
         </div>
 
         <form onSubmit={submit} className="space-y-3">
@@ -327,6 +327,7 @@ function CustomerForm({ initial, onCancel, onSaved, employee, existingMatch, onU
       } else {
         payload.created_by = employee.id;
         payload.updated_by = employee.id;
+        payload.store_id = employee.store_id;
         const { error: err } = await supabase.from("customers").insert(payload);
         if (err) throw err;
       }
@@ -536,16 +537,17 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
         if (err) throw err;
         await supabase.from("audit_logs").insert({
           table_name: "devices", record_id: initial.id, action: "update",
-          old_data: initial, new_data: updated, performed_by: employee.id,
+          old_data: initial, new_data: updated, performed_by: employee.id, store_id: employee.store_id,
         });
       } else {
         payload.status = "in_stock";
         payload.created_by = employee.id;
+        payload.store_id = employee.store_id;
         const { data: created, error: err } = await supabase.from("devices").insert(payload).select().maybeSingle();
         if (err) throw err;
         await supabase.from("audit_logs").insert({
           table_name: "devices", record_id: created?.id, action: "create",
-          new_data: created, performed_by: employee.id,
+          new_data: created, performed_by: employee.id, store_id: employee.store_id,
         });
       }
       onSaved();
@@ -698,7 +700,7 @@ function InventoryModule({ employee, onCountChange }) {
     if (error) { alert(error.message); return; }
     await supabase.from("audit_logs").insert({
       table_name: "devices", record_id: d.id, action: "delete",
-      old_data: d, performed_by: employee.id,
+      old_data: d, performed_by: employee.id, store_id: employee.store_id,
     });
     load();
   };
@@ -710,7 +712,7 @@ function InventoryModule({ employee, onCountChange }) {
     if (error) { alert(error.message); return; }
     await supabase.from("audit_logs").insert({
       table_name: "devices", record_id: d.id, action: "update",
-      old_data: d, new_data: updated, performed_by: employee.id,
+      old_data: d, new_data: updated, performed_by: employee.id, store_id: employee.store_id,
     });
     load();
   };
@@ -827,7 +829,7 @@ function InventoryModule({ employee, onCountChange }) {
 /* Print-friendly document modal — Phiếu thu & Hợp đồng                  */
 /* ---------------------------------------------------------------------- */
 
-function PrintDocModal({ type, order, customer, device, payments, contract, onClose }) {
+function PrintDocModal({ type, order, customer, device, payments, contract, storeName, onClose }) {
   const today = fmtDate(new Date());
 
   return (
@@ -841,7 +843,7 @@ function PrintDocModal({ type, order, customer, device, payments, contract, onCl
         </div>
 
         <div className="text-center mb-6">
-          <p className="text-xs text-slate-400">CH 54 Xuân Thủy — Quản lý mua bán điện thoại</p>
+          <p className="text-xs text-slate-400">{storeName || "Cửa hàng"} — Quản lý mua bán điện thoại</p>
           <h2 className="text-lg font-bold text-slate-800 mt-1">
             {type === "contract" ? "HỢP ĐỒNG MUA BÁN ĐIỆN THOẠI" : "PHIẾU THU TIỀN"}
           </h2>
@@ -1206,6 +1208,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
         notes: notes.trim() || null,
         created_by: employee.id,
         updated_by: employee.id,
+        store_id: employee.store_id,
       };
       const { data: order, error: orderErr } = await supabase.from("sales_orders").insert(orderPayload).select().maybeSingle();
       if (orderErr) throw orderErr;
@@ -1218,7 +1221,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
           storage: r.trade_in_storage?.trim() || null, color: r.trade_in_color?.trim() || null,
           condition: "used", status: "in_stock", cost_price: Number(r.amount),
           supplier: `Thu đổi từ khách — đơn ${order.order_code}`, import_date: new Date().toISOString().slice(0, 10),
-          created_by: employee.id, updated_by: employee.id,
+          created_by: employee.id, updated_by: employee.id, store_id: employee.store_id,
         }).select().maybeSingle();
         if (newDevErr) throw newDevErr;
         tradeInDeviceIds[r.trade_in_imei.trim()] = newDevice.id;
@@ -1226,14 +1229,15 @@ function OrderForm({ onCancel, onSaved, employee }) {
         const { data: purchase, error: poErr } = await supabase.from("purchase_orders").insert({
           customer_id: customer.id, device_id: newDevice.id, linked_sale_order_id: order.id,
           purchase_price: Number(r.amount), payment_method: "trade_in", created_by: employee.id,
+          store_id: employee.store_id,
         }).select().maybeSingle();
         if (poErr) throw poErr;
 
-        const { error: pcontractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id });
+        const { error: pcontractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id, store_id: employee.store_id });
         if (pcontractErr) throw pcontractErr;
 
         await supabase.from("audit_logs").insert({
-          table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id,
+          table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id, store_id: employee.store_id,
         });
       }
 
@@ -1246,11 +1250,12 @@ function OrderForm({ onCancel, onSaved, employee }) {
         trade_in_device_id: r.method === "trade_in" ? tradeInDeviceIds[r.trade_in_imei.trim()] : null,
         note: r.note?.trim() || null,
         created_by: employee.id,
+        store_id: employee.store_id,
       }));
       const { error: payErr } = await supabase.from("order_payments").insert(paymentRows);
       if (payErr) throw payErr;
 
-      const { error: contractErr } = await supabase.from("contracts").insert({ order_id: order.id, created_by: employee.id });
+      const { error: contractErr } = await supabase.from("contracts").insert({ order_id: order.id, created_by: employee.id, store_id: employee.store_id });
       if (contractErr) throw contractErr;
 
       const { data: soldDevice, error: devErr } = await supabase
@@ -1258,8 +1263,8 @@ function OrderForm({ onCancel, onSaved, employee }) {
       if (devErr) throw devErr;
 
       await supabase.from("audit_logs").insert([
-        { table_name: "sales_orders", record_id: order.id, action: "create", new_data: order, performed_by: employee.id },
-        { table_name: "devices", record_id: device.id, action: "update", old_data: device, new_data: soldDevice, performed_by: employee.id },
+        { table_name: "sales_orders", record_id: order.id, action: "create", new_data: order, performed_by: employee.id, store_id: employee.store_id },
+        { table_name: "devices", record_id: device.id, action: "update", old_data: device, new_data: soldDevice, performed_by: employee.id, store_id: employee.store_id },
       ]);
 
       onSaved();
@@ -1335,7 +1340,7 @@ function OrderRow({ order, employee, onDeleted }) {
     if (!confirm(`Xóa đơn hàng "${order.order_code}"? Máy sẽ không tự động chuyển lại trạng thái Còn hàng.`)) return;
     const { error } = await supabase.from("sales_orders").delete().eq("id", order.id);
     if (error) { alert(error.message); return; }
-    await supabase.from("audit_logs").insert({ table_name: "sales_orders", record_id: order.id, action: "delete", old_data: order, performed_by: employee.id });
+    await supabase.from("audit_logs").insert({ table_name: "sales_orders", record_id: order.id, action: "delete", old_data: order, performed_by: employee.id, store_id: employee.store_id });
     onDeleted();
   };
 
@@ -1414,6 +1419,7 @@ function OrderRow({ order, employee, onDeleted }) {
           device={detail.device}
           payments={printType.kind === "receipt" ? printType.payments : detail.payments}
           contract={detail.contract}
+          storeName={employee.stores?.name}
           onClose={() => setPrintType(null)}
         />
       )}
@@ -1588,7 +1594,7 @@ function OrdersModule({ employee }) {
 /* Purchase module — nhập máy/thu cũ độc lập (mua trả tiền khách)         */
 /* ---------------------------------------------------------------------- */
 
-function PrintPurchaseModal({ type, purchase, customer, device, contract, onClose }) {
+function PrintPurchaseModal({ type, purchase, customer, device, contract, storeName, onClose }) {
   const today = fmtDate(new Date());
   const isContract = type === "contract";
   return (
@@ -1605,7 +1611,7 @@ function PrintPurchaseModal({ type, purchase, customer, device, contract, onClos
           <p className="text-[11px] text-slate-400">Độc lập — Tự do — Hạnh phúc</p>
         </div>
         <div className="text-center mb-6">
-          <p className="text-xs text-slate-400 mt-3">CH 54 Xuân Thủy — Quản lý mua bán điện thoại</p>
+          <p className="text-xs text-slate-400 mt-3">{storeName || "Cửa hàng"} — Quản lý mua bán điện thoại</p>
           <h2 className="text-lg font-bold text-slate-800 mt-1">
             {isContract ? "HỢP ĐỒNG MUA BÁN TÀI SẢN (THU MUA MÁY CŨ)" : "PHIẾU CHI TIỀN (THU MUA MÁY CŨ)"}
           </h2>
@@ -1618,7 +1624,7 @@ function PrintPurchaseModal({ type, purchase, customer, device, contract, onClos
           <div className="text-sm text-slate-700 space-y-3 mb-4">
             <div>
               <p className="font-medium text-slate-800 mb-1">BÊN A (Bên mua):</p>
-              <p className="pl-3">Cửa hàng CH 54 Xuân Thủy — Kinh doanh mua bán điện thoại di động</p>
+              <p className="pl-3">Cửa hàng {storeName || ""} — Kinh doanh mua bán điện thoại di động</p>
               <p className="pl-3 text-slate-500">Đại diện: {"{Tên đại diện cửa hàng}"} — Chức vụ: {"{Chức vụ}"}</p>
             </div>
           </div>
@@ -1777,7 +1783,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         storage: form.storage.trim() || null, color: form.color.trim() || null,
         condition: form.condition, status: "in_stock", cost_price: Number(form.purchase_price),
         supplier: `Thu mua từ khách — ${customer.full_name}`, import_date: new Date().toISOString().slice(0, 10),
-        created_by: employee.id, updated_by: employee.id,
+        created_by: employee.id, updated_by: employee.id, store_id: employee.store_id,
       }).select().maybeSingle();
       if (devErr) throw devErr;
 
@@ -1791,16 +1797,16 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         customer_id: customer.id, device_id: newDevice.id, linked_sale_order_id: null,
         purchase_price: Number(form.purchase_price), payment_method: form.payment_method,
         notes: form.notes.trim() || null, created_by: employee.id,
-        cccd_front_url: cccdFrontUrl, cccd_back_url: cccdBackUrl,
+        cccd_front_url: cccdFrontUrl, cccd_back_url: cccdBackUrl, store_id: employee.store_id,
       }).select().maybeSingle();
       if (poErr) throw poErr;
 
-      const { error: contractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id });
+      const { error: contractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id, store_id: employee.store_id });
       if (contractErr) throw contractErr;
 
       await supabase.from("audit_logs").insert([
-        { table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id },
-        { table_name: "purchase_orders", record_id: purchase.id, action: "create", new_data: purchase, performed_by: employee.id },
+        { table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id, store_id: employee.store_id },
+        { table_name: "purchase_orders", record_id: purchase.id, action: "create", new_data: purchase, performed_by: employee.id, store_id: employee.store_id },
       ]);
 
       onSaved();
@@ -1913,7 +1919,7 @@ function PurchaseModule({ employee }) {
     if (!confirm(`Xóa phiếu thu mua "${p.purchase_code}"? Máy đã nhập kho sẽ không tự động bị xóa.`)) return;
     const { error } = await supabase.from("purchase_orders").delete().eq("id", p.id);
     if (error) { alert(error.message); return; }
-    await supabase.from("audit_logs").insert({ table_name: "purchase_orders", record_id: p.id, action: "delete", old_data: p, performed_by: employee.id });
+    await supabase.from("audit_logs").insert({ table_name: "purchase_orders", record_id: p.id, action: "delete", old_data: p, performed_by: employee.id, store_id: employee.store_id });
     load();
   };
 
@@ -2010,6 +2016,7 @@ function PurchaseModule({ employee }) {
           customer={printData.p.customers}
           device={printData.p.devices}
           contract={Array.isArray(printData.p.contracts) ? printData.p.contracts[0] : printData.p.contracts}
+          storeName={employee.stores?.name}
           onClose={() => setPrintData(null)}
         />
       )}
@@ -2116,6 +2123,7 @@ function ReceiptsModule({ employee }) {
           customer={printData.customer}
           device={printData.device}
           payments={printData.payments}
+          storeName={employee.stores?.name}
           onClose={() => setPrintData(null)}
         />
       )}
@@ -2451,6 +2459,7 @@ function EmployeesModule({ employee }) {
     try {
       const { error: err } = await supabase.from("employees").insert({
         full_name: form.full_name.trim(), email: toLoginEmail(form.email), role: form.role, is_active: true,
+        store_id: employee.store_id,
       });
       if (err) throw err;
       setForm({ full_name: "", email: "", role: "nhan_vien" });
@@ -2624,7 +2633,7 @@ function AppShell({ employee, onSignOut }) {
             <Smartphone className="text-white" size={18} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-800 leading-tight">CH 54 Xuân Thủy</p>
+            <p className="text-sm font-semibold text-slate-800 leading-tight">{employee.stores?.name || "Cửa hàng"}</p>
             <p className="text-[11px] text-slate-400">Quản lý mua bán máy</p>
           </div>
         </div>
@@ -2655,7 +2664,7 @@ function AppShell({ employee, onSignOut }) {
           <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
             <Smartphone className="text-white" size={16} />
           </div>
-          <p className="text-sm font-semibold text-slate-800">CH 54 Xuân Thủy</p>
+          <p className="text-sm font-semibold text-slate-800">{employee.stores?.name || "Cửa hàng"}</p>
         </div>
         <button onClick={() => setMobileMenuOpen((s) => !s)} className="text-slate-500"><Menu size={20} /></button>
       </div>
@@ -2707,13 +2716,13 @@ export default function App() {
     const uid = s.user.id;
     const userEmail = (s.user.email || "").toLowerCase();
 
-    let { data: byUid } = await supabase.from("employees").select("*").eq("user_id", uid).maybeSingle();
+    let { data: byUid } = await supabase.from("employees").select("*, stores(name, address)").eq("user_id", uid).maybeSingle();
     if (byUid) { setEmployee(byUid); return; }
 
     // First login after being invited: link by email if a placeholder row exists.
-    const { data: byEmail } = await supabase.from("employees").select("*").eq("email", userEmail).is("user_id", null).maybeSingle();
+    const { data: byEmail } = await supabase.from("employees").select("*, stores(name, address)").eq("email", userEmail).is("user_id", null).maybeSingle();
     if (byEmail) {
-      const { data: linked, error } = await supabase.from("employees").update({ user_id: uid }).eq("id", byEmail.id).select().maybeSingle();
+      const { data: linked, error } = await supabase.from("employees").update({ user_id: uid }).eq("id", byEmail.id).select("*, stores(name, address)").maybeSingle();
       if (!error && linked) { setEmployee(linked); return; }
     }
     setEmployee(null);
