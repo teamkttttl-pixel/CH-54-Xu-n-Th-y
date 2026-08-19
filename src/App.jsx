@@ -9,7 +9,7 @@ import {
   BarChart3, UserCog, ScrollText, Settings, LogOut, Search, Plus, X,
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
   History, Printer, Wallet, Landmark, CalendarClock, ChevronDown, FileSpreadsheet,
-  Filter, TrendingUp, Package, Award, ArrowLeftRight, Banknote,
+  Filter, TrendingUp, Package, Award, ArrowLeftRight, Banknote, Camera,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -298,7 +298,7 @@ function DashboardModule({ employee, customerCount, inStockCount }) {
 
 function CustomerForm({ initial, onCancel, onSaved, employee, existingMatch, onUseExisting }) {
   const [form, setForm] = useState(initial || {
-    full_name: "", cccd: "", cccd_issue_date: "", cccd_issue_place: "", address: "", phone: "", email: "",
+    full_name: "", cccd: "", cccd_issue_date: "", cccd_issue_place: "", date_of_birth: "", address: "", phone: "", email: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -315,6 +315,7 @@ function CustomerForm({ initial, onCancel, onSaved, employee, existingMatch, onU
         cccd: form.cccd.trim() || null,
         cccd_issue_date: form.cccd_issue_date || null,
         cccd_issue_place: form.cccd_issue_place.trim() || null,
+        date_of_birth: form.date_of_birth || null,
         address: form.address.trim() || null,
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
@@ -355,6 +356,7 @@ function CustomerForm({ initial, onCancel, onSaved, employee, existingMatch, onU
         <TextField label="Họ và tên *" value={form.full_name} onChange={set("full_name")} />
         <TextField label="Số điện thoại" value={form.phone} onChange={set("phone")} />
         <TextField label="Số CCCD" value={form.cccd} onChange={set("cccd")} />
+        <TextField label="Ngày sinh" type="date" value={form.date_of_birth || ""} onChange={set("date_of_birth")} />
         <TextField label="Ngày cấp CCCD" type="date" value={form.cccd_issue_date || ""} onChange={set("cccd_issue_date")} />
         <TextField label="Nơi cấp" value={form.cccd_issue_place} onChange={set("cccd_issue_place")} />
         <TextField label="Email" value={form.email} onChange={set("email")} />
@@ -1598,10 +1600,14 @@ function PrintPurchaseModal({ type, purchase, customer, device, contract, onClos
           </button>
           <button onClick={onClose} className="text-slate-400 hover:text-rose-600 rounded-xl px-3 py-2 text-sm">Đóng</button>
         </div>
+        <div className="text-center mb-2">
+          <p className="text-xs text-slate-400 uppercase tracking-wide">Cộng hòa xã hội chủ nghĩa Việt Nam</p>
+          <p className="text-[11px] text-slate-400">Độc lập — Tự do — Hạnh phúc</p>
+        </div>
         <div className="text-center mb-6">
-          <p className="text-xs text-slate-400">CH 54 Xuân Thủy — Quản lý mua bán điện thoại</p>
+          <p className="text-xs text-slate-400 mt-3">CH 54 Xuân Thủy — Quản lý mua bán điện thoại</p>
           <h2 className="text-lg font-bold text-slate-800 mt-1">
-            {isContract ? "HỢP ĐỒNG MUA BÁN ĐIỆN THOẠI (THU MUA)" : "PHIẾU CHI TIỀN (THU MUA MÁY CŨ)"}
+            {isContract ? "HỢP ĐỒNG MUA BÁN TÀI SẢN (THU MUA MÁY CŨ)" : "PHIẾU CHI TIỀN (THU MUA MÁY CŨ)"}
           </h2>
           <p className="text-xs text-slate-400 mt-1">
             Số: {isContract ? contract?.contract_code : purchase.purchase_code} — Ngày {today}
@@ -1610,32 +1616,57 @@ function PrintPurchaseModal({ type, purchase, customer, device, contract, onClos
 
         {isContract && (
           <div className="text-sm text-slate-700 space-y-3 mb-4">
-            <p><span className="font-medium text-slate-800">BÊN A (Bên mua):</span> CH 54 Xuân Thủy — Cửa hàng mua bán điện thoại</p>
-            <p><span className="font-medium text-slate-800">BÊN B (Bên bán):</span> {customer?.full_name}</p>
+            <div>
+              <p className="font-medium text-slate-800 mb-1">BÊN A (Bên mua):</p>
+              <p className="pl-3">Cửa hàng CH 54 Xuân Thủy — Kinh doanh mua bán điện thoại di động</p>
+              <p className="pl-3 text-slate-500">Đại diện: {"{Tên đại diện cửa hàng}"} — Chức vụ: {"{Chức vụ}"}</p>
+            </div>
           </div>
         )}
         <div className="text-sm text-slate-700 space-y-1 mb-4">
-          {!isContract && <p><span className="text-slate-400">Khách hàng (bên bán):</span> {customer?.full_name}</p>}
-          {customer?.phone && <p><span className="text-slate-400">SĐT:</span> {customer.phone}</p>}
-          {customer?.cccd && <p><span className="text-slate-400">CCCD:</span> {customer.cccd} {customer.cccd_issue_date && `— cấp ${fmtDate(customer.cccd_issue_date)}`} {customer.cccd_issue_place}</p>}
-          {customer?.address && <p><span className="text-slate-400">Địa chỉ:</span> {customer.address}</p>}
+          {isContract ? (
+            <p className="font-medium text-slate-800 mb-1">BÊN B (Bên bán):</p>
+          ) : (
+            <p><span className="text-slate-400">Khách hàng (bên bán):</span> {customer?.full_name}</p>
+          )}
+          <div className={isContract ? "pl-3 space-y-0.5" : ""}>
+            {isContract && <p><span className="text-slate-400">Họ và tên:</span> {customer?.full_name}</p>}
+            {customer?.date_of_birth && <p><span className="text-slate-400">Ngày sinh:</span> {fmtDate(customer.date_of_birth)}</p>}
+            {customer?.phone && <p><span className="text-slate-400">SĐT:</span> {customer.phone}</p>}
+            {customer?.cccd && <p><span className="text-slate-400">Số CCCD:</span> {customer.cccd} {customer.cccd_issue_date && `— cấp ngày ${fmtDate(customer.cccd_issue_date)}`} {customer.cccd_issue_place && `tại ${customer.cccd_issue_place}`}</p>}
+            {customer?.address && <p><span className="text-slate-400">Địa chỉ thường trú:</span> {customer.address}</p>}
+          </div>
         </div>
         <div className="text-sm text-slate-700 space-y-1 mb-4 border-t border-dashed border-slate-200 pt-4">
-          <p className="font-medium text-slate-800">Thông tin máy thu mua</p>
-          <p>{device?.model} {[device?.storage, device?.color].filter(Boolean).join(" · ")} — {DEVICE_CONDITION_LABELS[device?.condition]}</p>
-          <p><span className="text-slate-400">IMEI:</span> {device?.imei}</p>
+          <p className="font-medium text-slate-800">{isContract ? "Điều 1. Đối tượng hợp đồng" : "Thông tin máy thu mua"}</p>
+          <p className={isContract ? "pl-3" : ""}>Điện thoại {device?.model} {[device?.storage, device?.color].filter(Boolean).join(" · ")} — {DEVICE_CONDITION_LABELS[device?.condition]}</p>
+          <p className={isContract ? "pl-3" : ""}><span className="text-slate-400">Số IMEI:</span> {device?.imei}</p>
         </div>
         <div className="text-sm text-slate-700 space-y-1 mb-6 border-t border-dashed border-slate-200 pt-4">
-          <div className="flex justify-between"><span className="text-slate-400">Hình thức chi trả</span><span>{PAYMENT_METHOD_LABELS[purchase.payment_method]}</span></div>
-          <div className="flex justify-between font-semibold text-slate-800"><span>Số tiền {isContract ? "thu mua" : "chi"}</span><span>{fmtVND(purchase.purchase_price)}</span></div>
+          {isContract && <p className="font-medium text-slate-800">Điều 2. Giá cả và phương thức thanh toán</p>}
+          <div className={classNames("flex justify-between", isContract && "pl-3")}><span className="text-slate-400">Hình thức chi trả</span><span>{PAYMENT_METHOD_LABELS[purchase.payment_method]}</span></div>
+          <div className={classNames("flex justify-between font-semibold text-slate-800", isContract && "pl-3")}><span>Số tiền {isContract ? "thu mua (đã bao gồm mọi chi phí)" : "chi"}</span><span>{fmtVND(purchase.purchase_price)}</span></div>
         </div>
 
         {isContract && (
-          <div className="text-xs text-slate-500 space-y-1.5 mb-6 border-t border-dashed border-slate-200 pt-4">
-            <p className="font-medium text-slate-700 mb-1">Điều khoản</p>
-            <p>1. Bên B cam kết máy nêu trên thuộc quyền sở hữu hợp pháp của mình, không có tranh chấp, không phải tài sản trộm cắp hay đang thế chấp.</p>
-            <p>2. Ngay khi nhận đủ số tiền trên, quyền sở hữu máy chuyển giao hoàn toàn cho Bên A.</p>
-            <p>3. Hai bên cam kết thực hiện đúng nội dung đã thỏa thuận trong hợp đồng này.</p>
+          <div className="text-xs text-slate-600 space-y-2.5 mb-6 border-t border-dashed border-slate-200 pt-4">
+            <div>
+              <p className="font-medium text-slate-700 mb-1">Điều 3. Cam kết của Bên B</p>
+              <p className="pl-3">3.1. Tài sản nêu trên thuộc quyền sở hữu hợp pháp, đầy đủ của Bên B, không có tranh chấp, không phải tài sản do phạm tội mà có, không đang bị cầm cố, thế chấp hay thuộc diện tranh chấp với bên thứ ba nào.</p>
+              <p className="pl-3">3.2. Thông tin cá nhân và giấy tờ tùy thân (CCCD) cung cấp cho Bên A là đúng sự thật, Bên B chịu trách nhiệm trước pháp luật về tính chính xác của các thông tin này.</p>
+            </div>
+            <div>
+              <p className="font-medium text-slate-700 mb-1">Điều 4. Chuyển giao quyền sở hữu</p>
+              <p className="pl-3">Ngay sau khi Bên A thanh toán đủ số tiền tại Điều 2 và Bên B bàn giao tài sản, quyền sở hữu đối với tài sản nêu trên chuyển giao hoàn toàn, không điều kiện cho Bên A.</p>
+            </div>
+            <div>
+              <p className="font-medium text-slate-700 mb-1">Điều 5. Giải quyết tranh chấp</p>
+              <p className="pl-3">Mọi tranh chấp phát sinh (nếu có) được hai bên ưu tiên giải quyết trên tinh thần thương lượng, hòa giải. Trường hợp không thỏa thuận được, tranh chấp sẽ được đưa ra cơ quan có thẩm quyền giải quyết theo quy định pháp luật.</p>
+            </div>
+            <div>
+              <p className="font-medium text-slate-700 mb-1">Điều 6. Hiệu lực hợp đồng</p>
+              <p className="pl-3">Hợp đồng có hiệu lực kể từ thời điểm hai bên ký tên, lập thành bộ hồ sơ gồm hợp đồng này kèm bản sao/ảnh chụp CCCD của Bên B.</p>
+            </div>
           </div>
         )}
 
@@ -1643,9 +1674,70 @@ function PrintPurchaseModal({ type, purchase, customer, device, contract, onClos
           <div><p className="font-medium text-slate-700 mb-12">{isContract ? "Bên B (Khách hàng)" : "Khách hàng"}</p><p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p></div>
           <div><p className="font-medium text-slate-700 mb-12">{isContract ? "Bên A (Cửa hàng)" : "Đại diện cửa hàng"}</p><p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p></div>
         </div>
+
+        {isContract && (purchase.cccd_front_url || purchase.cccd_back_url) && (
+          <div className="mt-10 pt-6 border-t border-dashed border-slate-200 break-before-page">
+            <p className="text-sm font-medium text-slate-700 mb-3 text-center">TÀI LIỆU ĐÍNH KÈM — CĂN CƯỚC CÔNG DÂN BÊN B</p>
+            <div className="grid grid-cols-2 gap-4">
+              {purchase.cccd_front_url && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1 text-center">Mặt trước</p>
+                  <img src={purchase.cccd_front_url} alt="CCCD mặt trước" className="w-full rounded-lg border border-slate-200 object-cover" />
+                </div>
+              )}
+              {purchase.cccd_back_url && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1 text-center">Mặt sau</p>
+                  <img src={purchase.cccd_back_url} alt="CCCD mặt sau" className="w-full rounded-lg border border-slate-200 object-cover" />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function CccdUploadField({ label, file, onFile, existingUrl }) {
+  const [preview, setPreview] = useState(existingUrl || null);
+  const inputRef = React.useRef(null);
+
+  const handleChange = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    onFile(f);
+    setPreview(URL.createObjectURL(f));
+  };
+
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-slate-500 mb-1 block">{label}</span>
+      <div
+        onClick={() => inputRef.current?.click()}
+        className="border border-dashed border-slate-300 rounded-xl h-28 flex items-center justify-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 overflow-hidden relative"
+      >
+        {preview ? (
+          <img src={preview} alt={label} className="w-full h-full object-cover" />
+        ) : (
+          <div className="text-center text-slate-400">
+            <Camera size={20} className="mx-auto mb-1" />
+            <span className="text-xs">Bấm để chụp/chọn ảnh</span>
+          </div>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={handleChange} className="hidden" />
+    </label>
+  );
+}
+
+async function uploadCccdImage(file, purchaseCodeHint, side) {
+  const ext = file.name.split(".").pop() || "jpg";
+  const path = `${purchaseCodeHint}-${side}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from("purchase-cccd").upload(path, file, { upsert: false });
+  if (error) throw error;
+  const { data } = supabase.storage.from("purchase-cccd").getPublicUrl(path);
+  return data.publicUrl;
 }
 
 function PurchaseForm({ onCancel, onSaved, employee }) {
@@ -1654,6 +1746,8 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
     imei: "", model: "", storage: "", color: "", condition: "used",
     purchase_price: "", payment_method: "cash", notes: "",
   });
+  const [cccdFrontFile, setCccdFrontFile] = useState(null);
+  const [cccdBackFile, setCccdBackFile] = useState(null);
   const [duplicateImei, setDuplicateImei] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1673,6 +1767,8 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
     if (!form.imei.trim() || !form.model.trim()) { setError("Vui lòng nhập đủ IMEI và model máy."); return; }
     if (!form.purchase_price || Number(form.purchase_price) <= 0) { setError("Vui lòng nhập giá thu mua hợp lệ."); return; }
     if (duplicateImei) { setError("IMEI này đã có trong kho, không thể thu mua trùng."); return; }
+    if (!customer.cccd) { setError("Khách hàng chưa có số CCCD — vào mục Khách hàng bổ sung CCCD trước khi lập hồ sơ thu mua (bắt buộc để hồ sơ hợp lệ)."); return; }
+    if (!cccdFrontFile || !cccdBackFile) { setError("Vui lòng chụp/tải đủ ảnh CCCD mặt trước và mặt sau để có bộ hồ sơ hợp lệ."); return; }
 
     setSaving(true);
     try {
@@ -1685,10 +1781,17 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
       }).select().maybeSingle();
       if (devErr) throw devErr;
 
+      const codeHint = `NM-${Date.now()}`;
+      const [cccdFrontUrl, cccdBackUrl] = await Promise.all([
+        uploadCccdImage(cccdFrontFile, codeHint, "truoc"),
+        uploadCccdImage(cccdBackFile, codeHint, "sau"),
+      ]);
+
       const { data: purchase, error: poErr } = await supabase.from("purchase_orders").insert({
         customer_id: customer.id, device_id: newDevice.id, linked_sale_order_id: null,
         purchase_price: Number(form.purchase_price), payment_method: form.payment_method,
         notes: form.notes.trim() || null, created_by: employee.id,
+        cccd_front_url: cccdFrontUrl, cccd_back_url: cccdBackUrl,
       }).select().maybeSingle();
       if (poErr) throw poErr;
 
@@ -1722,6 +1825,9 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         <div>
           <span className="text-xs font-medium text-slate-500 mb-1 block">Khách hàng (bên bán máy) *</span>
           <CustomerPicker value={customer} onSelect={setCustomer} />
+          {customer && !customer.cccd && (
+            <p className="text-xs text-amber-600 mt-1.5">⚠ Khách này chưa có CCCD trong hồ sơ — cần vào mục Khách hàng bổ sung trước.</p>
+          )}
         </div>
 
         {duplicateImei && (
@@ -1743,6 +1849,14 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
             </select>
           </label>
           <TextField label="Giá thu mua (đ) *" type="number" value={form.purchase_price} onChange={set("purchase_price")} />
+        </div>
+
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Ảnh CCCD khách hàng * (bắt buộc để hồ sơ hợp lệ với khách lẻ)</span>
+          <div className="grid grid-cols-2 gap-3">
+            <CccdUploadField label="Mặt trước" file={cccdFrontFile} onFile={setCccdFrontFile} />
+            <CccdUploadField label="Mặt sau" file={cccdBackFile} onFile={setCccdBackFile} />
+          </div>
         </div>
 
         <label className="block">
@@ -1780,7 +1894,7 @@ function PurchaseModule({ employee }) {
     setLoading(true);
     const { data, error } = await supabase
       .from("purchase_orders")
-      .select("*, customers(full_name, phone, cccd, cccd_issue_date, cccd_issue_place, address), devices(imei, model, storage, color, condition), sales_orders(order_code), contracts(contract_code)")
+      .select("*, customers(full_name, phone, cccd, cccd_issue_date, cccd_issue_place, date_of_birth, address), devices(imei, model, storage, color, condition), sales_orders(order_code), contracts(contract_code)")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (!error) setPurchases(data || []);
