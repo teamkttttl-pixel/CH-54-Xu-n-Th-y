@@ -576,11 +576,14 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const isSold = initial?.status === "sold";
+  const canManagerEditSold = isSold && employee.role === "quan_ly";
+  const lockedForStaff = isSold && employee.role !== "quan_ly";
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = async (e) => {
     e.preventDefault();
+    if (lockedForStaff) { setError("Máy đã bán — chỉ Quản lý mới có quyền chỉnh sửa."); return; }
     if (!form.model.trim()) { setError("Vui lòng nhập tên model máy."); return; }
     if (form.imei.trim() && duplicateImei) {
       setError(`IMEI ${duplicateImei.imei} đã tồn tại trong kho — không được nhập trùng.`);
@@ -652,7 +655,13 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
         </div>
       )}
 
-      {isSold && (
+      {isSold && lockedForStaff && (
+        <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-slate-600 flex items-center gap-2">
+          <ShieldAlert size={15} className="shrink-0" />
+          Máy này đã bán — chỉ Quản lý cửa hàng mới có quyền chỉnh sửa. Toàn bộ thông tin bên dưới chỉ để xem.
+        </div>
+      )}
+      {isSold && canManagerEditSold && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-amber-800 flex items-center gap-2">
           <ShieldAlert size={15} className="shrink-0" />
           Máy này đã bán — chỉ sửa được IMEI và Nhà cung cấp/nguồn nhập (khắc phục sai sót nhập liệu), các thông tin khác được khóa để bảo vệ dữ liệu đã chốt.
@@ -660,7 +669,7 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
       )}
 
       <form onSubmit={submit} className="grid sm:grid-cols-2 gap-3">
-        <TextField label="Số IMEI (để trống nếu chưa có)" value={form.imei} onChange={set("imei")} disabled={!!initial?.id && !isSold} />
+        <TextField label="Số IMEI (để trống nếu chưa có)" value={form.imei} onChange={set("imei")} disabled={lockedForStaff || (!!initial?.id && !isSold)} />
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
           <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 14 Pro Max" disabled={isSold} />
@@ -677,17 +686,19 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
           </select>
         </label>
         <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} placeholder="99" disabled={isSold} />
-        <TextField label="Nhà cung cấp / nguồn nhập" value={form.supplier} onChange={set("supplier")} />
+        <TextField label="Nhà cung cấp / nguồn nhập" value={form.supplier} onChange={set("supplier")} disabled={lockedForStaff} />
         <TextField label="Giá vốn (đ)" type="number" value={form.cost_price} onChange={set("cost_price")} disabled={isSold} />
         <TextField label="Giá bán đề xuất (đ)" type="number" value={form.sale_price} onChange={set("sale_price")} disabled={isSold} />
         <TextField label="Ngày nhập" type="date" value={form.import_date || ""} onChange={set("import_date")} disabled={isSold} />
         <TextField label="Ghi chú" value={form.notes} onChange={set("notes")} className="sm:col-span-2" disabled={isSold} />
         {error && <p className="text-xs text-rose-600 sm:col-span-2">{error}</p>}
         <div className="sm:col-span-2 flex gap-2 mt-1">
-          <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
-            {saving && <Loader2 size={14} className="animate-spin" />} Lưu
-          </button>
-          <button type="button" onClick={onCancel} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
+          {!lockedForStaff && (
+            <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
+              {saving && <Loader2 size={14} className="animate-spin" />} Lưu
+            </button>
+          )}
+          <button type="button" onClick={onCancel} className="text-slate-500 text-sm px-4 py-2">{lockedForStaff ? "Đóng" : "Hủy"}</button>
         </div>
       </form>
     </Card>
@@ -750,6 +761,7 @@ function InventoryModule({ employee, onCountChange }) {
   const [historyImei, setHistoryImei] = useState(null);
 
   const canDelete = employee.role === "quan_ly";
+  const canManage = employee.role === "quan_ly";
   const canSeeCost = employee.role !== "nhan_vien";
 
   const load = useCallback(async () => {
@@ -797,6 +809,7 @@ function InventoryModule({ employee, onCountChange }) {
   };
 
   const cycleStatus = async (d) => {
+    if (!canManage) { alert("Bạn chỉ có quyền xem Kho hàng."); return; }
     if (d.status === "sold") { alert("Máy đã bán — không thể tự đổi trạng thái ở đây."); return; }
     const order = ["in_stock", "reserved", "sold"];
     const next = order[(order.indexOf(d.status) + 1) % order.length];
@@ -818,19 +831,28 @@ function InventoryModule({ employee, onCountChange }) {
             {devices.length} máy · {devices.filter((d) => d.status === "in_stock").length} còn hàng
           </p>
         </div>
-        <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-          <Plus size={15} /> Nhập máy
-        </button>
+        {canManage && (
+          <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Plus size={15} /> Nhập máy
+          </button>
+        )}
       </div>
 
-      {devices.some((d) => !d.imei) && (
+      {!canManage && (
+        <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-slate-600 flex items-center gap-2">
+          <ShieldAlert size={15} className="shrink-0" />
+          Bạn chỉ có quyền xem Kho hàng — mọi thao tác nhập/sửa/xóa máy do Quản lý cửa hàng thực hiện.
+        </div>
+      )}
+
+      {canManage && devices.some((d) => !d.imei) && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-800 flex items-center gap-2">
           <ShieldAlert size={15} className="shrink-0" />
           Có <span className="font-medium">{devices.filter((d) => !d.imei).length} máy</span> chưa có số IMEI — vui lòng cập nhật khi có đủ thông tin (lọc theo "Thiếu IMEI" bên dưới).
         </div>
       )}
 
-      {showForm && (
+      {canManage && showForm && (
         <DeviceForm
           initial={editing}
           employee={employee}
@@ -902,9 +924,12 @@ function InventoryModule({ employee, onCountChange }) {
                     {canSeeCost && <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.cost_price)}</td>}
                     <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.sale_price)}</td>
                     <td className="px-3 py-2.5">
-                      {d.status === "sold" ? (
-                        <span className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])} title="Máy đã bán — không thể tự đổi trạng thái, liên hệ đơn hàng liên quan nếu cần điều chỉnh">
-                          {DEVICE_STATUS_LABELS[d.status]}
+                      {d.status === "sold" || !canManage ? (
+                        <span
+                          className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])}
+                          title={d.status === "sold" ? "Máy đã bán — không thể tự đổi trạng thái" : "Bạn chỉ có quyền xem"}
+                        >
+                          {DEVICE_STATUS_LABELS[d.status] || d.status}
                         </span>
                       ) : (
                         <button
@@ -922,9 +947,11 @@ function InventoryModule({ employee, onCountChange }) {
                           <History size={14} className="inline" />
                         </button>
                       )}
-                      <button onClick={() => openEdit(d)} className="text-brand-600 hover:underline text-xs mr-3">
-                        <Pencil size={12} className="inline mr-0.5" />Sửa
-                      </button>
+                      {canManage && (d.status !== "sold" || employee.role === "quan_ly") && (
+                        <button onClick={() => openEdit(d)} className="text-brand-600 hover:underline text-xs mr-3">
+                          <Pencil size={12} className="inline mr-0.5" />Sửa
+                        </button>
+                      )}
                       {canDelete && (
                         <button onClick={() => remove(d)} className="text-rose-500 hover:underline text-xs">
                           <Trash2 size={12} className="inline mr-0.5" />Xóa
