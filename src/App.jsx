@@ -7419,22 +7419,22 @@ function AppShell({ employee, onSignOut }) {
       <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white border-r border-slate-200/80 print:hidden">
         {/* Măng-sét: tên cửa hàng đặt như tiêu đề sổ */}
         <div className="p-3 pb-2">
-          <div className="bg-brand-600 rounded-xl px-4 py-3.5">
+          <div className="bg-brand-500 rounded-xl px-4 py-3.5">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
                 <Smartphone size={18} className="text-white" />
               </div>
               <div className="min-w-0">
-                <p className="text-[9px] uppercase tracking-[0.16em] text-white/55 leading-none mb-1">Cửa hàng</p>
+                <p className="text-[9px] uppercase tracking-[0.16em] text-white/75 leading-none mb-1">Cửa hàng</p>
                 <p className="text-[15px] font-semibold text-white leading-tight truncate">
                   {employee.stores?.name || "Cửa hàng"}
                 </p>
               </div>
             </div>
-            <div className="mt-3 pt-2.5 border-t border-white/15">
+            <div className="mt-3 pt-2.5 border-t border-white/15 pl-[46px]">
               <p className="text-[12px] text-white/90 leading-tight truncate">{employee.full_name}</p>
               {employee.full_name !== (ROLE_LABELS[employee.role] || employee.role) && (
-                <p className="text-[11px] text-white/60 leading-tight mt-0.5">
+                <p className="text-[11px] text-white/75 leading-tight mt-0.5">
                   {ROLE_LABELS[employee.role] || employee.role}
                 </p>
               )}
@@ -7481,7 +7481,7 @@ function AppShell({ employee, onSignOut }) {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-brand-600 sticky top-0 z-20 print:hidden">
+      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-brand-500 sticky top-0 z-20 print:hidden">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
             <Smartphone size={16} className="text-white" />
@@ -7490,7 +7490,7 @@ function AppShell({ employee, onSignOut }) {
             <p className="text-sm font-semibold text-white leading-tight truncate">
               {employee.stores?.name || "Cửa hàng"}
             </p>
-            <p className="text-[11px] text-white/65 leading-tight truncate">
+            <p className="text-[11px] text-white/80 leading-tight truncate">
               {employee.full_name === (ROLE_LABELS[employee.role] || employee.role)
                 ? employee.full_name
                 : `${employee.full_name} · ${ROLE_LABELS[employee.role] || employee.role}`}
