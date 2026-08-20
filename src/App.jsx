@@ -3973,6 +3973,292 @@ function ReportKpiCard({ label, value, icon: Icon, sub }) {
   );
 }
 
+function CapitalCard({ employee }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    contribution_date: todayStr(), contributor_name: "", amount: "", note: "", kind: "in",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const canManage = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from("v_capital_contributions").select("*")
+      .order("contribution_date", { ascending: true }).limit(500);
+    setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const byPerson = {};
+  for (const r of rows) byPerson[r.contributor_name] = (byPerson[r.contributor_name] || 0) + Number(r.amount || 0);
+  const people = Object.entries(byPerson).sort((a, b) => b[1] - a[1]);
+
+  const submit = async () => {
+    const raw = Number(form.amount) || 0;
+    if (!form.contributor_name.trim()) { setError("Vui lòng nhập tên người góp vốn."); return; }
+    if (raw <= 0) { setError("Số tiền phải lớn hơn 0."); return; }
+    setSaving(true); setError("");
+    const { error: err } = await supabase.from("capital_contributions").insert({
+      contribution_date: form.contribution_date,
+      contributor_name: form.contributor_name.trim(),
+      amount: form.kind === "out" ? -raw : raw,
+      note: form.note.trim() || null,
+      store_id: employee.store_id, created_by: employee.id,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setShowForm(false);
+    setForm({ contribution_date: todayStr(), contributor_name: "", amount: "", note: "", kind: "in" });
+    load();
+  };
+
+  const remove = async (r) => {
+    if (!confirm(`Xóa bản ghi ${r.capital_code} — ${r.contributor_name} ${fmtVND(r.amount)}?`)) return;
+    const { error: err } = await supabase.from("capital_contributions").delete().eq("id", r.id);
+    if (err) { alert(err.message); return; }
+    load();
+  };
+
+  return (
+    <Card className="p-4 sm:p-5 mb-4">
+      <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+        <p className="text-sm font-medium text-slate-700">Vốn góp đầu tư</p>
+        {canManage && (
+          <button onClick={() => { setShowForm((s) => !s); setError(""); }}
+            className="text-xs bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+            <Plus size={13} /> Ghi vốn góp
+          </button>
+        )}
+      </div>
+      <p className="text-[11px] text-slate-400 mb-3">
+        Vốn góp không phải chi phí, không trừ vào lợi nhuận. Dùng làm mẫu số đánh giá hiệu quả kinh doanh.
+      </p>
+
+      <div className="bg-brand-50 rounded-xl p-3 mb-3">
+        <p className="text-xs text-brand-600 mb-1">Tổng vốn góp hiện tại</p>
+        <p className="text-xl font-semibold text-brand-700">{fmtVND(total)}</p>
+      </div>
+
+      {people.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+          {people.map(([name, amt]) => (
+            <div key={name} className="bg-slate-50 rounded-lg px-3 py-2">
+              <p className="text-xs text-slate-400 truncate">{name}</p>
+              <p className="text-sm font-medium text-slate-700">{fmtVND(amt)}</p>
+              {total > 0 && <p className="text-[11px] text-slate-400">{((amt / total) * 100).toFixed(1)}%</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <div className="bg-slate-50 rounded-xl p-3 mb-3 space-y-3">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <TextField label="Ngày" type="date" value={form.contribution_date}
+              onChange={(e) => setForm((f) => ({ ...f, contribution_date: e.target.value }))} />
+            <TextField label="Người góp vốn *" value={form.contributor_name}
+              placeholder="Nguyễn Văn A"
+              onChange={(e) => setForm((f) => ({ ...f, contributor_name: e.target.value }))} />
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Loại</span>
+              <select value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="in">Góp thêm vốn</option>
+                <option value="out">Rút vốn</option>
+              </select>
+            </label>
+            <TextField label="Số tiền (đ) *" type="number" value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+          </div>
+          <TextField label="Ghi chú" value={form.note}
+            onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={submit} disabled={saving}
+              className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} Lưu
+            </button>
+            <button onClick={() => setShowForm(false)} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-white">Hủy</button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-6"><Loader2 className="animate-spin text-slate-300" /></div>
+      ) : rows.length === 0 ? (
+        <p className="text-xs text-slate-400 py-4 text-center">Chưa ghi nhận vốn góp nào.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <th className="px-2 py-2">Mã</th>
+              <th className="px-2 py-2">Ngày</th>
+              <th className="px-2 py-2">Người góp</th>
+              <th className="px-2 py-2">Ghi chú</th>
+              <th className="px-2 py-2 text-right">Số tiền</th>
+              <th className="px-2 py-2"></th>
+            </tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                  <td className="px-2 py-2 text-slate-400 text-xs whitespace-nowrap">{r.capital_code}</td>
+                  <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{fmtDate(r.contribution_date)}</td>
+                  <td className="px-2 py-2 text-slate-700">{r.contributor_name}</td>
+                  <td className="px-2 py-2 text-slate-400 text-xs">{r.note || "—"}</td>
+                  <td className={classNames("px-2 py-2 text-right font-medium whitespace-nowrap",
+                    Number(r.amount) < 0 ? "text-rose-600" : "text-slate-700")}>
+                    {Number(r.amount) < 0 ? "" : "+"}{fmtVND(r.amount)}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    {employee.role === "quan_ly" && (
+                      <button onClick={() => remove(r)} className="text-slate-400 hover:text-rose-600"><Trash2 size={13} /></button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function IncomeStatementCard({ employee, fromDate, toDate, storeName }) {
+  const [d, setD] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    supabase.rpc("income_statement", { p_from: fromDate, p_to: toDate })
+      .then(({ data }) => {
+        if (!active) return;
+        setD(Array.isArray(data) ? data[0] : data);
+        setLoading(false);
+      });
+    return () => { active = false; };
+  }, [fromDate, toDate]);
+
+  if (loading) return (
+    <Card className="p-4 sm:p-5 mb-4">
+      <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-300" /></div>
+    </Card>
+  );
+  if (!d) return null;
+
+  const num = (v) => Number(v || 0);
+  const net = num(d.net_profit);
+  const roi = num(d.capital_total) > 0 ? (net / num(d.capital_total)) * 100 : null;
+  const marginPct = num(d.revenue) > 0 ? (num(d.gross_profit) / num(d.revenue)) * 100 : 0;
+
+  const Row = ({ label, value, bold, indent, tone, hint }) => (
+    <div className={classNames("flex justify-between py-1.5", indent && "pl-4",
+      bold && "border-t border-slate-200 mt-1 pt-2")}>
+      <span className={classNames("text-slate-500", bold && "font-medium text-slate-700")}>
+        {label}
+        {hint && <span className="text-[11px] text-slate-400 ml-1">{hint}</span>}
+      </span>
+      <span className={classNames("whitespace-nowrap",
+        bold ? "font-semibold" : "",
+        tone === "neg" ? "text-rose-600" : tone === "pos" ? "text-emerald-700" : "text-slate-700")}>
+        {tone === "neg" && num(value) > 0 ? "−" : ""}{fmtVND(Math.abs(num(value)))}
+      </span>
+    </div>
+  );
+
+  return (
+    <Card className="p-4 sm:p-5 mb-4">
+      <p className="text-sm font-medium text-slate-700 mb-1">Kết quả kinh doanh — {storeName}</p>
+      <p className="text-[11px] text-slate-400 mb-3">
+        {fmtDate(fromDate)} đến {fmtDate(toDate)} · {d.order_count} đơn bán
+      </p>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div className="bg-emerald-50 rounded-xl p-3">
+          <p className="text-xs text-emerald-600 mb-1">Doanh thu</p>
+          <p className="text-base font-semibold text-emerald-700">{fmtVND(d.revenue)}</p>
+        </div>
+        <div className="bg-brand-50 rounded-xl p-3">
+          <p className="text-xs text-brand-600 mb-1">Lãi gộp</p>
+          <p className="text-base font-semibold text-brand-700">{fmtVND(d.gross_profit)}</p>
+          <p className="text-[11px] text-brand-500">Biên {marginPct.toFixed(1)}%</p>
+        </div>
+        <div className="bg-rose-50 rounded-xl p-3">
+          <p className="text-xs text-rose-500 mb-1">Tổng chi phí</p>
+          <p className="text-base font-semibold text-rose-600">{fmtVND(d.exp_total)}</p>
+        </div>
+        <div className={classNames("rounded-xl p-3", net >= 0 ? "bg-emerald-50" : "bg-rose-50")}>
+          <p className={classNames("text-xs mb-1", net >= 0 ? "text-emerald-600" : "text-rose-500")}>Lợi nhuận</p>
+          <p className={classNames("text-base font-semibold", net >= 0 ? "text-emerald-700" : "text-rose-600")}>
+            {fmtVND(net)}
+          </p>
+          {roi !== null && <p className={classNames("text-[11px]", net >= 0 ? "text-emerald-500" : "text-rose-400")}>
+            {roi >= 0 ? "+" : ""}{roi.toFixed(1)}% trên vốn góp
+          </p>}
+        </div>
+      </div>
+
+      <div className="text-sm">
+        <Row label="Doanh thu bán hàng" value={d.revenue} tone="pos" />
+        <Row label="Giá vốn hàng bán" value={d.cogs} tone="neg" indent />
+        <Row label="Lãi gộp" value={d.gross_profit} bold />
+
+        <div className="mt-3">
+          <Row label="Chi phí khác" value={d.exp_other} tone="neg" indent />
+          <Row label="Chi thưởng nhân viên" value={d.exp_bonus} tone="neg" indent />
+          <Row label="Marketing — quảng cáo" value={d.exp_marketing} tone="neg" indent />
+          <Row label="Giảm trừ doanh thu" value={d.exp_sales_return} tone="neg" indent hint="khách trả máy" />
+          <Row label="Tổng chi phí" value={d.exp_total} bold tone="neg" />
+        </div>
+
+        <div className={classNames("flex justify-between py-2.5 mt-2 px-3 rounded-xl",
+          net >= 0 ? "bg-emerald-50" : "bg-rose-50")}>
+          <span className={classNames("font-semibold", net >= 0 ? "text-emerald-800" : "text-rose-700")}>
+            Lợi nhuận trong kỳ
+          </span>
+          <span className={classNames("font-bold", net >= 0 ? "text-emerald-800" : "text-rose-700")}>
+            {fmtVND(net)}
+          </span>
+        </div>
+      </div>
+
+      {num(d.internal_out_revenue) > 0 && (
+        <div className="mt-4 bg-indigo-50 rounded-xl p-3 text-sm">
+          <p className="text-xs font-medium text-indigo-700 mb-1">Xuất bán nội bộ (không tính vào lợi nhuận trên)</p>
+          <div className="flex justify-between text-xs text-indigo-700 py-0.5">
+            <span>Giá trị xuất</span><span>{fmtVND(d.internal_out_revenue)}</span>
+          </div>
+          <div className="flex justify-between text-xs text-indigo-700 py-0.5">
+            <span>Giá vốn máy xuất</span><span>{fmtVND(d.internal_out_cost)}</span>
+          </div>
+          <div className="flex justify-between text-xs font-semibold text-indigo-800 border-t border-indigo-200 pt-1 mt-1">
+            <span>Lãi nội bộ</span><span>{fmtVND(d.internal_margin)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <div className="bg-slate-50 rounded-xl p-3">
+          <p className="text-xs text-slate-400 mb-1">Vốn góp lũy kế</p>
+          <p className="font-semibold text-slate-800">{fmtVND(d.capital_total)}</p>
+        </div>
+        <div className="bg-slate-50 rounded-xl p-3">
+          <p className="text-xs text-slate-400 mb-1">Giá trị tồn kho</p>
+          <p className="font-semibold text-slate-800">{fmtVND(d.inventory_value)}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function CommissionSection({ employee, fromDate, toDate }) {
   const [summary, setSummary] = useState([]);
   const [detail, setDetail] = useState([]);
@@ -4385,6 +4671,11 @@ function ReportsModule({ employee }) {
               </div>
             </div>
           </Card>
+
+          <IncomeStatementCard employee={employee} fromDate={fromDate} toDate={toDate}
+            storeName={employee.stores?.name || "Cửa hàng"} />
+
+          <CapitalCard employee={employee} />
 
           <CommissionSection employee={employee} fromDate={fromDate} toDate={toDate} />
 
@@ -5447,6 +5738,7 @@ function DebtModule({ employee }) {
 /* -------------------------------------------------------------- */
 
 const EXPENSE_CATEGORY_LABELS = {
+  bonus: "Chi thưởng",
   other: "Chi phí khác",
   marketing: "Marketing — Quảng cáo",
   sales_return: "Giảm trừ doanh thu",
@@ -5961,6 +6253,206 @@ function ConfirmReturnModal({ sale, employee, onClose, onDone }) {
   );
 }
 
+function BonusTab({ employee, rows, loading, onChanged, fromDate, toDate }) {
+  const [staff, setStaff] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({
+    expense_date: todayStr(), employee_id: "", amount: "", description: "", bank_account_id: null,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { banks } = usePaymentOptions();
+
+  const canManage = employee.role !== "nhan_vien";
+  const list = rows.filter((r) => r.category === "bonus");
+  const total = list.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("employees")
+        .select("id, full_name, role").eq("is_active", true).order("full_name");
+      setStaff(data || []);
+    })();
+  }, []);
+
+  const nameOf = (id) => staff.find((s) => s.id === id)?.full_name || "—";
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ expense_date: todayStr(), employee_id: "", amount: "", description: "", bank_account_id: null });
+    setError(""); setShowForm(true);
+  };
+  const openEdit = (r) => {
+    setEditing(r);
+    setForm({
+      expense_date: r.expense_date, employee_id: r.employee_id || "",
+      amount: String(r.amount), description: r.description || "",
+      bank_account_id: r.bank_account_id || null,
+    });
+    setError(""); setShowForm(true);
+  };
+
+  const submit = async () => {
+    const amt = Number(form.amount) || 0;
+    if (!form.employee_id) { setError("Vui lòng chọn nhân viên."); return; }
+    if (amt <= 0) { setError("Số tiền thưởng phải lớn hơn 0."); return; }
+    if (!form.bank_account_id) { setError("Vui lòng chọn tài khoản chi."); return; }
+    setSaving(true); setError("");
+    const payload = {
+      expense_date: form.expense_date, amount: amt, category: "bonus",
+      employee_id: form.employee_id,
+      description: form.description.trim() || `Thưởng ngày ${fmtDate(form.expense_date)} — ${nameOf(form.employee_id)}`,
+      payment_method: "bank_transfer", bank_account_id: form.bank_account_id,
+      store_id: employee.store_id, created_by: employee.id,
+    };
+    const { error: err } = editing
+      ? await supabase.from("expenses").update(payload).eq("id", editing.id)
+      : await supabase.from("expenses").insert(payload);
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setShowForm(false); onChanged();
+  };
+
+  const remove = async (r) => {
+    if (!confirm(`Xóa khoản thưởng ${fmtVND(r.amount)} ngày ${fmtDate(r.expense_date)}?`)) return;
+    const { error: err } = await supabase.from("expenses").delete().eq("id", r.id);
+    if (err) { alert(err.message); return; }
+    onChanged();
+  };
+
+  // Gom theo ngày
+  const byDay = {};
+  for (const r of list) {
+    (byDay[r.expense_date] = byDay[r.expense_date] || []).push(r);
+  }
+  const days = Object.keys(byDay).sort().reverse();
+
+  // Gom theo nhân viên
+  const byStaff = {};
+  for (const r of list) {
+    const k = r.employee_id || "none";
+    byStaff[k] = (byStaff[k] || 0) + Number(r.amount || 0);
+  }
+  const staffRows = Object.entries(byStaff).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div className="bg-slate-100 rounded-xl px-3 py-2 text-sm">
+          <span className="text-slate-400">Tổng thưởng trong kỳ: </span>
+          <span className="font-semibold text-slate-700">{fmtVND(total)}</span>
+          <span className="text-slate-400"> · {list.length} lượt · {days.length} ngày</span>
+        </div>
+        {canManage && (
+          <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Plus size={15} /> Chi thưởng
+          </button>
+        )}
+      </div>
+
+      {staffRows.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+          {staffRows.map(([id, amt]) => (
+            <Card key={id} className="p-3">
+              <p className="text-xs text-slate-400 mb-1 truncate">{id === "none" ? "Không rõ" : nameOf(id)}</p>
+              <p className="text-base font-semibold text-slate-800">{fmtVND(amt)}</p>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <Card className="p-4 mb-3">
+          <p className="text-sm font-medium text-slate-700 mb-3">
+            {editing ? `Sửa khoản thưởng ${editing.expense_code}` : "Chi thưởng cho nhân viên"}
+          </p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <TextField label="Ngày chi thưởng *" type="date" value={form.expense_date}
+              onChange={(e) => setForm((f) => ({ ...f, expense_date: e.target.value }))} />
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Nhân viên *</span>
+              <select value={form.employee_id}
+                onChange={(e) => setForm((f) => ({ ...f, employee_id: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="">— Chọn nhân viên —</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.full_name} ({ROLE_LABELS[s.role] || s.role})</option>
+                ))}
+              </select>
+            </label>
+            <TextField label="Số tiền thưởng (đ) *" type="number" value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+            <div>
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chi *</span>
+              <BankSelect banks={banks} value={form.bank_account_id}
+                onChange={(v) => setForm((f) => ({ ...f, bank_account_id: v }))}
+                className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <TextField label="Lý do thưởng" value={form.description}
+              placeholder="Thưởng doanh số ngày, thưởng chăm chỉ..."
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+          </div>
+          <p className="text-[11px] text-slate-400 mt-2">
+            Khoản thưởng tính là chi phí của đúng ngày chọn ở trên, vào ngay báo cáo kết quả kinh doanh của ngày đó.
+          </p>
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
+          <div className="flex gap-2 mt-3">
+            <button onClick={submit} disabled={saving}
+              className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} {editing ? "Lưu" : "Chi thưởng"}
+            </button>
+            <button onClick={() => setShowForm(false)} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+          </div>
+        </Card>
+      )}
+
+      <Card className="p-0 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : list.length === 0 ? (
+          <EmptyState icon={Award} text="Chưa có khoản thưởng nào trong kỳ." />
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {days.map((day) => {
+              const items = byDay[day];
+              const dayTotal = items.reduce((s, r) => s + Number(r.amount || 0), 0);
+              return (
+                <div key={day}>
+                  <div className="flex items-center justify-between px-3 py-2 bg-slate-50/70">
+                    <p className="text-xs font-medium text-slate-600">{fmtDate(day)}</p>
+                    <p className="text-xs text-slate-500">{items.length} lượt · <span className="font-semibold text-slate-700">{fmtVND(dayTotal)}</span></p>
+                  </div>
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {items.map((r) => (
+                        <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                          <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap w-24">{r.expense_code}</td>
+                          <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{nameOf(r.employee_id)}</td>
+                          <td className="px-3 py-2.5 text-slate-500 text-xs">{r.description}</td>
+                          <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap w-20">
+                            {canManage && (<>
+                              <button onClick={() => openEdit(r)} className="text-slate-400 hover:text-brand-600 mr-2"><Pencil size={14} /></button>
+                              <button onClick={() => remove(r)} className="text-slate-400 hover:text-rose-600"><Trash2 size={14} /></button>
+                            </>)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function ExpensesModule({ employee }) {
   const [tab, setTab] = useState("other");
   const [fromDate, setFromDate] = useState(startOfMonth());
@@ -5984,6 +6476,7 @@ function ExpensesModule({ employee }) {
 
   const TABS = [
     ["other", "Chi phí khác", sumOf("other")],
+    ["bonus", "Chi thưởng", sumOf("bonus")],
     ["marketing", "Marketing", sumOf("marketing")],
     ["sales_return", "Giảm trừ doanh thu", sumOf("sales_return")],
   ];
@@ -6015,6 +6508,7 @@ function ExpensesModule({ employee }) {
       </div>
 
       {tab === "other" && <OtherExpenseTab employee={employee} rows={rows} loading={loading} onChanged={load} />}
+      {tab === "bonus" && <BonusTab employee={employee} rows={rows} loading={loading} onChanged={load} fromDate={fromDate} toDate={toDate} />}
       {tab === "marketing" && <MarketingTab employee={employee} rows={rows} onChanged={load} />}
       {tab === "sales_return" && <ReturnTab employee={employee} rows={rows} onChanged={load} />}
     </div>
