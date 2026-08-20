@@ -8,24 +8,24 @@ export default {
         mono: ['"IBM Plex Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
-        // Nâu cà phê — không đụng màu nào trong hệ ngữ nghĩa của app
-        // (xanh lá đã thu, vàng còn nợ, đỏ trả hàng, tím nội bộ, xanh dương NCC).
+        // Xám đậm — trung tính có chút ánh xanh, không tranh chỗ với hệ màu
+        // ngữ nghĩa (xanh lá đã thu, vàng còn nợ, đỏ trả hàng, tím nội bộ).
         brand: {
-          50:  "#FAF6F2",
-          100: "#F0E7DE",
-          200: "#DFCBB6",
-          300: "#C4A78C",
-          400: "#A67A54",
-          500: "#8C5C31",
-          600: "#7C4A21",   // nút chính — chữ trắng đạt 7,4:1
-          700: "#633A19",
-          800: "#4A2C13",
-          900: "#331E0D",
+          50:  "#F5F7FA",
+          100: "#E8EDF2",
+          200: "#CFD8E3",
+          300: "#93A3B5",
+          400: "#6B7D92",
+          500: "#4C5F76",
+          600: "#35475C",   // nút chính — chữ trắng đạt 9,0:1
+          700: "#2A3949",
+          800: "#1E2833",
+          900: "#151C25",
         },
       },
       boxShadow: {
-        card: "0 1px 2px 0 rgb(51 30 13 / 0.04), 0 1px 3px 0 rgb(51 30 13 / 0.05)",
-        lift: "0 4px 14px -4px rgb(51 30 13 / 0.12)",
+        card: "0 1px 2px 0 rgb(21 28 37 / 0.04), 0 1px 3px 0 rgb(21 28 37 / 0.05)",
+        lift: "0 4px 14px -4px rgb(21 28 37 / 0.12)",
       },
     },
   },
