@@ -9,7 +9,7 @@ import {
   BarChart3, UserCog, ScrollText, Settings, LogOut, Search, Plus, X,
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
   History, Printer, Wallet, Landmark, CalendarClock, ChevronDown, FileSpreadsheet,
-  Filter, TrendingUp, Package, Award, ArrowLeftRight, Banknote, Camera,
+  Filter, TrendingUp, Package, Award, ArrowLeftRight, Banknote,
   Building2,
 } from "lucide-react";
 
@@ -2091,70 +2091,9 @@ function PrintPurchaseModal({ type, purchase, customer, device, contract, storeN
           <div><p className="font-medium text-slate-700 mb-12">{isContract ? "Bên B (Khách hàng)" : "Khách hàng"}</p><p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p></div>
           <div><p className="font-medium text-slate-700 mb-12">{isContract ? "Bên A (Cửa hàng)" : "Đại diện cửa hàng"}</p><p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p></div>
         </div>
-
-        {isContract && (purchase.cccd_front_url || purchase.cccd_back_url) && (
-          <div className="mt-10 pt-6 border-t border-dashed border-slate-200 break-before-page">
-            <p className="text-sm font-medium text-slate-700 mb-3 text-center">TÀI LIỆU ĐÍNH KÈM — CĂN CƯỚC CÔNG DÂN BÊN B</p>
-            <div className="grid grid-cols-2 gap-4">
-              {purchase.cccd_front_url && (
-                <div>
-                  <p className="text-xs text-slate-400 mb-1 text-center">Mặt trước</p>
-                  <img src={purchase.cccd_front_url} alt="CCCD mặt trước" className="w-full rounded-lg border border-slate-200 object-cover" />
-                </div>
-              )}
-              {purchase.cccd_back_url && (
-                <div>
-                  <p className="text-xs text-slate-400 mb-1 text-center">Mặt sau</p>
-                  <img src={purchase.cccd_back_url} alt="CCCD mặt sau" className="w-full rounded-lg border border-slate-200 object-cover" />
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
-}
-
-function CccdUploadField({ label, file, onFile, existingUrl }) {
-  const [preview, setPreview] = useState(existingUrl || null);
-  const inputRef = React.useRef(null);
-
-  const handleChange = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    onFile(f);
-    setPreview(URL.createObjectURL(f));
-  };
-
-  return (
-    <label className="block">
-      <span className="text-xs font-medium text-slate-500 mb-1 block">{label}</span>
-      <div
-        onClick={() => inputRef.current?.click()}
-        className="border border-dashed border-slate-300 rounded-xl h-28 flex items-center justify-center cursor-pointer hover:border-brand-400 hover:bg-brand-50/40 overflow-hidden relative"
-      >
-        {preview ? (
-          <img src={preview} alt={label} className="w-full h-full object-cover" />
-        ) : (
-          <div className="text-center text-slate-400">
-            <Camera size={20} className="mx-auto mb-1" />
-            <span className="text-xs">Bấm để chụp/chọn ảnh</span>
-          </div>
-        )}
-      </div>
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={handleChange} className="hidden" />
-    </label>
-  );
-}
-
-async function uploadCccdImage(file, purchaseCodeHint, side) {
-  const ext = file.name.split(".").pop() || "jpg";
-  const path = `${purchaseCodeHint}-${side}-${Date.now()}.${ext}`;
-  const { error } = await supabase.storage.from("purchase-cccd").upload(path, file, { upsert: false });
-  if (error) throw error;
-  const { data } = supabase.storage.from("purchase-cccd").getPublicUrl(path);
-  return data.publicUrl;
 }
 
 function SupplierPicker({ value, onSelect, employee }) {
@@ -2265,8 +2204,6 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
     purchase_price: "", payment_method: "cash", notes: "",
     paid_amount: "", due_date: "",
   });
-  const [cccdFrontFile, setCccdFrontFile] = useState(null);
-  const [cccdBackFile, setCccdBackFile] = useState(null);
   const [duplicateImei, setDuplicateImei] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -2293,7 +2230,6 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
     if (form.imei.trim() && duplicateImei) { setError(`IMEI ${duplicateImei.imei} đã có trong kho, không thể thu mua trùng.`); return; }
     if (sourceType === "customer") {
       if (!customer.cccd) { setError("Khách hàng chưa có số CCCD — vào mục Khách hàng bổ sung CCCD trước khi lập hồ sơ thu mua (bắt buộc để hồ sơ hợp lệ)."); return; }
-      if (!cccdFrontFile || !cccdBackFile) { setError("Vui lòng chụp/tải đủ ảnh CCCD mặt trước và mặt sau để có bộ hồ sơ hợp lệ."); return; }
     }
     if (sourceType === "supplier" && paid > price) { setError("Số tiền đã thanh toán không được lớn hơn giá thu mua."); return; }
 
@@ -2310,15 +2246,6 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
       }).select().maybeSingle();
       if (devErr) throw devErr;
 
-      let cccdFrontUrl = null, cccdBackUrl = null;
-      if (sourceType === "customer") {
-        const codeHint = `NM-${Date.now()}`;
-        [cccdFrontUrl, cccdBackUrl] = await Promise.all([
-          uploadCccdImage(cccdFrontFile, codeHint, "truoc"),
-          uploadCccdImage(cccdBackFile, codeHint, "sau"),
-        ]);
-      }
-
       const debtStatus = sourceType === "supplier" ? (debt === 0 ? "paid" : (paid === 0 ? "unpaid" : "partial")) : "paid";
 
       const { data: purchase, error: poErr } = await supabase.from("purchase_orders").insert({
@@ -2328,7 +2255,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         device_id: newDevice.id, linked_sale_order_id: null,
         purchase_price: price, payment_method: form.payment_method,
         notes: form.notes.trim() || null, created_by: employee.id,
-        cccd_front_url: cccdFrontUrl, cccd_back_url: cccdBackUrl, store_id: employee.store_id,
+        store_id: employee.store_id,
         paid_amount: sourceType === "supplier" ? paid : price,
         debt_status: debtStatus,
         due_date: sourceType === "supplier" && debt > 0 ? (form.due_date || null) : null,
@@ -2425,16 +2352,6 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} placeholder="99" />
           <TextField label="Giá thu mua (đ) *" type="number" value={form.purchase_price} onChange={set("purchase_price")} />
         </div>
-
-        {sourceType === "customer" && (
-          <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Ảnh CCCD khách hàng * (bắt buộc để hồ sơ hợp lệ với khách lẻ)</span>
-            <div className="grid grid-cols-2 gap-3">
-              <CccdUploadField label="Mặt trước" file={cccdFrontFile} onFile={setCccdFrontFile} />
-              <CccdUploadField label="Mặt sau" file={cccdBackFile} onFile={setCccdBackFile} />
-            </div>
-          </div>
-        )}
 
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi trả</span>
