@@ -732,48 +732,149 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
   );
 }
 
-function ImeiHistoryPanel({ imei, onClose }) {
-  const [logs, setLogs] = useState([]);
+const HISTORY_STYLES = {
+  purchase:     { label: "Nhập kho",     dot: "bg-sky-500",     chip: "bg-sky-50 text-sky-700" },
+  spa:          { label: "Spa",          dot: "bg-fuchsia-500", chip: "bg-fuchsia-50 text-fuchsia-700" },
+  screen:       { label: "Thay màn",     dot: "bg-violet-500",  chip: "bg-violet-50 text-violet-700" },
+  transfer_out: { label: "Xuất nội bộ",  dot: "bg-indigo-500",  chip: "bg-indigo-50 text-indigo-700" },
+  sale:         { label: "Bán",          dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700" },
+  return:       { label: "Khách trả",    dot: "bg-rose-500",    chip: "bg-rose-50 text-rose-700" },
+};
+
+function DeviceHistoryPanel({ device, employee, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const canSeeCost = employee.role !== "nhan_vien";
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    supabase.rpc("device_history", { p_device_id: device.id })
+      .then(({ data }) => { if (active) { setRows(data || []); setLoading(false); } });
+    return () => { active = false; };
+  }, [device.id]);
+
+  const services = (rows || []).filter((r) => r.event_type === "spa" || r.event_type === "screen");
+  const spaTotal = services.filter((r) => r.event_type === "spa")
+    .reduce((s, r) => s + Number(r.amount || 0), 0);
+  const screenNet = services.filter((r) => r.event_type === "screen")
+    .reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
+      <Card className="w-full max-w-2xl p-5 my-8">
+        <div className="flex items-center justify-between mb-1">
+          <p className="font-semibold text-slate-800 text-sm">Lý lịch máy</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          {[device.model, device.storage, device.color].filter(Boolean).join(" ")} · IMEI {device.imei || "—"}
+        </p>
+
+        {services.length > 0 && canSeeCost && (
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-xs text-slate-400 mb-1">Số lần dịch vụ</p>
+              <p className="text-base font-semibold text-slate-800">{services.length}</p>
+            </div>
+            <div className="bg-fuchsia-50 rounded-xl p-3">
+              <p className="text-xs text-fuchsia-600 mb-1">Chi phí spa</p>
+              <p className="text-base font-semibold text-fuchsia-700">{fmtVND(spaTotal)}</p>
+            </div>
+            <div className={classNames("rounded-xl p-3", screenNet >= 0 ? "bg-amber-50" : "bg-emerald-50")}>
+              <p className={classNames("text-xs mb-1", screenNet >= 0 ? "text-amber-600" : "text-emerald-600")}>Chênh do thay màn</p>
+              <p className={classNames("text-base font-semibold", screenNet >= 0 ? "text-amber-700" : "text-emerald-700")}>
+                {screenNet >= 0 ? "+" : ""}{fmtVND(screenNet)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : !rows || rows.length === 0 ? (
+          <p className="text-xs text-slate-400 py-6 text-center">Chưa có sự kiện nào cho máy này.</p>
+        ) : (
+          <ol className="relative border-l-2 border-slate-100 ml-2 space-y-4">
+            {rows.map((r, i) => {
+              const st = HISTORY_STYLES[r.event_type] || { label: r.event_type, dot: "bg-slate-400", chip: "bg-slate-100 text-slate-500" };
+              const before = r.cost_before == null ? null : Number(r.cost_before);
+              const after  = r.cost_after  == null ? null : Number(r.cost_after);
+              const changed = before != null && after != null && Math.round(before) !== Math.round(after);
+              return (
+                <li key={i} className="ml-4">
+                  <span className={classNames("absolute -left-[7px] w-3 h-3 rounded-full ring-2 ring-white", st.dot)} />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={classNames("text-[10px] px-1.5 py-0.5 rounded", st.chip)}>{st.label}</span>
+                    <span className="text-sm font-medium text-slate-700">{r.title}</span>
+                    {r.code && <span className="text-xs text-slate-400">{r.code}</span>}
+                    <span className="text-xs text-slate-400">· {fmtDate(r.event_date)}</span>
+                  </div>
+                  {r.detail && <p className="text-xs text-slate-500 mt-0.5">{r.detail}</p>}
+                  {canSeeCost && changed && (
+                    <p className="text-xs mt-0.5">
+                      <span className="text-slate-400">Giá vốn </span>
+                      <span className="text-slate-500">{fmtVND(before)}</span>
+                      <span className="text-slate-400"> → </span>
+                      <span className={classNames("font-medium", after > before ? "text-amber-600" : "text-emerald-600")}>
+                        {fmtVND(after)}
+                      </span>
+                      <span className={classNames("ml-1", after > before ? "text-amber-600" : "text-emerald-600")}>
+                        ({after > before ? "+" : ""}{fmtVND(after - before)})
+                      </span>
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function ScreenHistoryPanel({ screen, onClose }) {
+  const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    supabase
-      .from("audit_logs")
-      .select("*")
-      .eq("table_name", "devices")
-      .or(`new_data->>imei.eq.${imei},old_data->>imei.eq.${imei}`)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => { if (active) { setLogs(data || []); setLoading(false); } });
+    supabase.rpc("screen_history", { p_screen_id: screen.id })
+      .then(({ data }) => { if (active) { setRows(data || []); setLoading(false); } });
     return () => { active = false; };
-  }, [imei]);
-
-  const ACTION_LABELS = { create: "Nhập kho", update: "Cập nhật", delete: "Xóa khỏi kho" };
+  }, [screen.id]);
 
   return (
-    <Card className="p-4 sm:p-5 mb-5">
-      <div className="flex items-center justify-between mb-3">
-        <p className="font-semibold text-slate-800 text-sm">Lịch sử tra cứu IMEI {imei}</p>
-        <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
-      </div>
-      {loading ? (
-        <div className="flex justify-center py-6"><Loader2 className="animate-spin text-slate-300" /></div>
-      ) : logs.length === 0 ? (
-        <p className="text-xs text-slate-400">Chưa có lịch sử ghi nhận cho máy này.</p>
-      ) : (
-        <ul className="space-y-2">
-          {logs.map((l) => (
-            <li key={l.id} className="text-xs text-slate-500 border-b border-slate-50 pb-2 last:border-0">
-              <span className="font-medium text-slate-700">{ACTION_LABELS[l.action] || l.action}</span> — {fmtDate(l.created_at)}
-              {l.action === "update" && l.old_data?.status !== l.new_data?.status && (
-                <span> · {DEVICE_STATUS_LABELS[l.old_data?.status]} → {DEVICE_STATUS_LABELS[l.new_data?.status]}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-1">
+          <p className="font-semibold text-slate-800 text-sm">Lý lịch màn {screen.screen_code}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          {screen.model || "—"} · {screen.grade || "chưa đánh giá"} · {fmtVND(screen.unit_price)}
+        </p>
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : !rows || rows.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">Chưa có sự kiện nào.</p>
+        ) : (
+          <ol className="relative border-l-2 border-slate-100 ml-2 space-y-3">
+            {rows.map((r, i) => (
+              <li key={i} className="ml-4">
+                <span className={classNames("absolute -left-[7px] w-3 h-3 rounded-full ring-2 ring-white",
+                  r.event_type === "installed_to" ? "bg-sky-500" : "bg-slate-400")} />
+                <p className="text-sm font-medium text-slate-700">{r.title}</p>
+                <p className="text-xs text-slate-500">{r.detail}</p>
+                <p className="text-xs text-slate-400">{fmtDate(r.event_date)}{r.code ? ` · ${r.code}` : ""}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -785,7 +886,7 @@ function InventoryModule({ employee, onCountChange }) {
   const [originFilter, setOriginFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [historyImei, setHistoryImei] = useState(null);
+  const [historyDevice, setHistoryDevice] = useState(null);
   const [incoming, setIncoming] = useState([]);
   const [receiving, setReceiving] = useState(null);
   const canReceive = employee.role !== "nhan_vien";
@@ -945,7 +1046,9 @@ function InventoryModule({ employee, onCountChange }) {
         />
       )}
 
-      {historyImei && <ImeiHistoryPanel imei={historyImei} onClose={() => setHistoryImei(null)} />}
+      {historyDevice && (
+        <DeviceHistoryPanel device={historyDevice} employee={employee} onClose={() => setHistoryDevice(null)} />
+      )}
 
       <Card className="p-0 overflow-hidden">
         <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-2">
@@ -1045,11 +1148,9 @@ function InventoryModule({ employee, onCountChange }) {
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      {d.imei && (
-                        <button onClick={() => setHistoryImei(d.imei)} className="text-slate-400 hover:text-brand-600 mr-3" title="Lịch sử IMEI">
-                          <History size={14} className="inline" />
-                        </button>
-                      )}
+                      <button onClick={() => setHistoryDevice(d)} className="text-slate-400 hover:text-brand-600 mr-3" title="Lý lịch máy">
+                        <History size={14} className="inline" />
+                      </button>
                       {canManage && (d.status !== "sold" || employee.role === "quan_ly") && (
                         <button onClick={() => openEdit(d)} className="text-brand-600 hover:underline text-xs mr-3">
                           <Pencil size={12} className="inline mr-0.5" />Sửa
@@ -6045,6 +6146,7 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
 }
 
 function ScreenStockTab({ employee }) {
+  const [historyScreen, setHistoryScreen] = useState(null);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("in_stock");
@@ -6124,6 +6226,7 @@ function ScreenStockTab({ employee }) {
                 <th className="px-3 py-2">Nguồn</th>
                 <th className="px-3 py-2 text-right">Đơn giá</th>
                 <th className="px-3 py-2">Trạng thái</th>
+                <th className="px-3 py-2"></th>
               </tr></thead>
               <tbody>
                 {filtered.map((r) => (
@@ -6145,6 +6248,11 @@ function ScreenStockTab({ employee }) {
                         {SCREEN_STATUS_LABELS[r.status] || r.status}
                       </span>
                     </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <button onClick={() => setHistoryScreen(r)} className="text-slate-400 hover:text-brand-600" title="Lý lịch tấm màn">
+                        <History size={14} className="inline" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -6152,6 +6260,10 @@ function ScreenStockTab({ employee }) {
           </div>
         )}
       </Card>
+
+      {historyScreen && (
+        <ScreenHistoryPanel screen={historyScreen} onClose={() => setHistoryScreen(null)} />
+      )}
     </div>
   );
 }
