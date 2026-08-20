@@ -7418,14 +7418,28 @@ function AppShell({ employee, onSignOut }) {
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white border-r border-slate-200/80 print:hidden">
         {/* Măng-sét: tên cửa hàng đặt như tiêu đề sổ */}
-        <div className="px-5 pt-6 pb-5">
-          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400 mb-1.5">Hệ thống quản lý</p>
-          <p className="text-[15px] font-semibold text-brand-800 leading-snug">
-            {employee.stores?.name || "Cửa hàng"}
-          </p>
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            {employee.full_name} · {ROLE_LABELS[employee.role] || employee.role}
-          </p>
+        <div className="p-3 pb-2">
+          <div className="bg-brand-600 rounded-xl px-4 py-3.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                <Smartphone size={18} className="text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] uppercase tracking-[0.16em] text-white/55 leading-none mb-1">Cửa hàng</p>
+                <p className="text-[15px] font-semibold text-white leading-tight truncate">
+                  {employee.stores?.name || "Cửa hàng"}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 pt-2.5 border-t border-white/15">
+              <p className="text-[12px] text-white/90 leading-tight truncate">{employee.full_name}</p>
+              {employee.full_name !== (ROLE_LABELS[employee.role] || employee.role) && (
+                <p className="text-[11px] text-white/60 leading-tight mt-0.5">
+                  {ROLE_LABELS[employee.role] || employee.role}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
         <nav className="flex-1 px-3 pb-4 overflow-y-auto">
@@ -7467,13 +7481,24 @@ function AppShell({ employee, onSignOut }) {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200/80 sticky top-0 z-20 print:hidden">
-        <div>
-          <p className="text-sm font-semibold text-brand-800 leading-tight">{employee.stores?.name || "Cửa hàng"}</p>
-          <p className="text-[11px] text-slate-500">{ROLE_LABELS[employee.role] || employee.role}</p>
+      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-brand-600 sticky top-0 z-20 print:hidden">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+            <Smartphone size={16} className="text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white leading-tight truncate">
+              {employee.stores?.name || "Cửa hàng"}
+            </p>
+            <p className="text-[11px] text-white/65 leading-tight truncate">
+              {employee.full_name === (ROLE_LABELS[employee.role] || employee.role)
+                ? employee.full_name
+                : `${employee.full_name} · ${ROLE_LABELS[employee.role] || employee.role}`}
+            </p>
+          </div>
         </div>
         <button onClick={() => setMobileMenuOpen((s) => !s)}
-          aria-label="Mở menu" className="text-slate-400 hover:text-brand-700 p-1"><Menu size={20} /></button>
+          aria-label="Mở menu" className="text-white/80 hover:text-white p-1 shrink-0"><Menu size={20} /></button>
       </div>
       {mobileMenuOpen && (
         <div className="lg:hidden bg-white border-b border-slate-200/80 px-3 py-2 print:hidden">
