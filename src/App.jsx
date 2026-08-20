@@ -182,7 +182,7 @@ function toKiotVietProductCode(device) {
 
 function Card({ className = "", children }) {
   return (
-    <div className={classNames("bg-white rounded-2xl shadow-card border border-slate-200/70", className)}>
+    <div className={classNames("bg-white rounded-2xl shadow-card border border-slate-200/60", className)}>
       {children}
     </div>
   );
@@ -252,7 +252,7 @@ function LoginPage({ onLoggedIn }) {
   };
 
   return (
-    <div className="min-h-screen bg-brand-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-sm p-6 sm:p-8">
         <div className="flex flex-col items-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-brand-600 flex items-center justify-center mb-3">
@@ -296,7 +296,7 @@ function LoginPage({ onLoggedIn }) {
 
 function NotProvisioned({ email, onSignOut }) {
   return (
-    <div className="min-h-screen bg-brand-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-sm p-8 text-center">
         <ShieldAlert size={36} className="mx-auto text-amber-500 mb-3" />
         <h2 className="font-semibold text-slate-800 mb-1">Tài khoản chưa được cấp quyền</h2>
@@ -7359,17 +7359,17 @@ function ServiceModule({ employee }) {
 }
 
 const NAV_ITEMS = [
-  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { key: "customers", label: "Khách hàng", icon: Users },
-  { key: "inventory", label: "Kho hàng", icon: Smartphone },
-  { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart },
-  { key: "purchases", label: "Nhập máy/Thu cũ", icon: ArrowLeftRight },
-  { key: "service", label: "Spa / Sửa chữa", icon: Settings },
-  { key: "expenses", label: "Chi phí", icon: Receipt },
-  { key: "debts", label: "Công nợ", icon: Banknote },
-  { key: "reports", label: "Báo cáo", icon: BarChart3, allowedRoles: ["quan_ly", "ke_toan"] },
-  { key: "employees", label: "Nhân viên", icon: UserCog, managerOnly: true },
-  { key: "audit", label: "Audit Log", icon: ScrollText, allowedRoles: ["quan_ly", "ke_toan"] },
+  { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, group: null },
+  { key: "customers", label: "Khách hàng", icon: Users, group: "Bán hàng" },
+  { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart, group: "Bán hàng" },
+  { key: "inventory", label: "Kho hàng", icon: Smartphone, group: "Kho & dịch vụ" },
+  { key: "purchases", label: "Nhập máy / Thu cũ", icon: ArrowLeftRight, group: "Kho & dịch vụ" },
+  { key: "service", label: "Spa / Sửa chữa", icon: Settings, group: "Kho & dịch vụ" },
+  { key: "debts", label: "Công nợ", icon: Banknote, group: "Tài chính" },
+  { key: "expenses", label: "Chi phí", icon: Receipt, group: "Tài chính" },
+  { key: "reports", label: "Báo cáo", icon: BarChart3, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
+  { key: "employees", label: "Nhân viên", icon: UserCog, group: "Hệ thống", managerOnly: true },
+  { key: "audit", label: "Nhật ký thao tác", icon: ScrollText, group: "Hệ thống", allowedRoles: ["quan_ly", "ke_toan"] },
 ];
 
 function AppShell({ employee, onSignOut }) {
@@ -7414,76 +7414,88 @@ function AppShell({ employee, onSignOut }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 lg:flex">
+    <div className="min-h-screen bg-slate-50/70 lg:flex">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-brand-900 print:hidden">
+      <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white border-r border-slate-200/80 print:hidden">
         {/* Măng-sét: tên cửa hàng đặt như tiêu đề sổ */}
-        <div className="px-5 pt-6 pb-5 border-b border-white/10">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-brand-300 mb-1.5">Hệ thống quản lý</p>
-          <p className="text-[15px] font-semibold text-white leading-snug">
+        <div className="px-5 pt-6 pb-5">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400 mb-1.5">Hệ thống quản lý</p>
+          <p className="text-[15px] font-semibold text-brand-800 leading-snug">
             {employee.stores?.name || "Cửa hàng"}
           </p>
-          <p className="text-[11px] text-brand-300 mt-0.5">
+          <p className="text-[11px] text-slate-400 mt-0.5">
             {employee.full_name} · {ROLE_LABELS[employee.role] || employee.role}
           </p>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {visibleNav.map((item) => {
+        <nav className="flex-1 px-3 pb-4 overflow-y-auto">
+          {visibleNav.map((item, i) => {
             const active = tab === item.key;
+            const newGroup = item.group && item.group !== visibleNav[i - 1]?.group;
             return (
-              <button
-                key={item.key}
-                onClick={() => setTab(item.key)}
-                aria-current={active ? "page" : undefined}
-                className={classNames(
-                  "w-full flex items-center gap-3 pl-3 pr-2 py-2 rounded-lg text-sm transition-colors relative",
-                  active
-                    ? "bg-white/10 text-white font-medium"
-                    : "text-brand-200 hover:text-white hover:bg-white/5"
+              <div key={item.key}>
+                {newGroup && (
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-300 px-3 pt-4 pb-1.5">
+                    {item.group}
+                  </p>
                 )}
-              >
-                {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-white" />}
-                <item.icon size={16} className={active ? "text-white" : "text-brand-300"} />
-                <span className="flex-1 text-left">{item.label}</span>
-              </button>
+                <button
+                  onClick={() => setTab(item.key)}
+                  aria-current={active ? "page" : undefined}
+                  className={classNames(
+                    "w-full flex items-center gap-3 pl-3 pr-2 py-2 rounded-lg text-[13.5px] transition-colors relative",
+                    active
+                      ? "bg-brand-50 text-brand-800 font-medium"
+                      : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                  )}
+                >
+                  {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-brand-600" />}
+                  <item.icon size={16} className={active ? "text-brand-600" : "text-slate-400"} />
+                  <span className="flex-1 text-left">{item.label}</span>
+                </button>
+              </div>
             );
           })}
         </nav>
 
-        <div className="px-3 pb-4 pt-3 border-t border-white/10">
+        <div className="px-3 pb-4 pt-3 border-t border-slate-100">
           <button onClick={onSignOut}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-brand-300 hover:text-white hover:bg-white/5 transition-colors">
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] text-slate-400 hover:text-rose-600 hover:bg-rose-50/60 transition-colors">
             <LogOut size={16} /> Đăng xuất
           </button>
         </div>
       </aside>
 
       {/* Mobile top bar */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-brand-900 sticky top-0 z-20 print:hidden">
+      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200/80 sticky top-0 z-20 print:hidden">
         <div>
-          <p className="text-sm font-semibold text-white leading-tight">{employee.stores?.name || "Cửa hàng"}</p>
-          <p className="text-[11px] text-brand-300">{ROLE_LABELS[employee.role] || employee.role}</p>
+          <p className="text-sm font-semibold text-brand-800 leading-tight">{employee.stores?.name || "Cửa hàng"}</p>
+          <p className="text-[11px] text-slate-400">{ROLE_LABELS[employee.role] || employee.role}</p>
         </div>
         <button onClick={() => setMobileMenuOpen((s) => !s)}
-          aria-label="Mở menu" className="text-brand-200 hover:text-white p-1"><Menu size={20} /></button>
+          aria-label="Mở menu" className="text-slate-400 hover:text-brand-700 p-1"><Menu size={20} /></button>
       </div>
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-brand-800 px-3 py-2 print:hidden">
-          {visibleNav.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => { setTab(item.key); setMobileMenuOpen(false); }}
-              className={classNames(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm",
-                tab === item.key ? "bg-white/10 text-white font-medium" : "text-brand-200"
+        <div className="lg:hidden bg-white border-b border-slate-200/80 px-3 py-2 print:hidden">
+          {visibleNav.map((item, i) => (
+            <div key={item.key}>
+              {item.group && item.group !== visibleNav[i - 1]?.group && (
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-300 px-3 pt-3 pb-1">{item.group}</p>
               )}
-            >
-              <item.icon size={16} /><span className="flex-1 text-left">{item.label}</span>
-              {tab === item.key && <ChevronRight size={14} />}
-            </button>
+              <button
+                onClick={() => { setTab(item.key); setMobileMenuOpen(false); }}
+                className={classNames(
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm",
+                  tab === item.key ? "bg-brand-50 text-brand-800 font-medium" : "text-slate-500"
+                )}
+              >
+                <item.icon size={16} className={tab === item.key ? "text-brand-600" : "text-slate-400"} />
+                <span className="flex-1 text-left">{item.label}</span>
+                {tab === item.key && <ChevronRight size={14} />}
+              </button>
+            </div>
           ))}
-          <button onClick={onSignOut} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-brand-300">
+          <button onClick={onSignOut} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400">
             <LogOut size={16} /> Đăng xuất
           </button>
         </div>
