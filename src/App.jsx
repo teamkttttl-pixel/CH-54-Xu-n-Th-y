@@ -3274,6 +3274,7 @@ function ReportsModule({ employee }) {
   const [fromDate, setFromDate] = useState(startOfMonth());
   const [toDate, setToDate] = useState(todayStr());
   const [orders, setOrders] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [inventoryValue, setInventoryValue] = useState(0);
   const [inStockCount, setInStockCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -3282,7 +3283,7 @@ function ReportsModule({ employee }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: orderData }, { data: deviceData }] = await Promise.all([
+    const [{ data: orderData }, { data: deviceData }, { data: payData }] = await Promise.all([
       supabase
         .from("sales_orders")
         .select("*, devices(model, storage, color, cost_price), employees:created_by(full_name)")
@@ -3291,8 +3292,16 @@ function ReportsModule({ employee }) {
         .lte("created_at", `${toDate}T23:59:59`)
         .order("created_at", { ascending: true }),
       supabase.from("devices").select("cost_price, status"),
+      // Phiếu thu phát sinh trong kỳ — gồm cả tiền thu nợ của đơn kỳ trước
+      supabase
+        .from("order_payments")
+        .select("method, amount, installment_provider, bank_accounts(short_label, bank_name)")
+        .gte("created_at", `${fromDate}T00:00:00`)
+        .lte("created_at", `${toDate}T23:59:59`)
+        .limit(5000),
     ]);
     setOrders(orderData || []);
+    setPayments(payData || []);
     const inStock = (deviceData || []).filter((d) => d.status === "in_stock");
     setInventoryValue(inStock.reduce((s, d) => s + Number(d.cost_price || 0), 0));
     setInStockCount(inStock.length);
@@ -3305,6 +3314,39 @@ function ReportsModule({ employee }) {
   const totalProfit = orders.reduce((s, o) => s + (Number(o.total_amount || 0) - Number(o.devices?.cost_price || 0)), 0);
   const totalOrders = orders.length;
   const avgOrderValue = totalOrders ? totalRevenue / totalOrders : 0;
+
+  // ---- Tiền thu trong kỳ, chia theo hình thức ----
+  const sumBy = (m) => payments.filter((p) => p.method === m)
+    .reduce((s, p) => s + Number(p.amount || 0), 0);
+
+  const cashIn        = sumBy("cash");
+  const bankIn        = sumBy("bank_transfer");
+  const installmentIn = sumBy("installment");
+  const offsetIn      = sumBy("debt_offset");
+  const tradeInIn     = sumBy("trade_in");
+  const realCashIn    = cashIn + bankIn + installmentIn;          // tiền thật vào
+  const totalCollected = realCashIn + offsetIn + tradeInIn;       // tổng đã tất toán
+
+  // Công nợ phát sinh từ chính các đơn trong kỳ
+  const periodDebt = orders.reduce(
+    (s, o) => s + Math.max(0, Number(o.total_amount || 0) - Number(o.paid_amount || 0)), 0
+  );
+
+  // Chi tiết chuyển khoản theo từng tài khoản
+  const byBank = {};
+  for (const p of payments.filter((x) => x.method === "bank_transfer")) {
+    const k = p.bank_accounts?.short_label || p.bank_accounts?.bank_name || "Chưa gán tài khoản";
+    byBank[k] = (byBank[k] || 0) + Number(p.amount || 0);
+  }
+  const bankRows = Object.entries(byBank).sort((a, b) => b[1] - a[1]);
+
+  // Chi tiết trả góp theo đơn vị
+  const byProvider = {};
+  for (const p of payments.filter((x) => x.method === "installment")) {
+    const k = p.installment_provider || "Chưa ghi đơn vị";
+    byProvider[k] = (byProvider[k] || 0) + Number(p.amount || 0);
+  }
+  const providerRows = Object.entries(byProvider).sort((a, b) => b[1] - a[1]);
 
   // Doanh thu theo ngày cho biểu đồ
   const byDay = {};
@@ -3352,11 +3394,98 @@ function ReportsModule({ employee }) {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
-            <ReportKpiCard label="Doanh thu" value={fmtVND(totalRevenue)} icon={TrendingUp} sub={`${totalOrders} đơn hàng`} />
+            <ReportKpiCard label="Doanh thu ghi nhận" value={fmtVND(totalRevenue)} icon={TrendingUp} sub={`${totalOrders} đơn · gồm cả chưa thu`} />
             {canSeeProfit && <ReportKpiCard label="Lợi nhuận gộp" value={fmtVND(totalProfit)} icon={Award} sub={totalRevenue ? `Biên LN ${((totalProfit / totalRevenue) * 100).toFixed(1)}%` : ""} />}
             <ReportKpiCard label="Giá trị đơn TB" value={fmtVND(avgOrderValue)} icon={Receipt} />
             {canSeeProfit && <ReportKpiCard label="Tồn kho hiện tại" value={fmtVND(inventoryValue)} icon={Package} sub={`${inStockCount} máy còn hàng`} />}
           </div>
+
+
+          <Card className="p-4 sm:p-5 mb-4">
+            <div className="flex items-baseline justify-between mb-1">
+              <p className="text-sm font-medium text-slate-700">Dòng tiền theo hình thức</p>
+              <p className="text-xs text-slate-400">phiếu thu phát sinh trong kỳ</p>
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Gồm cả tiền thu nợ của đơn kỳ trước, nên có thể lệch với Doanh thu ở trên.
+            </p>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="bg-emerald-50 rounded-xl p-3">
+                <p className="text-xs text-emerald-700 mb-1 flex items-center gap-1"><Wallet size={13} /> Tiền mặt</p>
+                <p className="text-base font-semibold text-emerald-800">{fmtVND(cashIn)}</p>
+              </div>
+              <div className="bg-sky-50 rounded-xl p-3">
+                <p className="text-xs text-sky-700 mb-1 flex items-center gap-1"><Landmark size={13} /> Chuyển khoản</p>
+                <p className="text-base font-semibold text-sky-800">{fmtVND(bankIn)}</p>
+              </div>
+              <div className="bg-violet-50 rounded-xl p-3">
+                <p className="text-xs text-violet-700 mb-1 flex items-center gap-1"><CalendarClock size={13} /> Trả góp</p>
+                <p className="text-base font-semibold text-violet-800">{fmtVND(installmentIn)}</p>
+              </div>
+              <div className="bg-amber-50 rounded-xl p-3">
+                <p className="text-xs text-amber-700 mb-1 flex items-center gap-1"><Banknote size={13} /> Công nợ phát sinh</p>
+                <p className="text-base font-semibold text-amber-800">{fmtVND(periodDebt)}</p>
+                <p className="text-[10px] text-amber-600 mt-0.5">từ đơn trong kỳ, chưa thu</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-xs mb-4">
+              <div className="bg-slate-50 rounded-lg px-3 py-2">
+                <span className="text-slate-400">Tiền thật vào két/ngân hàng: </span>
+                <span className="font-semibold text-slate-700">{fmtVND(realCashIn)}</span>
+              </div>
+              {offsetIn > 0 && (
+                <div className="bg-indigo-50 rounded-lg px-3 py-2 text-indigo-700">
+                  <span className="opacity-70">Bù trừ công nợ (không phải tiền): </span>
+                  <span className="font-semibold">{fmtVND(offsetIn)}</span>
+                </div>
+              )}
+              {tradeInIn > 0 && (
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <span className="text-slate-400">Đổi máy cũ (đơn cũ): </span>
+                  <span className="font-semibold text-slate-700">{fmtVND(tradeInIn)}</span>
+                </div>
+              )}
+              <div className="bg-slate-50 rounded-lg px-3 py-2">
+                <span className="text-slate-400">Tổng đã tất toán: </span>
+                <span className="font-semibold text-slate-700">{fmtVND(totalCollected)}</span>
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-2">Chuyển khoản theo tài khoản</p>
+                {bankRows.length === 0 ? (
+                  <p className="text-xs text-slate-400">Không có giao dịch chuyển khoản.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {bankRows.map(([name, amt]) => (
+                      <div key={name} className="flex justify-between text-sm">
+                        <span className="text-slate-600">{name}</span>
+                        <span className="font-medium text-slate-700">{fmtVND(amt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-2">Trả góp theo đơn vị</p>
+                {providerRows.length === 0 ? (
+                  <p className="text-xs text-slate-400">Không có giao dịch trả góp.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {providerRows.map(([name, amt]) => (
+                      <div key={name} className="flex justify-between text-sm">
+                        <span className="text-slate-600">{name}</span>
+                        <span className="font-medium text-slate-700">{fmtVND(amt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
 
           <Card className="p-4 sm:p-5 mb-4">
             <p className="text-sm font-medium text-slate-700 mb-3">Doanh thu theo ngày</p>
