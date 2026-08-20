@@ -182,7 +182,7 @@ function toKiotVietProductCode(device) {
 
 function Card({ className = "", children }) {
   return (
-    <div className={classNames("bg-white rounded-3xl shadow-sm border border-slate-100", className)}>
+    <div className={classNames("bg-white rounded-2xl shadow-card border border-slate-200/70", className)}>
       {children}
     </div>
   );
@@ -191,10 +191,10 @@ function Card({ className = "", children }) {
 function TextField({ label, className = "", ...props }) {
   return (
     <label className={classNames("block", className)}>
-      {label && <span className="text-xs font-medium text-slate-500 mb-1 block">{label}</span>}
+      {label && <span className="text-xs font-medium text-slate-600 mb-1.5 block">{label}</span>}
       <input
         {...props}
-        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400 transition"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
       />
     </label>
   );
@@ -252,7 +252,7 @@ function LoginPage({ onLoggedIn }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-brand-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-sm p-6 sm:p-8">
         <div className="flex flex-col items-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-brand-600 flex items-center justify-center mb-3">
@@ -296,7 +296,7 @@ function LoginPage({ onLoggedIn }) {
 
 function NotProvisioned({ email, onSignOut }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-brand-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-sm p-8 text-center">
         <ShieldAlert size={36} className="mx-auto text-amber-500 mb-3" />
         <h2 className="font-semibold text-slate-800 mb-1">Tài khoản chưa được cấp quyền</h2>
@@ -538,7 +538,7 @@ function CustomersModule({ employee, onCountChange }) {
                 if (!editing) checkDuplicate({ cccd: e.target.value.trim(), phone: e.target.value.trim() });
               }}
               placeholder="Tìm theo tên, CCCD, SĐT..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
         </div>
@@ -1050,7 +1050,7 @@ function InventoryModule({ employee, onCountChange }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo IMEI, model, màu..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
           <select
@@ -1289,7 +1289,7 @@ function CustomerPicker({ value, onSelect }) {
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           placeholder="Tìm khách hàng theo tên, SĐT, CCCD..."
-          className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
         />
       </div>
       {open && query.trim() && (
@@ -1359,7 +1359,7 @@ function DevicePicker({ value, onSelect }) {
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           placeholder="Tìm máy còn hàng theo IMEI, model..."
-          className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
         />
       </div>
       {open && (
@@ -1974,7 +1974,7 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
           <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
           <label className="block">
             <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
-            <select value={form.condition} onChange={set("condition")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            <select value={form.condition} onChange={set("condition")} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="new">Máy mới</option>
               <option value="used">Máy cũ</option>
             </select>
@@ -2044,7 +2044,7 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
           <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức thu</span>
           <select
             value={method} onChange={(e) => setMethod(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
           >
             <option value="cash">Tiền mặt</option>
             <option value="bank_transfer">Chuyển khoản</option>
@@ -2485,7 +2485,7 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Cửa hàng nhận *</span>
           <select value={toStore} onChange={(e) => setToStore(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
             <option value="">— Chọn cửa hàng —</option>
             {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
@@ -2500,7 +2500,7 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm theo IMEI, model, màu..."
-            className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition" />
         </div>
         <div className="border border-slate-200 rounded-xl max-h-56 overflow-y-auto">
           {filtered.length === 0 ? (
@@ -2643,7 +2643,7 @@ function InternalTransferTab({ employee }) {
                   const isOut = r.from_store_id === employee.store_id;
                   return (
                     <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.transfer_code}</td>
+                      <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.transfer_code}</td>
                       <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.created_at)}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <span className={classNames("text-xs px-2 py-0.5 rounded",
@@ -2864,7 +2864,7 @@ function OrdersModule({ employee }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo mã đơn hàng..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
         </div>
@@ -2957,7 +2957,7 @@ function SupplierPicker({ value, onSelect, employee }) {
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           placeholder="Tìm nhà cung cấp theo tên..."
-          className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
         />
       </div>
       {open && (
@@ -3175,7 +3175,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
           <label className="block">
             <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
-            <select value={form.condition} onChange={set("condition")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            <select value={form.condition} onChange={set("condition")} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="used">Máy cũ</option>
               <option value="new">Máy mới</option>
             </select>
@@ -3186,7 +3186,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
 
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi trả</span>
-          <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
             <option value="bank_transfer">Chuyển khoản</option>
             <option value="debt_offset">Bù trừ công nợ (không chi tiền)</option>
           </select>
@@ -3542,7 +3542,7 @@ function EditPurchaseModal({ purchase, employee, onClose, onDone }) {
             <label className="block">
               <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
               <select value={form.condition} onChange={set("condition")}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="used">Máy cũ</option>
                 <option value="new">Máy mới</option>
               </select>
@@ -3685,7 +3685,7 @@ function PurchaseModule({ employee }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo mã phiếu, IMEI, tên khách/NCC..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
         </div>
@@ -3893,7 +3893,7 @@ function AuditLogModule() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo nội dung thay đổi, người thực hiện..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
           <select value={tableFilter} onChange={(e) => setTableFilter(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
@@ -4061,7 +4061,7 @@ function CapitalCard({ employee }) {
             <label className="block">
               <span className="text-xs font-medium text-slate-500 mb-1 block">Loại</span>
               <select value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="in">Góp thêm vốn</option>
                 <option value="out">Rút vốn</option>
               </select>
@@ -4100,7 +4100,7 @@ function CapitalCard({ employee }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-2 py-2 text-slate-400 text-xs whitespace-nowrap">{r.capital_code}</td>
+                  <td className="px-2 py-2 text-slate-400 doc-code whitespace-nowrap">{r.capital_code}</td>
                   <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{fmtDate(r.contribution_date)}</td>
                   <td className="px-2 py-2 text-slate-700">{r.contributor_name}</td>
                   <td className="px-2 py-2 text-slate-400 text-xs">{r.note || "—"}</td>
@@ -4786,7 +4786,7 @@ function EmployeesModule({ employee }) {
             <TextField label="Tên đăng nhập (số điện thoại)" type="text" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="0914657111" />
             <label className="block">
               <span className="text-xs font-medium text-slate-500 mb-1 block">Vai trò</span>
-              <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="nhan_vien">Nhân viên</option>
                 <option value="quan_ly">Quản lý cửa hàng</option>
                 <option value="ke_toan">Kế toán thuế</option>
@@ -5085,7 +5085,7 @@ function InstallmentTracking({ employee }) {
             <input
               value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm mã đơn, khách, mã hồ sơ, IMEI..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
           <select value={provider} onChange={(e) => setProvider(e.target.value)}
@@ -5224,7 +5224,7 @@ function SettleAdvanceModal({ row, employee, onClose, onDone }) {
           <div>
             <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức nộp</span>
             <select value={method} onChange={(e) => setMethod(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="bank_transfer">Chuyển khoản</option>
               <option value="cash">Nộp tiền mặt</option>
             </select>
@@ -5339,7 +5339,7 @@ function CashAdvanceTab({ employee }) {
             <label className="block">
               <span className="text-xs font-medium text-slate-500 mb-1 block">Nhân sự tạm ứng *</span>
               <select value={holderId} onChange={(e) => setHolderId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="">— Chọn nhân sự —</option>
                 {staff.map((s) => (
                   <option key={s.id} value={s.id}>{s.full_name} ({ROLE_LABELS[s.role] || s.role})</option>
@@ -5412,7 +5412,7 @@ function CashAdvanceTab({ employee }) {
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.advance_code}</td>
+                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.advance_code}</td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.advance_date)}</td>
                     <td className="px-3 py-2.5">
                       <p className="text-slate-700">{r.holder_name}</p>
@@ -5594,7 +5594,7 @@ function DebtModule({ employee }) {
             <input
               value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo tên, SĐT, mã đối tác..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
           {[["all", "Tất cả"], ["receivable", "Phải thu"], ["payable", "Phải trả"]].map(([k, label]) => (
@@ -5830,7 +5830,7 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
               <tbody>
                 {list.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.expense_code}</td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
                     <td className="px-3 py-2.5 text-slate-700">{r.description}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
@@ -5978,7 +5978,7 @@ function MarketingTab({ employee, rows, onChanged }) {
               <tbody>
                 {list.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.expense_code}</td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
                     <td className="px-3 py-2.5 text-slate-600 text-xs">{r.description}</td>
                     <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
@@ -6031,7 +6031,7 @@ function ReturnTab({ employee, rows, onChanged }) {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
               placeholder="IMEI, CCCD, họ tên hoặc mã đơn..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
           <button onClick={search} disabled={searching}
@@ -6098,7 +6098,7 @@ function ReturnTab({ employee, rows, onChanged }) {
               <tbody>
                 {list.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.expense_code}</td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
                     <td className="px-3 py-2.5 text-slate-600 text-xs">{r.description}</td>
                     <td className="px-3 py-2.5 text-right font-medium text-rose-600 whitespace-nowrap">{fmtVND(r.amount)}</td>
@@ -6338,7 +6338,7 @@ function BonusTab({ employee, rows, loading, onChanged, fromDate, toDate }) {
               <span className="text-xs font-medium text-slate-500 mb-1 block">Nhân viên *</span>
               <select value={form.employee_id}
                 onChange={(e) => setForm((f) => ({ ...f, employee_id: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="">— Chọn nhân viên —</option>
                 {staff.map((s) => (
                   <option key={s.id} value={s.id}>{s.full_name} ({ROLE_LABELS[s.role] || s.role})</option>
@@ -6567,7 +6567,7 @@ function SendServiceForm({ employee, onCancel, onSaved }) {
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)}
                   placeholder="Tìm IMEI, model, màu..."
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition" />
               </div>
               <div className="mt-2 max-h-48 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
                 {filtered.length === 0 ? (
@@ -6587,7 +6587,7 @@ function SendServiceForm({ employee, onCancel, onSaved }) {
           <label className="block">
             <span className="text-xs font-medium text-slate-500 mb-1 block">Loại dịch vụ *</span>
             <select value={type} onChange={(e) => setType(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="spa">Spa — làm đẹp máy (giá vốn tăng)</option>
               <option value="screen_replace">Thay màn (giá vốn tăng hoặc giảm)</option>
             </select>
@@ -6729,7 +6729,7 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
                   <label className="block">
                     <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng màn cũ</span>
                     <select value={oldGrade} onChange={(e) => setOldGrade(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                       <option value="">— Chọn —</option>
                       {SCREEN_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
                     </select>
@@ -6744,7 +6744,7 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
 
                   {useStock ? (
                     <select value={stockId} onChange={(e) => setStockId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                       <option value="">— Chọn màn trong kho —</option>
                       {stockScreens.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -6758,7 +6758,7 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
                       <label className="block">
                         <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng màn mới</span>
                         <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                           <option value="">— Chọn —</option>
                           {SCREEN_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
                         </select>
@@ -6856,7 +6856,7 @@ function ScreenStockTab({ employee }) {
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm mã màn, loại, chất lượng, IMEI..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition" />
           </div>
           <select value={status} onChange={(e) => setStatus(e.target.value)}
             className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
@@ -6887,7 +6887,7 @@ function ScreenStockTab({ employee }) {
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.screen_code}</td>
+                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.screen_code}</td>
                     <td className="px-3 py-2.5 text-slate-700">{r.model || "—"}</td>
                     <td className="px-3 py-2.5 text-slate-600 text-xs">{r.grade || "chưa đánh giá"}</td>
                     <td className="px-3 py-2.5 text-xs">
@@ -6983,7 +6983,7 @@ function ScreenPurchaseForm({ employee, onCancel, onSaved }) {
           <label className="block">
             <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng</span>
             <select value={grade} onChange={(e) => setGrade(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="">— Chọn —</option>
               {SCREEN_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
@@ -7166,7 +7166,7 @@ function ScreenPurchaseTab({ employee }) {
                   const rem = Math.max(0, Number(r.remaining || 0));
                   return (
                     <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.purchase_code}</td>
+                      <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.purchase_code}</td>
                       <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.purchase_date)}</td>
                       <td className="px-3 py-2.5">
                         <p className="text-slate-700">{r.model}</p>
@@ -7310,7 +7310,7 @@ function ServiceModule({ employee }) {
                       const change = Number(r.cost_after || 0) - Number(r.cost_before || 0);
                       return (
                         <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                          <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.ticket_code}</td>
+                          <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.ticket_code}</td>
                           <td className="px-3 py-2.5">
                             <p className="text-slate-700">{[r.model, r.storage, r.color].filter(Boolean).join(" ")}</p>
                             <p className="text-xs text-slate-400">IMEI {r.imei || "—"} · gửi {fmtDate(r.sent_at)}</p>
@@ -7414,65 +7414,76 @@ function AppShell({ employee, onSignOut }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50 to-white lg:flex">
+    <div className="min-h-screen bg-slate-50 lg:flex">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-slate-100 bg-white/70 p-4 print:hidden">
-        <div className="flex items-center gap-2 px-2 mb-6">
-          <div className="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center">
-            <Smartphone className="text-white" size={18} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-800 leading-tight">{employee.stores?.name || "Cửa hàng"}</p>
-            <p className="text-[11px] text-slate-400">Quản lý mua bán máy</p>
-          </div>
+      <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-brand-900 print:hidden">
+        {/* Măng-sét: tên cửa hàng đặt như tiêu đề sổ */}
+        <div className="px-5 pt-6 pb-5 border-b border-white/10">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-brand-300 mb-1.5">Hệ thống quản lý</p>
+          <p className="text-[15px] font-semibold text-white leading-snug">
+            {employee.stores?.name || "Cửa hàng"}
+          </p>
+          <p className="text-[11px] text-brand-300 mt-0.5">
+            {employee.full_name} · {ROLE_LABELS[employee.role] || employee.role}
+          </p>
         </div>
-        <nav className="flex-1 space-y-1">
-          {visibleNav.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setTab(item.key)}
-              className={classNames(
-                "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition",
-                tab === item.key ? "bg-brand-600 text-white" : "text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              <item.icon size={16} />
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.phase && <span className={classNames("text-[10px]", tab === item.key ? "text-brand-100" : "text-slate-300")}>{item.phase}</span>}
-            </button>
-          ))}
+
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          {visibleNav.map((item) => {
+            const active = tab === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => setTab(item.key)}
+                aria-current={active ? "page" : undefined}
+                className={classNames(
+                  "w-full flex items-center gap-3 pl-3 pr-2 py-2 rounded-lg text-sm transition-colors relative",
+                  active
+                    ? "bg-white/10 text-white font-medium"
+                    : "text-brand-200 hover:text-white hover:bg-white/5"
+                )}
+              >
+                {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-white" />}
+                <item.icon size={16} className={active ? "text-white" : "text-brand-300"} />
+                <span className="flex-1 text-left">{item.label}</span>
+              </button>
+            );
+          })}
         </nav>
-        <button onClick={onSignOut} className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-rose-50 hover:text-rose-600">
-          <LogOut size={16} /> Đăng xuất
-        </button>
+
+        <div className="px-3 pb-4 pt-3 border-t border-white/10">
+          <button onClick={onSignOut}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-brand-300 hover:text-white hover:bg-white/5 transition-colors">
+            <LogOut size={16} /> Đăng xuất
+          </button>
+        </div>
       </aside>
 
       {/* Mobile top bar */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100 sticky top-0 z-10 print:hidden">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
-            <Smartphone className="text-white" size={16} />
-          </div>
-          <p className="text-sm font-semibold text-slate-800">{employee.stores?.name || "Cửa hàng"}</p>
+      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-brand-900 sticky top-0 z-20 print:hidden">
+        <div>
+          <p className="text-sm font-semibold text-white leading-tight">{employee.stores?.name || "Cửa hàng"}</p>
+          <p className="text-[11px] text-brand-300">{ROLE_LABELS[employee.role] || employee.role}</p>
         </div>
-        <button onClick={() => setMobileMenuOpen((s) => !s)} className="text-slate-500"><Menu size={20} /></button>
+        <button onClick={() => setMobileMenuOpen((s) => !s)}
+          aria-label="Mở menu" className="text-brand-200 hover:text-white p-1"><Menu size={20} /></button>
       </div>
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-white border-b border-slate-100 px-4 py-2">
+        <div className="lg:hidden bg-brand-800 px-3 py-2 print:hidden">
           {visibleNav.map((item) => (
             <button
               key={item.key}
               onClick={() => { setTab(item.key); setMobileMenuOpen(false); }}
               className={classNames(
-                "w-full flex items-center gap-2.5 px-2 py-2.5 rounded-lg text-sm",
-                tab === item.key ? "text-brand-700 font-medium" : "text-slate-500"
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm",
+                tab === item.key ? "bg-white/10 text-white font-medium" : "text-brand-200"
               )}
             >
               <item.icon size={16} /><span className="flex-1 text-left">{item.label}</span>
               {tab === item.key && <ChevronRight size={14} />}
             </button>
           ))}
-          <button onClick={onSignOut} className="w-full flex items-center gap-2.5 px-2 py-2.5 rounded-lg text-sm text-rose-500">
+          <button onClick={onSignOut} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-brand-300">
             <LogOut size={16} /> Đăng xuất
           </button>
         </div>
