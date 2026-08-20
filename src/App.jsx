@@ -60,11 +60,13 @@ const DEVICE_STATUS_LABELS = {
   in_stock: "Còn hàng",
   reserved: "Đang giữ chỗ",
   sold: "Đã bán",
+  pending_reconciliation: "Chờ đối soát",
 };
 const DEVICE_STATUS_STYLES = {
   in_stock: "bg-emerald-50 text-emerald-700",
   reserved: "bg-amber-50 text-amber-700",
   sold: "bg-slate-100 text-slate-500",
+  pending_reconciliation: "bg-rose-50 text-rose-600",
 };
 const DEVICE_CONDITION_LABELS = {
   new: "Máy mới",
@@ -1294,6 +1296,8 @@ function PaymentRows({ rows, setRows, total }) {
 function OrderForm({ onCancel, onSaved, employee }) {
   const [customer, setCustomer] = useState(null);
   const [device, setDevice] = useState(null);
+  const [manualDeviceMode, setManualDeviceMode] = useState(false);
+  const [manualDevice, setManualDevice] = useState({ imei: "", model: "", storage: "", color: "", condition: "used" });
   const [salePrice, setSalePrice] = useState("");
   const [discount, setDiscount] = useState("0");
   const [notes, setNotes] = useState("");
@@ -1314,7 +1318,11 @@ function OrderForm({ onCancel, onSaved, employee }) {
     e.preventDefault();
     setError("");
     if (!customer) { setError("Vui lòng chọn khách hàng."); return; }
-    if (!device) { setError("Vui lòng chọn máy bán (còn hàng)."); return; }
+    if (!manualDeviceMode && !device) { setError("Vui lòng chọn máy bán (còn hàng)."); return; }
+    if (manualDeviceMode && (!manualDevice.imei.trim() || !manualDevice.model.trim())) {
+      setError("Vui lòng nhập đủ IMEI và model của máy đang bán để chờ Quản lý đối soát.");
+      return;
+    }
     if (!salePrice || Number(salePrice) <= 0) { setError("Vui lòng nhập giá bán hợp lệ."); return; }
     const paidTotal = payments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
     if (Math.round(paidTotal) !== Math.round(total)) { setError("Tổng các hình thức thanh toán phải bằng tổng tiền đơn hàng."); return; }
@@ -1336,16 +1344,41 @@ function OrderForm({ onCancel, onSaved, employee }) {
         return;
       }
     }
+    if (manualDeviceMode) {
+      const { data: existing } = await supabase.from("devices").select("id, status").eq("imei", manualDevice.imei.trim()).maybeSingle();
+      if (existing) {
+        setError(`IMEI ${manualDevice.imei.trim()} thực ra ĐÃ có trong kho (${DEVICE_STATUS_LABELS[existing.status]}) — vui lòng tắt "Bán tạm" và chọn máy này từ danh sách bình thường.`);
+        return;
+      }
+    }
 
     setSaving(true);
     try {
+      let saleDevice = device;
+      if (manualDeviceMode) {
+        const { data: newDevice, error: mdErr } = await supabase.from("devices").insert({
+          imei: manualDevice.imei.trim(), model: manualDevice.model.trim(),
+          storage: manualDevice.storage.trim() || null, color: manualDevice.color.trim() || null,
+          condition: manualDevice.condition, status: "pending_reconciliation", cost_price: null,
+          sale_price: Number(salePrice), supplier: "Bán tạm — chờ Quản lý đối soát kho",
+          import_date: new Date().toISOString().slice(0, 10),
+          created_by: employee.id, updated_by: employee.id, store_id: employee.store_id,
+        }).select().maybeSingle();
+        if (mdErr) throw mdErr;
+        saleDevice = newDevice;
+        await supabase.from("audit_logs").insert({
+          table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id, store_id: employee.store_id,
+        });
+      }
+
       const orderPayload = {
         customer_id: customer.id,
-        device_id: device.id,
+        device_id: saleDevice.id,
         sale_price: Number(salePrice),
         discount: Number(discount) || 0,
         total_amount: total,
         notes: notes.trim() || null,
+        status: manualDeviceMode ? "pending_stock" : "completed",
         created_by: employee.id,
         updated_by: employee.id,
         store_id: employee.store_id,
@@ -1398,14 +1431,18 @@ function OrderForm({ onCancel, onSaved, employee }) {
       const { error: contractErr } = await supabase.from("contracts").insert({ order_id: order.id, created_by: employee.id, store_id: employee.store_id });
       if (contractErr) throw contractErr;
 
-      const { data: soldDevice, error: devErr } = await supabase
-        .from("devices").update({ status: "sold", updated_by: employee.id }).eq("id", device.id).select().maybeSingle();
-      if (devErr) throw devErr;
-
-      await supabase.from("audit_logs").insert([
+      const auditRows = [
         { table_name: "sales_orders", record_id: order.id, action: "create", new_data: order, performed_by: employee.id, store_id: employee.store_id },
-        { table_name: "devices", record_id: device.id, action: "update", old_data: device, new_data: soldDevice, performed_by: employee.id, store_id: employee.store_id },
-      ]);
+      ];
+
+      if (!manualDeviceMode) {
+        const { data: soldDevice, error: devErr } = await supabase
+          .from("devices").update({ status: "sold", updated_by: employee.id }).eq("id", saleDevice.id).select().maybeSingle();
+        if (devErr) throw devErr;
+        auditRows.push({ table_name: "devices", record_id: saleDevice.id, action: "update", old_data: saleDevice, new_data: soldDevice, performed_by: employee.id, store_id: employee.store_id });
+      }
+
+      await supabase.from("audit_logs").insert(auditRows);
 
       onSaved();
     } catch (err) {
@@ -1427,8 +1464,55 @@ function OrderForm({ onCancel, onSaved, employee }) {
           <CustomerPicker value={customer} onSelect={setCustomer} />
         </div>
         <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Máy bán (IMEI) *</span>
-          <DevicePicker value={device} onSelect={setDevice} />
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-slate-500 block">Máy bán (IMEI) *</span>
+            <button
+              type="button"
+              onClick={() => { setManualDeviceMode((s) => !s); setDevice(null); }}
+              className={classNames("text-xs hover:underline", manualDeviceMode ? "text-rose-600" : "text-brand-600")}
+            >
+              {manualDeviceMode ? "✕ Tắt bán tạm, chọn máy trong kho" : "Không tìm thấy IMEI trong kho?"}
+            </button>
+          </div>
+          {!manualDeviceMode ? (
+            <DevicePicker value={device} onSelect={setDevice} />
+          ) : (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-2">
+              <p className="text-xs text-rose-700 flex items-center gap-1.5">
+                <ShieldAlert size={14} className="shrink-0" />
+                Bán tạm khi IMEI thực tế không khớp dữ liệu Kho — đơn sẽ ở trạng thái "Chờ đối soát kho" cho tới khi Quản lý xác nhận và cập nhật lại Kho hàng.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  value={manualDevice.imei}
+                  onChange={(e) => setManualDevice((f) => ({ ...f, imei: e.target.value }))}
+                  placeholder="Số IMEI thực tế trên máy *"
+                  className="rounded-lg border border-rose-200 px-2 py-1.5 text-xs bg-white"
+                />
+                <input
+                  value={manualDevice.model}
+                  onChange={(e) => setManualDevice((f) => ({ ...f, model: e.target.value }))}
+                  placeholder="Model máy *"
+                  list="dl-models-manual-order"
+                  className="rounded-lg border border-rose-200 px-2 py-1.5 text-xs bg-white"
+                />
+                <input
+                  value={manualDevice.storage}
+                  onChange={(e) => setManualDevice((f) => ({ ...f, storage: e.target.value }))}
+                  placeholder="Dung lượng"
+                  list="dl-storage"
+                  className="rounded-lg border border-rose-200 px-2 py-1.5 text-xs bg-white"
+                />
+                <input
+                  value={manualDevice.color}
+                  onChange={(e) => setManualDevice((f) => ({ ...f, color: e.target.value }))}
+                  placeholder="Màu sắc"
+                  className="rounded-lg border border-rose-200 px-2 py-1.5 text-xs bg-white"
+                />
+                <datalist id="dl-models-manual-order">{IPHONE_MODEL_LIST.map((m) => <option key={m} value={m} />)}</datalist>
+              </div>
+            </div>
+          )}
         </div>
         <div className="grid sm:grid-cols-2 gap-3">
           <TextField label="Giá bán (đ) *" type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} />
@@ -1446,7 +1530,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
         {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
         <div className="flex gap-2">
           <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
-            {saving && <Loader2 size={14} className="animate-spin" />} Hoàn tất đơn hàng
+            {saving && <Loader2 size={14} className="animate-spin" />} {manualDeviceMode ? "Bán tạm — chờ đối soát kho" : "Hoàn tất đơn hàng"}
           </button>
           <button type="button" onClick={onCancel} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
         </div>
@@ -1455,12 +1539,106 @@ function OrderForm({ onCancel, onSaved, employee }) {
   );
 }
 
-function OrderRow({ order, employee, onDeleted }) {
+function ReconcileModal({ order, device, employee, onClose, onDone }) {
+  const [form, setForm] = useState({
+    imei: device?.imei || "", model: device?.model || "", storage: device?.storage || "", color: device?.color || "",
+    condition: device?.condition || "used", condition_percent: device?.condition_percent ?? "",
+    cost_price: device?.cost_price ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.imei.trim() || !form.model.trim()) { setError("Vui lòng nhập đủ IMEI và model."); return; }
+    if (form.cost_price === "" || Number(form.cost_price) < 0) { setError("Vui lòng nhập giá vốn hợp lệ cho máy này."); return; }
+    setError(""); setSaving(true);
+    try {
+      const payload = {
+        imei: form.imei.trim(), model: form.model.trim(),
+        storage: form.storage.trim() || null, color: form.color.trim() || null,
+        condition: form.condition, condition_percent: form.condition_percent === "" ? null : Number(form.condition_percent),
+        cost_price: Number(form.cost_price), status: "sold",
+        supplier: device?.supplier?.replace("Bán tạm — chờ Quản lý đối soát kho", "Đã đối soát bởi Quản lý") || device?.supplier,
+        updated_by: employee.id,
+      };
+      const { data: updatedDevice, error: devErr } = await supabase.from("devices").update(payload).eq("id", device.id).select().maybeSingle();
+      if (devErr) throw devErr;
+
+      const { data: updatedOrder, error: orderErr } = await supabase.from("sales_orders")
+        .update({ status: "completed", updated_by: employee.id }).eq("id", order.id).select().maybeSingle();
+      if (orderErr) throw orderErr;
+
+      await supabase.from("audit_logs").insert([
+        { table_name: "devices", record_id: device.id, action: "update", old_data: device, new_data: updatedDevice, performed_by: employee.id, store_id: employee.store_id },
+        { table_name: "sales_orders", record_id: order.id, action: "update", old_data: order, new_data: updatedOrder, performed_by: employee.id, store_id: employee.store_id },
+      ]);
+
+      onDone();
+    } catch (err) {
+      if (err.code === "23505" || /duplicate/i.test(err.message || "")) {
+        setError(`IMEI ${form.imei.trim()} đã tồn tại ở 1 máy khác trong kho — kiểm tra lại, có thể đây là bản ghi trùng cần gộp thủ công.`);
+      } else {
+        setError(err.message || "Không lưu được, vui lòng thử lại.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Đối soát kho — {order.order_code}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-slate-400 mb-3">
+          Kiểm tra lại thông tin máy nhân viên đã nhập lúc bán, sửa nếu cần, bổ sung giá vốn rồi xác nhận — đơn hàng sẽ chuyển thành "Hoàn tất" và máy chuyển "Đã bán" trong Kho.
+        </p>
+        <form onSubmit={submit} className="grid grid-cols-2 gap-3">
+          <TextField label="Số IMEI *" value={form.imei} onChange={set("imei")} className="col-span-2" />
+          <label className="block col-span-2">
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
+            <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} />
+          </label>
+          <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} list="dl-storage" />
+          <TextField label="Màu sắc" value={form.color} onChange={set("color")} list="dl-colors-reconcile" />
+          <datalist id="dl-colors-reconcile">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
+          <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
+            <select value={form.condition} onChange={set("condition")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <option value="new">Máy mới</option>
+              <option value="used">Máy cũ</option>
+            </select>
+          </label>
+          <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} />
+          <TextField label="Giá vốn (đ) *" type="number" value={form.cost_price} onChange={set("cost_price")} className="col-span-2" />
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 col-span-2">{error}</p>}
+          <div className="col-span-2 flex gap-2 mt-1">
+            <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
+              {saving && <Loader2 size={14} className="animate-spin" />} Xác nhận đã cập nhật kho
+            </button>
+            <button type="button" onClick={onClose} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+
+function OrderRow({ order, employee, onDeleted, onReconciled }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [printType, setPrintType] = useState(null);
+  const [showReconcile, setShowReconcile] = useState(false);
   const canDelete = employee.role === "quan_ly";
+  const canReconcile = employee.role === "quan_ly" && order.status === "pending_stock";
 
   const loadDetail = async () => {
     if (detail) { setExpanded((s) => !s); return; }
@@ -1491,8 +1669,13 @@ function OrderRow({ order, employee, onDeleted }) {
         <td className="px-3 py-2.5 text-slate-500">{fmtDate(order.created_at)}</td>
         <td className="px-3 py-2.5 text-slate-600">{fmtVND(order.total_amount)}</td>
         <td className="px-3 py-2.5">
-          <span className={classNames("text-xs px-2 py-0.5 rounded-full", order.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600")}>
-            {order.status === "completed" ? "Hoàn tất" : "Đã hủy"}
+          <span className={classNames(
+            "text-xs px-2 py-0.5 rounded-full",
+            order.status === "completed" ? "bg-emerald-50 text-emerald-700"
+              : order.status === "pending_stock" ? "bg-amber-50 text-amber-700"
+              : "bg-rose-50 text-rose-600"
+          )}>
+            {order.status === "completed" ? "Hoàn tất" : order.status === "pending_stock" ? "Chờ đối soát kho" : "Đã hủy"}
           </span>
         </td>
         <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
@@ -1504,6 +1687,12 @@ function OrderRow({ order, employee, onDeleted }) {
       {expanded && detail && (
         <tr>
           <td colSpan={5} className="bg-slate-50/70 px-4 py-4">
+            {order.status === "pending_stock" && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-amber-800 flex items-center gap-2">
+                <ShieldAlert size={15} className="shrink-0" />
+                Đơn này được tạo với IMEI không khớp Kho hàng (nhân viên nhập tay lúc bán) — đơn chỉ hợp lệ hoàn toàn sau khi Quản lý đối soát và cập nhật Kho.
+              </div>
+            )}
             <div className="grid sm:grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-xs text-slate-400 mb-1">Khách hàng</p>
@@ -1513,7 +1702,7 @@ function OrderRow({ order, employee, onDeleted }) {
               <div>
                 <p className="text-xs text-slate-400 mb-1">Máy đã bán</p>
                 <p className="font-medium text-slate-700">{detail.device?.model} {[detail.device?.storage, detail.device?.color].filter(Boolean).join(" · ")}</p>
-                <p className="text-xs text-slate-400">IMEI {detail.device?.imei}</p>
+                <p className="text-xs text-slate-400">{detail.device?.imei ? `IMEI ${detail.device.imei}` : "Chưa có IMEI"}</p>
               </div>
             </div>
             <div className="mt-3 space-y-1">
@@ -1538,10 +1727,15 @@ function OrderRow({ order, employee, onDeleted }) {
               ))}
             </div>
             {order.notes && <p className="text-xs text-slate-400 mt-2">Ghi chú: {order.notes}</p>}
-            <div className="flex gap-3 mt-3">
+            <div className="flex gap-3 mt-3 items-center">
               <button onClick={() => setPrintType({ kind: "contract" })} className="text-brand-600 hover:underline text-xs flex items-center gap-1">
                 <Printer size={12} /> In hợp đồng
               </button>
+              {canReconcile && (
+                <button onClick={() => setShowReconcile(true)} className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1">
+                  <ShieldAlert size={12} /> Đối soát kho
+                </button>
+              )}
               {canDelete && (
                 <button onClick={remove} className="text-rose-500 hover:underline text-xs flex items-center gap-1">
                   <Trash2 size={12} /> Xóa đơn
@@ -1550,6 +1744,13 @@ function OrderRow({ order, employee, onDeleted }) {
             </div>
           </td>
         </tr>
+      )}
+      {showReconcile && detail && (
+        <ReconcileModal
+          order={order} device={detail.device} employee={employee}
+          onClose={() => setShowReconcile(false)}
+          onDone={() => { setShowReconcile(false); setDetail(null); onReconciled?.(); }}
+        />
       )}
       {printType && detail && (
         <PrintDocModal
@@ -1687,6 +1888,13 @@ function OrdersModule({ employee }) {
         </div>
       </div>
 
+      {employee.role === "quan_ly" && orders.some((o) => o.status === "pending_stock") && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-800 flex items-center gap-2">
+          <ShieldAlert size={15} className="shrink-0" />
+          Có <span className="font-medium">{orders.filter((o) => o.status === "pending_stock").length} đơn</span> đang chờ đối soát kho (IMEI nhân viên nhập tay lúc bán không khớp Kho hàng) — mở đơn để đối soát.
+        </div>
+      )}
+
       {showExport && <KiotVietExportModal onClose={() => setShowExport(false)} />}
 
       {showForm && (
@@ -1720,7 +1928,7 @@ function OrdersModule({ employee }) {
                 <th className="px-3 py-2"></th>
               </tr></thead>
               <tbody>
-                {filtered.map((o) => <OrderRow key={o.id} order={o} employee={employee} onDeleted={load} />)}
+                {filtered.map((o) => <OrderRow key={o.id} order={o} employee={employee} onDeleted={load} onReconciled={load} />)}
               </tbody>
             </table>
           </div>
