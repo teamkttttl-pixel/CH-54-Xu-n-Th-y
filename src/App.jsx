@@ -132,6 +132,7 @@ const PAYMENT_METHOD_LABELS = {
   installment: "Trả góp",
   trade_in: "Đổi máy cũ",
   debt_offset: "Bù trừ công nợ",
+  debt: "Khách nợ shop",
 };
 const PAYMENT_METHOD_ICONS = {
   cash: Wallet,
@@ -139,6 +140,7 @@ const PAYMENT_METHOD_ICONS = {
   installment: CalendarClock,
   trade_in: ArrowLeftRight,
   debt_offset: Banknote,
+  debt: CalendarClock,
 };
 
 // Tạo "Mã hàng" KiotViet từ model+dung lượng+màu (gom các máy cùng loại về
@@ -1274,6 +1276,8 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
   const { banks, providers } = usePaymentOptions();
   const paid = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const remaining = total - paid;
+  const debtDeclared = rows.filter((r) => r.method === "debt")
+    .reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const offsetUsed = rows.filter((r) => r.method === "debt_offset")
     .reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const offsetLeft = supplierDebt - offsetUsed;
@@ -1301,19 +1305,34 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
                 <option value="cash">Tiền mặt</option>
                 <option value="bank_transfer">Chuyển khoản</option>
                 <option value="installment">Trả góp</option>
+                <option value="debt">Khách nợ shop</option>
                 {supplierDebt > 0 && <option value="debt_offset">Bù trừ công nợ</option>}
               </select>
               <input
                 type="number"
                 value={r.amount}
                 onChange={(e) => update(i, { amount: e.target.value })}
-                placeholder={r.method === "debt_offset" ? "Số tiền bù trừ" : "Số tiền"}
+                placeholder={r.method === "debt_offset" ? "Số tiền bù trừ" : r.method === "debt" ? "Số tiền ghi nợ" : "Số tiền"}
                 className="w-32 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
               />
               {rows.length > 1 && (
                 <button type="button" onClick={() => removeRow(i)} className="text-rose-400 hover:text-rose-600"><X size={15} /></button>
               )}
             </div>
+            {r.method === "debt" && (
+              <div className="pl-6 space-y-1.5">
+                <p className="text-[11px] text-slate-400">
+                  Không thu tiền. Khoản này hiện ở cột Công nợ của đơn, thu dần sau bằng nút "Thu nợ".
+                </p>
+                <button
+                  type="button"
+                  onClick={() => update(i, { amount: String(Math.max(0, (Number(r.amount) || 0) + remaining)) })}
+                  className="text-[11px] text-brand-600 hover:underline"
+                >
+                  Ghi nợ phần còn lại ({fmtVND(Math.max(0, remaining))})
+                </button>
+              </div>
+            )}
             {r.method === "bank_transfer" && (
               <div className="pl-6">
                 <BankSelect
@@ -1374,14 +1393,20 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
         <Plus size={13} /> Thêm hình thức thanh toán
       </button>
       <div className={classNames(
-        "text-xs px-3 py-2 rounded-lg",
+        "text-xs px-3 py-2 rounded-lg space-y-0.5",
         remaining === 0 ? "bg-emerald-50 text-emerald-700"
           : remaining > 0 ? "bg-amber-50 text-amber-700"
           : "bg-rose-50 text-rose-600"
       )}>
-        Đã phân bổ {fmtVND(paid)} / {fmtVND(total)}
-        {remaining > 0 && ` — khách còn nợ ${fmtVND(remaining)}`}
-        {remaining < 0 && ` — thừa ${fmtVND(-remaining)}, vui lòng giảm bớt`}
+        <div>Đã phân bổ {fmtVND(paid)} / {fmtVND(total)}
+          {remaining > 0 && ` — còn thiếu ${fmtVND(remaining)}`}
+          {remaining < 0 && ` — thừa ${fmtVND(-remaining)}, vui lòng giảm bớt`}
+        </div>
+        {debtDeclared > 0 && (
+          <div className="opacity-80">
+            Thực thu {fmtVND(paid - debtDeclared)} · khách nợ {fmtVND(debtDeclared)}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1427,7 +1452,8 @@ function OrderForm({ onCancel, onSaved, employee }) {
   }, [customer]);
 
   const total = Math.max(0, (Number(salePrice) || 0) - (Number(discount) || 0));
-  const paidNow = payments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const realPaidNow = payments.filter((r) => r.method !== "debt")
+    .reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -1440,10 +1466,19 @@ function OrderForm({ onCancel, onSaved, employee }) {
     }
     if (!salePrice || Number(salePrice) <= 0) { setError("Vui lòng nhập giá bán hợp lệ."); return; }
     // Dòng để trống = chưa thu -> bỏ qua, cho phép đơn nợ toàn bộ
-    const activePayments = payments.filter((r) => String(r.amount).trim() !== "");
+    const filledRows = payments.filter((r) => String(r.amount).trim() !== "");
+    // Dòng "Khách nợ shop" chỉ để khai báo cho rõ, KHÔNG tạo phiếu thu.
+    // Phần chưa thu tự thành công nợ qua sổ cái.
+    const declaredDebt = filledRows.filter((r) => r.method === "debt")
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const activePayments = filledRows.filter((r) => r.method !== "debt");
     const paidTotal = activePayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
     if (Math.round(paidTotal) > Math.round(total)) {
-      setError("Tổng các hình thức thanh toán đang lớn hơn tổng tiền đơn hàng."); return;
+      setError("Tổng tiền thu đang lớn hơn tổng tiền đơn hàng."); return;
+    }
+    if (declaredDebt > 0 && Math.round(paidTotal + declaredDebt) !== Math.round(total)) {
+      setError(`Tiền thu (${fmtVND(paidTotal)}) cộng khoản ghi nợ (${fmtVND(declaredDebt)}) phải bằng đúng tổng tiền đơn hàng (${fmtVND(total)}).`);
+      return;
     }
     if (activePayments.some((r) => Number(r.amount) <= 0)) { setError("Số tiền thanh toán phải lớn hơn 0."); return; }
 
@@ -1503,7 +1538,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
         discount: Number(discount) || 0,
         total_amount: total,
         notes: notes.trim() || null,
-        due_date: Math.round(paidTotal) < Math.round(total) ? (dueDate || null) : null,
+        due_date: Math.round(paidTotal) < Math.round(total) ? (dueDate || null) : null,   // paidTotal đã loại dòng ghi nợ
         status: manualDeviceMode ? "pending_stock" : "completed",
         created_by: employee.id,
         updated_by: employee.id,
@@ -1643,10 +1678,10 @@ function OrderForm({ onCancel, onSaved, employee }) {
             supplierDebt={supplierDebt} supplierName={linkedSupplier?.name || ""}
           />
         </div>
-        {paidNow < total && (
+        {realPaidNow < total && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
             <p className="text-xs text-amber-800">
-              Khách còn nợ <span className="font-medium">{fmtVND(total - paidNow)}</span> — đơn sẽ được ghi nhận là công nợ và thu sau ở màn Đơn hàng bán.
+              Khách còn nợ <span className="font-medium">{fmtVND(total - realPaidNow)}</span> — đơn sẽ được ghi nhận là công nợ và thu sau ở màn Đơn hàng bán.
             </p>
             <TextField label="Hẹn ngày thanh toán" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
