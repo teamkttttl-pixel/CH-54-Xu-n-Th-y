@@ -2617,8 +2617,25 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
   const [duplicateImei, setDuplicateImei] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [partnerRec, setPartnerRec] = useState(0);   // đối tác đang nợ cửa hàng
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Người bán máy này có đang nợ cửa hàng không?
+  useEffect(() => {
+    let active = true;
+    const ref = sourceType === "customer" ? customer : supplier;
+    if (!ref) { setPartnerRec(0); return; }
+    (async () => {
+      const { data } = sourceType === "customer"
+        ? await supabase.rpc("partner_balance_by_customer", { p_customer_id: ref.id })
+        : await supabase.rpc("partner_balance_by_supplier", { p_supplier_id: ref.id });
+      if (!active) return;
+      const bal = Array.isArray(data) ? data[0] : data;
+      setPartnerRec(Math.max(0, Number(bal?.receivable) || 0));
+    })();
+    return () => { active = false; };
+  }, [sourceType, customer, supplier]);
 
   const checkImei = async (imei) => {
     if (!imei.trim()) { setDuplicateImei(null); return; }
@@ -2667,7 +2684,8 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         bank_account_id: form.payment_method === "bank_transfer" ? (form.bank_account_id || null) : null,
         notes: form.notes.trim() || null, created_by: employee.id,
         store_id: employee.store_id,
-        paid_amount: sourceType === "supplier" ? paid : price,
+        paid_amount: form.payment_method === "debt_offset" ? 0
+          : (sourceType === "supplier" ? paid : price),
         debt_status: debtStatus,
         due_date: sourceType === "supplier" && debt > 0 ? (form.due_date || null) : null,
       }).select().maybeSingle();
@@ -2769,7 +2787,29 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
             <option value="cash">Tiền mặt</option>
             <option value="bank_transfer">Chuyển khoản</option>
+            {partnerRec > 0 && <option value="debt_offset">Bù trừ công nợ</option>}
           </select>
+          {form.payment_method === "debt_offset" && (
+            <div className="mt-2 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5 text-xs text-indigo-800 space-y-1">
+              <p>
+                Người bán đang nợ cửa hàng <span className="font-medium">{fmtVND(partnerRec)}</span>.
+                Tiền mua máy sẽ trừ thẳng vào khoản đó, không chi tiền.
+              </p>
+              {price > 0 && (
+                <p>
+                  Trừ được <span className="font-medium">{fmtVND(Math.min(price, partnerRec))}</span>
+                  {price > partnerRec && <> — phần còn lại <span className="font-medium">{fmtVND(price - partnerRec)}</span> thành khoản cửa hàng nợ họ.</>}
+                  {price <= partnerRec && <> — sau đó họ còn nợ <span className="font-medium">{fmtVND(partnerRec - price)}</span>.</>}
+                </p>
+              )}
+              <p className="text-indigo-500">Hệ thống lập biên bản bù trừ mã BT và phân bổ vào các đơn bán cũ nhất trước.</p>
+            </div>
+          )}
+          {partnerRec > 0 && form.payment_method !== "debt_offset" && (
+            <p className="mt-1.5 text-[11px] text-amber-600">
+              Người bán đang nợ cửa hàng {fmtVND(partnerRec)} — cân nhắc chọn "Bù trừ công nợ" thay vì chi tiền.
+            </p>
+          )}
           {form.payment_method === "bank_transfer" && (
             <div className="mt-2">
               <BankSelect
@@ -2782,7 +2822,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           )}
         </label>
 
-        {sourceType === "supplier" && (
+        {sourceType === "supplier" && form.payment_method !== "debt_offset" && (
           <div className="bg-slate-50 rounded-xl p-3 space-y-3">
             <p className="text-xs font-medium text-slate-600">Công nợ NCC</p>
             <div className="grid sm:grid-cols-2 gap-3">
