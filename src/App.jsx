@@ -575,6 +575,7 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const isSold = initial?.status === "sold";
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -587,7 +588,13 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
     }
     setError(""); setSaving(true);
     try {
-      const payload = {
+      const payload = isSold ? {
+        // Máy đã bán: chỉ cho phép sửa IMEI + Nhà cung cấp/nguồn nhập, mọi trường
+        // khác giữ nguyên giá trị gốc để bảo vệ dữ liệu đã chốt.
+        imei: form.imei.trim() || null,
+        supplier: form.supplier.trim() || null,
+        updated_by: employee.id,
+      } : {
         imei: form.imei.trim() || null,
         model: form.model.trim(),
         storage: form.storage.trim() || null,
@@ -645,29 +652,36 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
         </div>
       )}
 
+      {isSold && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-amber-800 flex items-center gap-2">
+          <ShieldAlert size={15} className="shrink-0" />
+          Máy này đã bán — chỉ sửa được IMEI và Nhà cung cấp/nguồn nhập (khắc phục sai sót nhập liệu), các thông tin khác được khóa để bảo vệ dữ liệu đã chốt.
+        </div>
+      )}
+
       <form onSubmit={submit} className="grid sm:grid-cols-2 gap-3">
-        <TextField label="Số IMEI (để trống nếu chưa có)" value={form.imei} onChange={set("imei")} disabled={!!initial?.id} />
+        <TextField label="Số IMEI (để trống nếu chưa có)" value={form.imei} onChange={set("imei")} disabled={!!initial?.id && !isSold} />
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
-          <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 14 Pro Max" />
+          <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 14 Pro Max" disabled={isSold} />
         </label>
-        <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="256GB" list="dl-storage" />
-        <TextField label="Màu sắc" value={form.color} onChange={set("color")} placeholder="Tím" list="dl-colors-device" />
+        <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="256GB" list="dl-storage" disabled={isSold} />
+        <TextField label="Màu sắc" value={form.color} onChange={set("color")} placeholder="Tím" list="dl-colors-device" disabled={isSold} />
         <datalist id="dl-colors-device">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
         <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
-          <select value={form.condition} onChange={set("condition")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <select value={form.condition} onChange={set("condition")} disabled={isSold} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400">
             <option value="new">Máy mới</option>
             <option value="used">Máy cũ</option>
           </select>
         </label>
-        <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} placeholder="99" />
+        <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} placeholder="99" disabled={isSold} />
         <TextField label="Nhà cung cấp / nguồn nhập" value={form.supplier} onChange={set("supplier")} />
-        <TextField label="Giá vốn (đ)" type="number" value={form.cost_price} onChange={set("cost_price")} />
-        <TextField label="Giá bán đề xuất (đ)" type="number" value={form.sale_price} onChange={set("sale_price")} />
-        <TextField label="Ngày nhập" type="date" value={form.import_date || ""} onChange={set("import_date")} />
-        <TextField label="Ghi chú" value={form.notes} onChange={set("notes")} className="sm:col-span-2" />
+        <TextField label="Giá vốn (đ)" type="number" value={form.cost_price} onChange={set("cost_price")} disabled={isSold} />
+        <TextField label="Giá bán đề xuất (đ)" type="number" value={form.sale_price} onChange={set("sale_price")} disabled={isSold} />
+        <TextField label="Ngày nhập" type="date" value={form.import_date || ""} onChange={set("import_date")} disabled={isSold} />
+        <TextField label="Ghi chú" value={form.notes} onChange={set("notes")} className="sm:col-span-2" disabled={isSold} />
         {error && <p className="text-xs text-rose-600 sm:col-span-2">{error}</p>}
         <div className="sm:col-span-2 flex gap-2 mt-1">
           <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
@@ -783,6 +797,7 @@ function InventoryModule({ employee, onCountChange }) {
   };
 
   const cycleStatus = async (d) => {
+    if (d.status === "sold") { alert("Máy đã bán — không thể tự đổi trạng thái ở đây."); return; }
     const order = ["in_stock", "reserved", "sold"];
     const next = order[(order.indexOf(d.status) + 1) % order.length];
     const { data: updated, error } = await supabase.from("devices").update({ status: next, updated_by: employee.id }).eq("id", d.id).select().maybeSingle();
@@ -887,13 +902,19 @@ function InventoryModule({ employee, onCountChange }) {
                     {canSeeCost && <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.cost_price)}</td>}
                     <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.sale_price)}</td>
                     <td className="px-3 py-2.5">
-                      <button
-                        onClick={() => cycleStatus(d)}
-                        className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])}
-                        title="Bấm để chuyển trạng thái"
-                      >
-                        {DEVICE_STATUS_LABELS[d.status] || d.status}
-                      </button>
+                      {d.status === "sold" ? (
+                        <span className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])} title="Máy đã bán — không thể tự đổi trạng thái, liên hệ đơn hàng liên quan nếu cần điều chỉnh">
+                          {DEVICE_STATUS_LABELS[d.status]}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => cycleStatus(d)}
+                          className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])}
+                          title="Bấm để chuyển trạng thái"
+                        >
+                          {DEVICE_STATUS_LABELS[d.status] || d.status}
+                        </button>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       {d.imei && (
@@ -1143,7 +1164,7 @@ function DevicePicker({ value, onSelect }) {
   );
 }
 
-function ModelPicker({ value, onSelect, placeholder }) {
+function ModelPicker({ value, onSelect, placeholder, disabled }) {
   const [query, setQuery] = useState(value || "");
   const [open, setOpen] = useState(false);
 
@@ -1162,13 +1183,14 @@ function ModelPicker({ value, onSelect, placeholder }) {
         <input
           value={query}
           onChange={(e) => { setQuery(e.target.value); onSelect(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => !disabled && setOpen(true)}
           placeholder={placeholder || "Gõ hoặc chọn từ danh sách..."}
-          className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+          disabled={disabled}
+          className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400 disabled:bg-slate-50 disabled:text-slate-400"
         />
         <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
       </div>
-      {open && (
+      {open && !disabled && (
         <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
           {filtered.length === 0 ? (
             <div className="p-3 text-xs text-slate-400">Không có trong danh mục — vẫn dùng được đúng tên bạn vừa gõ (máy hãng khác/đời cũ).</div>
@@ -1650,7 +1672,7 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [printType, setPrintType] = useState(null);
   const [showReconcile, setShowReconcile] = useState(false);
-  const canDelete = employee.role === "quan_ly";
+  const canDelete = employee.role === "quan_ly" && order.status !== "completed";
   const canReconcile = employee.role === "quan_ly" && order.status === "pending_stock";
 
   const loadDetail = async () => {
@@ -1668,6 +1690,7 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
   };
 
   const remove = async () => {
+    if (order.status === "completed") { alert("Đơn hàng đã Hoàn tất — không thể xóa để bảo vệ dữ liệu đã chốt."); return; }
     if (!confirm(`Xóa đơn hàng "${order.order_code}"? Máy sẽ không tự động chuyển lại trạng thái Còn hàng.`)) return;
     const { error } = await supabase.from("sales_orders").delete().eq("id", order.id);
     if (error) { alert(error.message); return; }
