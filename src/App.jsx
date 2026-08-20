@@ -841,19 +841,6 @@ function InventoryModule({ employee, onCountChange }) {
     load();
   };
 
-  const cycleStatus = async (d) => {
-    if (!canManage) { alert("Bạn chỉ có quyền xem Kho hàng."); return; }
-    if (d.status === "sold") { alert("Máy đã bán — không thể tự đổi trạng thái ở đây."); return; }
-    const order = ["in_stock", "reserved", "sold"];
-    const next = order[(order.indexOf(d.status) + 1) % order.length];
-    const { data: updated, error } = await supabase.from("devices").update({ status: next, updated_by: employee.id }).eq("id", d.id).select().maybeSingle();
-    if (error) { alert(error.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "devices", record_id: d.id, action: "update",
-      old_data: d, new_data: updated, performed_by: employee.id, store_id: employee.store_id,
-    });
-    load();
-  };
 
   return (
     <div>
@@ -1050,22 +1037,12 @@ function InventoryModule({ employee, onCountChange }) {
                     {canSeeCost && <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.cost_price)}</td>}
                     <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.sale_price)}</td>
                     <td className="px-3 py-2.5">
-                      {d.status === "sold" || !canManage ? (
-                        <span
-                          className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])}
-                          title={d.status === "sold" ? "Máy đã bán — không thể tự đổi trạng thái" : "Bạn chỉ có quyền xem"}
-                        >
-                          {DEVICE_STATUS_LABELS[d.status] || d.status}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => cycleStatus(d)}
-                          className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])}
-                          title="Bấm để chuyển trạng thái"
-                        >
-                          {DEVICE_STATUS_LABELS[d.status] || d.status}
-                        </button>
-                      )}
+                      <span
+                        className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])}
+                        title="Trạng thái do nghiệp vụ quyết định: bán hàng, xuất nội bộ, gửi spa/sửa, trả hàng"
+                      >
+                        {DEVICE_STATUS_LABELS[d.status] || d.status}
+                      </span>
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       {d.imei && (
