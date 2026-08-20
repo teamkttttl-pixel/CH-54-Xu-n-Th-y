@@ -3007,131 +3007,6 @@ function PurchaseModule({ employee }) {
 /* Receipts module — global ledger of all phiếu thu/chi                  */
 /* ---------------------------------------------------------------------- */
 
-function ReceiptsModule({ employee }) {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [printData, setPrintData] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from("order_payments")
-      .select("*, sales_orders(order_code, customer_id, device_id, sale_price, discount, total_amount, notes, created_at)")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    setRows(data || []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  // Gộp các phiếu cùng 1 đơn thành 1 nhóm — mỗi đơn chỉ hiện 1 dòng trong bảng,
-  // dù có bao nhiêu hình thức thanh toán, tránh lặp lại và nhầm lẫn.
-  const groups = [];
-  const groupIndexByOrder = {};
-  for (const r of rows) {
-    const key = r.sales_orders?.order_code || r.id;
-    if (groupIndexByOrder[key] === undefined) {
-      groupIndexByOrder[key] = groups.length;
-      groups.push({ orderCode: key, sales_orders: r.sales_orders, payments: [r] });
-    } else {
-      groups[groupIndexByOrder[key]].payments.push(r);
-    }
-  }
-
-  const openPrint = async (group) => {
-    const first = group.payments[0];
-    const [{ data: customer }, { data: device }] = await Promise.all([
-      supabase.from("customers").select("*").eq("id", first.sales_orders.customer_id).maybeSingle(),
-      supabase.from("devices").select("*").eq("id", first.sales_orders.device_id).maybeSingle(),
-    ]);
-    setPrintData({ row: first, customer, device, payments: group.payments });
-  };
-
-  return (
-    <div>
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">Phiếu thu/chi</h2>
-        <p className="text-xs text-slate-400">Mỗi đơn hàng 1 dòng — đơn có nhiều hình thức thanh toán in ra sẽ gộp thành 1 phiếu duy nhất</p>
-      </div>
-      <Card className="p-0 overflow-hidden">
-        {loading ? (
-          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
-        ) : groups.length === 0 ? (
-          <EmptyState icon={Receipt} text="Chưa có phiếu thu/chi nào." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
-                <th className="px-3 py-2">Mã phiếu</th>
-                <th className="px-3 py-2">Đơn hàng</th>
-                <th className="px-3 py-2">Hình thức</th>
-                <th className="px-3 py-2">Số tiền</th>
-                <th className="px-3 py-2">Ngày</th>
-                <th className="px-3 py-2"></th>
-              </tr></thead>
-              <tbody>
-                {groups.map((g) => {
-                  const total = g.payments.reduce((s, p) => s + Number(p.amount || 0), 0);
-                  const methods = g.payments.map((p) => PAYMENT_METHOD_LABELS[p.method]).join(" + ");
-                  const codes = g.payments.map((p) => p.payment_code).join(", ");
-                  return (
-                    <tr key={g.orderCode} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                      <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{codes}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{g.orderCode}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{methods}</td>
-                      <td className="px-3 py-2.5 text-slate-600">{fmtVND(total)}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{fmtDate(g.payments[0].created_at)}</td>
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        <button onClick={() => openPrint(g)} className="text-brand-600 hover:underline text-xs flex items-center gap-1 ml-auto">
-                          <Printer size={12} /> {g.payments.length > 1 ? `In gộp (${g.payments.length} hình thức)` : "In"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-      {printData && (
-        <PrintDocModal
-          type="receipt"
-          order={printData.row.sales_orders}
-          customer={printData.customer}
-          device={printData.device}
-          payments={printData.payments}
-          storeName={employee.stores?.name}
-          onClose={() => setPrintData(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------------- */
-/* Audit Log module — lịch sử thao tác toàn hệ thống (quan_ly + ke_toan)  */
-/* ---------------------------------------------------------------------- */
-
-const AUDIT_TABLE_LABELS = {
-  devices: "Kho hàng",
-  sales_orders: "Đơn hàng bán",
-  customers: "Khách hàng",
-};
-const AUDIT_ACTION_LABELS = { create: "Tạo mới", update: "Cập nhật", delete: "Xóa" };
-const AUDIT_ACTION_STYLES = {
-  create: "bg-emerald-50 text-emerald-700",
-  update: "bg-amber-50 text-amber-700",
-  delete: "bg-rose-50 text-rose-600",
-};
-
-// Vài trường đáng chú ý để tóm tắt thay đổi (nếu có), tránh dump cả object JSON khó đọc
-const AUDIT_FIELD_LABELS = {
-  imei: "IMEI", model: "Model", status: "Trạng thái", cost_price: "Giá vốn", sale_price: "Giá bán",
-  full_name: "Họ tên", phone: "SĐT", order_code: "Mã đơn", total_amount: "Tổng tiền",
-};
-
 function summarizeAuditChange(log) {
   if (log.action === "delete") {
     const d = log.old_data || {};
@@ -4253,6 +4128,572 @@ function DebtModule({ employee }) {
   );
 }
 
+
+/* -------------------------------------------------------------- */
+/* Chi phí — thay cho Phiếu thu/chi                                */
+/* -------------------------------------------------------------- */
+
+const EXPENSE_CATEGORY_LABELS = {
+  other: "Chi phí khác",
+  marketing: "Marketing — Quảng cáo",
+  sales_return: "Giảm trừ doanh thu",
+};
+
+function OtherExpenseTab({ employee, rows, loading, onChanged }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ expense_date: todayStr(), amount: "", description: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const canManage = employee.role !== "nhan_vien";
+  const list = rows.filter((r) => r.category === "other");
+  const total = list.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ expense_date: todayStr(), amount: "", description: "" });
+    setError(""); setShowForm(true);
+  };
+  const openEdit = (r) => {
+    setEditing(r);
+    setForm({ expense_date: r.expense_date, amount: String(r.amount), description: r.description || "" });
+    setError(""); setShowForm(true);
+  };
+
+  const submit = async () => {
+    const amt = Number(form.amount) || 0;
+    if (amt <= 0) { setError("Số tiền phải lớn hơn 0."); return; }
+    if (!form.description.trim()) { setError("Vui lòng nhập diễn giải."); return; }
+    setSaving(true); setError("");
+    const payload = {
+      expense_date: form.expense_date, amount: amt,
+      description: form.description.trim(), category: "other",
+      store_id: employee.store_id, created_by: employee.id,
+    };
+    const { error: err } = editing
+      ? await supabase.from("expenses").update(payload).eq("id", editing.id)
+      : await supabase.from("expenses").insert(payload);
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setShowForm(false); onChanged();
+  };
+
+  const remove = async (r) => {
+    if (!confirm(`Xóa chi phí ${r.expense_code} — ${fmtVND(r.amount)}?`)) return;
+    const { error: err } = await supabase.from("expenses").delete().eq("id", r.id);
+    if (err) { alert(err.message); return; }
+    onChanged();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div className="bg-slate-100 rounded-xl px-3 py-2 text-sm">
+          <span className="text-slate-400">Tổng trong kỳ: </span>
+          <span className="font-semibold text-slate-700">{fmtVND(total)}</span>
+          <span className="text-slate-400"> · {list.length} khoản</span>
+        </div>
+        {canManage && (
+          <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Plus size={15} /> Thêm chi phí
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <Card className="p-4 mb-3">
+          <p className="text-sm font-medium text-slate-700 mb-3">{editing ? `Sửa ${editing.expense_code}` : "Thêm chi phí khác"}</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <TextField label="Ngày phát sinh" type="date" value={form.expense_date}
+              onChange={(e) => setForm((f) => ({ ...f, expense_date: e.target.value }))} />
+            <TextField label="Số tiền (đ) *" type="number" value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+          </div>
+          <div className="mt-3">
+            <TextField label="Diễn giải *" value={form.description}
+              placeholder="Tiền điện, tiền nước, sửa chữa, phí ship..."
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+          </div>
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
+          <div className="flex gap-2 mt-3">
+            <button onClick={submit} disabled={saving}
+              className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} {editing ? "Lưu" : "Thêm"}
+            </button>
+            <button onClick={() => setShowForm(false)} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+          </div>
+        </Card>
+      )}
+
+      <Card className="p-0 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : list.length === 0 ? (
+          <EmptyState icon={Receipt} text="Chưa có chi phí nào trong kỳ." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã</th>
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2">Diễn giải</th>
+                <th className="px-3 py-2 text-right">Số tiền</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-700">{r.description}</td>
+                    <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {canManage && (<>
+                        <button onClick={() => openEdit(r)} className="text-slate-400 hover:text-brand-600 mr-2"><Pencil size={14} /></button>
+                        <button onClick={() => remove(r)} className="text-slate-400 hover:text-rose-600"><Trash2 size={14} /></button>
+                      </>)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function MarketingTab({ employee, rows, onChanged }) {
+  const [month, setMonth] = useState(todayStr().slice(0, 7));
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [okCode, setOkCode] = useState(null);
+
+  const canManage = employee.role !== "nhan_vien";
+  const list = rows.filter((r) => r.category === "marketing");
+  const total = list.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  const doPreview = async () => {
+    const amt = Number(amount) || 0;
+    if (amt <= 0) { setError("Nhập số tiền lớn hơn 0."); return; }
+    setBusy(true); setError(""); setOkCode(null);
+    const { data, error: err } = await supabase.rpc("preview_marketing_allocation", {
+      p_month: `${month}-01`, p_total: amt,
+    });
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    setPreview(data || []);
+  };
+
+  const doAllocate = async () => {
+    setBusy(true); setError("");
+    const { data, error: err } = await supabase.rpc("allocate_marketing_cost", {
+      p_month: `${month}-01`, p_total: Number(amount), p_description: note.trim() || null,
+    });
+    setBusy(false);
+    if (err) { setError(err.message); return; }
+    setOkCode(data); setPreview(null); setAmount(""); setNote("");
+    onChanged();
+  };
+
+  return (
+    <div className="space-y-3">
+      {canManage && (
+        <Card className="p-4">
+          <p className="text-sm font-medium text-slate-700 mb-1">Nhập chi phí quảng cáo toàn hệ thống</p>
+          <p className="text-xs text-slate-400 mb-3">
+            Số tổng sẽ tự chia cho các cửa hàng theo tỷ lệ lãi gộp (doanh thu trừ giá vốn) của tháng đã chọn.
+          </p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <TextField label="Tháng" type="month" value={month} onChange={(e) => { setMonth(e.target.value); setPreview(null); }} />
+            <TextField label="Tổng chi phí (đ) *" type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setPreview(null); }} />
+            <TextField label="Diễn giải" value={note} placeholder="Quảng cáo Facebook tháng 8" onChange={(e) => setNote(e.target.value)} />
+          </div>
+
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
+          {okCode && (
+            <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 mt-3">
+              Đã phân bổ xong, mã đợt <span className="font-semibold">{okCode}</span>.
+            </p>
+          )}
+
+          {preview && (
+            <div className="mt-3 bg-slate-50 rounded-xl p-3">
+              <p className="text-xs font-medium text-slate-600 mb-2">Xem trước phân bổ</p>
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs text-slate-400">
+                  <th className="py-1">Cửa hàng</th>
+                  <th className="py-1 text-right">Lãi gộp</th>
+                  <th className="py-1 text-right">Tỷ lệ</th>
+                  <th className="py-1 text-right">Phân bổ</th>
+                </tr></thead>
+                <tbody>
+                  {preview.map((p) => (
+                    <tr key={p.store_name} className="border-t border-slate-200">
+                      <td className="py-1.5 text-slate-700">{p.store_name}</td>
+                      <td className="py-1.5 text-right text-slate-500">{fmtVND(p.gross_profit)}</td>
+                      <td className="py-1.5 text-right text-slate-500">{p.ratio}%</td>
+                      <td className="py-1.5 text-right font-medium text-slate-700">{fmtVND(p.allocated)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {preview.every((p) => Number(p.gross_profit) <= 0) && (
+                <p className="text-[11px] text-amber-600 mt-2">
+                  Tháng này không cửa hàng nào có lãi gộp dương — hệ thống sẽ chia đều.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-2 mt-3">
+            <button onClick={doPreview} disabled={busy}
+              className="border border-brand-300 text-brand-700 hover:bg-brand-50 disabled:opacity-60 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+              {busy && <Loader2 size={15} className="animate-spin" />} Xem trước
+            </button>
+            {preview && (
+              <button onClick={doAllocate} disabled={busy}
+                className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium">
+                Xác nhận phân bổ
+              </button>
+            )}
+          </div>
+        </Card>
+      )}
+
+      <div className="bg-slate-100 rounded-xl px-3 py-2 text-sm inline-block">
+        <span className="text-slate-400">Marketing phân bổ cho cửa hàng này trong kỳ: </span>
+        <span className="font-semibold text-slate-700">{fmtVND(total)}</span>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        {list.length === 0 ? (
+          <EmptyState icon={TrendingUp} text="Chưa có chi phí marketing nào trong kỳ." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã</th>
+                <th className="px-3 py-2">Kỳ</th>
+                <th className="px-3 py-2">Diễn giải</th>
+                <th className="px-3 py-2 text-right">Phân bổ</th>
+              </tr></thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-600 text-xs">{r.description}</td>
+                    <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function ReturnTab({ employee, rows, onChanged }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [picked, setPicked] = useState(null);
+
+  const list = rows.filter((r) => r.category === "sales_return");
+  const total = list.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  const search = async () => {
+    const q = query.trim();
+    if (q.length < 3) { setResults([]); return; }
+    setSearching(true);
+    const esc = q.replace(/[%,()]/g, "");
+    const { data } = await supabase
+      .from("v_returnable_sales").select("*")
+      .or(`imei.ilike.%${esc}%,customer_cccd.ilike.%${esc}%,customer_name.ilike.%${esc}%,order_code.ilike.%${esc}%`)
+      .order("sold_at", { ascending: false }).limit(20);
+    setResults(data || []);
+    setSearching(false);
+  };
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-4">
+        <p className="text-sm font-medium text-slate-700 mb-1">Nhận máy khách trả</p>
+        <p className="text-xs text-slate-400 mb-3">
+          Tra theo số IMEI, số CCCD, họ tên khách hoặc mã đơn. Máy sẽ nhập lại kho theo đúng giá vốn cũ,
+          phần chênh so với giá bán ghi thành chi phí giảm trừ doanh thu.
+        </p>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && search()}
+              placeholder="IMEI, CCCD, họ tên hoặc mã đơn..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+          <button onClick={search} disabled={searching}
+            className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+            {searching && <Loader2 size={15} className="animate-spin" />} Tra cứu
+          </button>
+        </div>
+
+        {results !== null && (
+          <div className="mt-3">
+            {results.length === 0 ? (
+              <p className="text-xs text-slate-400 py-3 text-center">
+                Không tìm thấy đơn nào khớp. Kiểm tra lại IMEI hoặc thông tin khách.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {results.map((r) => (
+                  <div key={r.order_id} className="flex items-center gap-3 border border-slate-200 rounded-xl px-3 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-700">
+                        {[r.model, r.storage, r.color].filter(Boolean).join(" ")}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        IMEI {r.imei || "—"} · {r.order_code} · bán {fmtDate(r.sold_at)}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {r.customer_name}{r.customer_phone ? ` · ${r.customer_phone}` : ""}
+                        {r.customer_cccd ? ` · CCCD ${r.customer_cccd}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-slate-700">{fmtVND(r.total_amount)}</p>
+                      <button onClick={() => setPicked(r)}
+                        className="text-xs text-brand-600 hover:underline">
+                        Nhận trả máy
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <div className="bg-rose-50 rounded-xl px-3 py-2 text-sm inline-block">
+        <span className="text-rose-500">Giảm trừ doanh thu trong kỳ: </span>
+        <span className="font-semibold text-rose-700">{fmtVND(total)}</span>
+        <span className="text-rose-400"> · {list.length} lượt trả</span>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        {list.length === 0 ? (
+          <EmptyState icon={ArrowLeftRight} text="Chưa có lượt trả máy nào trong kỳ." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã</th>
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2">Diễn giải</th>
+                <th className="px-3 py-2 text-right">Giảm trừ</th>
+              </tr></thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-600 text-xs">{r.description}</td>
+                    <td className="px-3 py-2.5 text-right font-medium text-rose-600 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {picked && (
+        <ConfirmReturnModal
+          sale={picked} employee={employee}
+          onClose={() => setPicked(null)}
+          onDone={() => { setPicked(null); setResults(null); setQuery(""); onChanged(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmReturnModal({ sale, employee, onClose, onDone }) {
+  const [method, setMethod] = useState("cash");
+  const [bankId, setBankId] = useState(null);
+  const [reason, setReason] = useState("");
+  const [returnDate, setReturnDate] = useState(todayStr());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [okCode, setOkCode] = useState(null);
+  const { banks } = usePaymentOptions();
+
+  const refund = Number(sale.paid_amount || 0);
+  const debtLeft = Math.max(0, Number(sale.total_amount) - refund);
+
+  const submit = async () => {
+    if (method === "bank_transfer" && !bankId) { setError("Vui lòng chọn tài khoản chuyển hoàn."); return; }
+    setSaving(true); setError("");
+    const { data, error: err } = await supabase.rpc("create_sales_return", {
+      p_sales_order_id: sale.order_id, p_refund_method: method,
+      p_bank_account_id: bankId, p_reason: reason.trim() || null, p_return_date: returnDate,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setOkCode(data);
+    await supabase.from("audit_logs").insert({
+      table_name: "sales_returns", record_id: sale.order_id, action: "create",
+      new_data: { ma: data, imei: sale.imei, hoan: refund },
+      performed_by: employee.id, store_id: employee.store_id,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Nhận máy khách trả</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+
+        {okCode ? (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800 space-y-1">
+              <p>Đã lập chứng từ trả hàng <span className="font-semibold">{okCode}</span>.</p>
+              <p className="text-xs">Máy đã về kho ở trạng thái Còn hàng theo giá vốn cũ. Phần chênh lệch đã ghi vào chi phí giảm trừ doanh thu.</p>
+            </div>
+            <button onClick={onDone} className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">Xong</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-xs space-y-0.5">
+              <p className="font-medium text-slate-700">{[sale.model, sale.storage, sale.color].filter(Boolean).join(" ")}</p>
+              <p className="text-slate-400">IMEI {sale.imei || "—"} · {sale.order_code}</p>
+              <p className="text-slate-400">{sale.customer_name} · bán ngày {fmtDate(sale.sold_at)}</p>
+              <div className="flex justify-between pt-1 mt-1 border-t border-slate-200">
+                <span className="text-slate-400">Giá đã bán</span>
+                <span className="font-medium text-slate-700">{fmtVND(sale.total_amount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Khách đã trả — sẽ hoàn lại</span>
+                <span className="font-medium text-slate-700">{fmtVND(refund)}</span>
+              </div>
+              {debtLeft > 0 && (
+                <div className="flex justify-between text-amber-700">
+                  <span>Công nợ còn lại — sẽ được xóa</span>
+                  <span className="font-medium">{fmtVND(debtLeft)}</span>
+                </div>
+              )}
+            </div>
+
+            <TextField label="Ngày nhận máy" type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
+
+            <div>
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức hoàn tiền</span>
+              <select value={method} onChange={(e) => setMethod(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="cash">Tiền mặt</option>
+                <option value="bank_transfer">Chuyển khoản</option>
+              </select>
+            </div>
+            {method === "bank_transfer" && (
+              <div>
+                <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển hoàn *</span>
+                <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+              </div>
+            )}
+            <TextField label="Lý do trả máy" value={reason} placeholder="Máy lỗi, khách đổi ý..." onChange={(e) => setReason(e.target.value)} />
+
+            <p className="text-[11px] text-slate-400">
+              Đơn gốc được giữ nguyên để tra cứu, hệ thống sinh chứng từ trả hàng riêng đối ứng lại.
+            </p>
+
+            {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={submit} disabled={saving}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận nhận máy
+              </button>
+              <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function ExpensesModule({ employee }) {
+  const [tab, setTab] = useState("other");
+  const [fromDate, setFromDate] = useState(startOfMonth());
+  const [toDate, setToDate] = useState(todayStr());
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from("expenses").select("*")
+      .gte("expense_date", fromDate).lte("expense_date", toDate)
+      .order("expense_date", { ascending: false }).limit(2000);
+    setRows(data || []);
+    setLoading(false);
+  }, [fromDate, toDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const sumOf = (c) => rows.filter((r) => r.category === c).reduce((s, r) => s + Number(r.amount || 0), 0);
+  const grand = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  const TABS = [
+    ["other", "Chi phí khác", sumOf("other")],
+    ["marketing", "Marketing", sumOf("marketing")],
+    ["sales_return", "Giảm trừ doanh thu", sumOf("sales_return")],
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Chi phí</h2>
+          <p className="text-xs text-slate-400">Tổng chi phí trong kỳ: {fmtVND(grand)}</p>
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
+          <Filter size={14} className="text-slate-400" />
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="text-sm outline-none" />
+          <span className="text-slate-300">—</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="text-sm outline-none" />
+        </div>
+      </div>
+
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {TABS.map(([k, label, amt]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={classNames("px-4 py-2 rounded-xl text-sm border text-left",
+              tab === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
+            <span className="font-medium">{label}</span>
+            <span className={classNames("ml-2 text-xs", tab === k ? "text-white/80" : "text-slate-400")}>{fmtVND(amt)}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === "other" && <OtherExpenseTab employee={employee} rows={rows} loading={loading} onChanged={load} />}
+      {tab === "marketing" && <MarketingTab employee={employee} rows={rows} onChanged={load} />}
+      {tab === "sales_return" && <ReturnTab employee={employee} rows={rows} onChanged={load} />}
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "customers", label: "Khách hàng", icon: Users },
@@ -4260,7 +4701,7 @@ const NAV_ITEMS = [
   { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart },
   { key: "purchases", label: "Nhập máy/Thu cũ", icon: ArrowLeftRight },
   { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 4" },
-  { key: "receipts", label: "Phiếu thu/chi", icon: Receipt },
+  { key: "expenses", label: "Chi phí", icon: Receipt },
   { key: "debts", label: "Công nợ", icon: Banknote },
   { key: "reports", label: "Báo cáo", icon: BarChart3, allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "employees", label: "Nhân viên", icon: UserCog, managerOnly: true },
@@ -4291,8 +4732,8 @@ function AppShell({ employee, onSignOut }) {
         return <OrdersModule employee={employee} />;
       case "purchases":
         return <PurchaseModule employee={employee} />;
-      case "receipts":
-        return <ReceiptsModule employee={employee} />;
+      case "expenses":
+        return <ExpensesModule employee={employee} />;
       case "debts":
         return <DebtModule employee={employee} />;
       case "reports":
