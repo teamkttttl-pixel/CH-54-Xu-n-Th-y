@@ -1244,7 +1244,45 @@ function ModelPicker({ value, onSelect, placeholder, disabled }) {
   );
 }
 
+function usePaymentOptions() {
+  const [banks, setBanks] = useState([]);
+  const [providers, setProviders] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const [{ data: b }, { data: p }] = await Promise.all([
+        supabase.from("bank_accounts").select("id, short_label, bank_name, account_number")
+          .eq("is_active", true).order("sort_order"),
+        supabase.from("installment_providers").select("id, code, name")
+          .eq("is_active", true).order("sort_order"),
+      ]);
+      if (!active) return;
+      setBanks(b || []);
+      setProviders(p || []);
+    })();
+    return () => { active = false; };
+  }, []);
+
+  return { banks, providers };
+}
+
+function BankSelect({ banks, value, onChange, className = "" }) {
+  return (
+    <select
+      value={value || ""} onChange={(e) => onChange(e.target.value || null)}
+      className={classNames("rounded-lg border border-slate-200 px-2 py-1.5 text-xs", className)}
+    >
+      <option value="">— Chọn tài khoản nhận tiền —</option>
+      {banks.map((b) => (
+        <option key={b.id} value={b.id}>{(b.short_label || b.bank_name) + (b.account_number ? ` · ${b.account_number}` : "")}</option>
+      ))}
+    </select>
+  );
+}
+
 function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = "" }) {
+  const { banks, providers } = usePaymentOptions();
   const paid = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const remaining = total - paid;
   const offsetUsed = rows.filter((r) => r.method === "debt_offset")
@@ -1253,7 +1291,7 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
 
   const update = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const addRow = () => setRows((rs) => [...rs, {
-    method: "cash", amount: remaining > 0 ? remaining : "",
+    method: "cash", amount: remaining > 0 ? remaining : "", bank_account_id: null,
     installment_provider: "", installment_contract_code: "", note: "",
     trade_in_imei: "", trade_in_model: "", trade_in_storage: "", trade_in_color: "", trade_in_condition: "used",
   }]);
@@ -1289,6 +1327,21 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
                 <button type="button" onClick={() => removeRow(i)} className="text-rose-400 hover:text-rose-600"><X size={15} /></button>
               )}
             </div>
+            {r.method === "bank_transfer" && (
+              <div className="pl-6">
+                <BankSelect
+                  banks={banks}
+                  value={r.bank_account_id}
+                  onChange={(v) => update(i, { bank_account_id: v })}
+                  className="w-full"
+                />
+                {banks.length === 0 && (
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    Chưa khai báo tài khoản ngân hàng nào — nhờ Quản lý bổ sung.
+                  </p>
+                )}
+              </div>
+            )}
             {r.method === "debt_offset" && (
               <div className="pl-6 space-y-1.5">
                 <p className="text-[11px] text-slate-400">
@@ -1311,12 +1364,14 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
             )}
             {r.method === "installment" && (
               <div className="grid grid-cols-2 gap-2 pl-6">
-                <input
+                <select
                   value={r.installment_provider}
                   onChange={(e) => update(i, { installment_provider: e.target.value })}
-                  placeholder="Đơn vị hỗ trợ (Mira...)"
                   className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                />
+                >
+                  <option value="">— Chọn đơn vị trả góp —</option>
+                  {providers.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
                 <input
                   value={r.installment_contract_code}
                   onChange={(e) => update(i, { installment_contract_code: e.target.value })}
@@ -1390,7 +1445,8 @@ function OrderForm({ onCancel, onSaved, employee }) {
   const [discount, setDiscount] = useState("0");
   const [notes, setNotes] = useState("");
   const [payments, setPayments] = useState([{
-    method: "cash", amount: "", installment_provider: "", installment_contract_code: "", note: "",
+    method: "cash", amount: "", bank_account_id: null,
+    installment_provider: "", installment_contract_code: "", note: "",
     trade_in_imei: "", trade_in_model: "", trade_in_storage: "", trade_in_color: "", trade_in_condition: "used",
   }]);
   const [saving, setSaving] = useState(false);
@@ -1436,8 +1492,25 @@ function OrderForm({ onCancel, onSaved, employee }) {
     // Dòng để trống = chưa thu -> bỏ qua, cho phép đơn nợ toàn bộ
     const activePayments = payments.filter((r) => String(r.amount).trim() !== "");
     const paidTotal = activePayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    if (Math.round(paidTotal) > Math.round(total)) { setError("Tổng các hình thức thanh toán đang lớn hơn tổng tiền đơn hàng."); return; }
+    const tradeInTotal = activePayments.filter((r) => r.method === "trade_in")
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const nonTradeIn = paidTotal - tradeInTotal;
+    if (Math.round(nonTradeIn) > Math.round(total)) {
+      setError("Tiền mặt/chuyển khoản/trả góp đang vượt tổng tiền đơn hàng."); return;
+    }
+    if (Math.round(paidTotal) > Math.round(total) && tradeInTotal <= 0) {
+      setError("Tổng các hình thức thanh toán đang lớn hơn tổng tiền đơn hàng."); return;
+    }
     if (activePayments.some((r) => Number(r.amount) <= 0)) { setError("Số tiền thanh toán phải lớn hơn 0."); return; }
+
+    if (activePayments.some((r) => r.method === "bank_transfer" && !r.bank_account_id)) {
+      setError("Vui lòng chọn tài khoản ngân hàng nhận tiền cho dòng chuyển khoản.");
+      return;
+    }
+    if (activePayments.some((r) => r.method === "installment" && !r.installment_provider?.trim())) {
+      setError("Vui lòng chọn đơn vị hỗ trợ trả góp.");
+      return;
+    }
 
     const offsetTotal = activePayments.filter((r) => r.method === "debt_offset")
       .reduce((s, r) => s + (Number(r.amount) || 0), 0);
@@ -1545,6 +1618,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
         order_id: order.id,
         method: r.method,
         amount: Number(r.amount),
+        bank_account_id: r.method === "bank_transfer" ? (r.bank_account_id || null) : null,
         installment_provider: r.method === "installment" ? (r.installment_provider.trim() || null) : null,
         installment_contract_code: r.method === "installment" ? (r.installment_contract_code.trim() || null) : null,
         trade_in_device_id: r.method === "trade_in" ? tradeInDeviceIds[r.trade_in_imei.trim()] : null,
@@ -1672,6 +1746,16 @@ function OrderForm({ onCancel, onSaved, employee }) {
             supplierDebt={supplierDebt} supplierName={linkedSupplier?.name || ""}
           />
         </div>
+        {paidNow > total && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5 text-xs text-indigo-800 flex items-start gap-2">
+            <Banknote size={15} className="shrink-0 mt-0.5" />
+            <span>
+              Máy khách đổi có giá trị cao hơn máy bán — cửa hàng sẽ nợ khách{" "}
+              <span className="font-medium">{fmtVND(paidNow - total)}</span>.
+              Khoản này hiện ở danh sách đơn hàng để trả lại hoặc trừ vào lần mua sau.
+            </span>
+          </div>
+        )}
         {paidNow < total && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
             <p className="text-xs text-amber-800">
@@ -1791,17 +1875,21 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
   const debt = Math.max(0, Number(order.total_amount) - Number(order.paid_amount || 0));
   const [amount, setAmount] = useState(String(debt));
   const [method, setMethod] = useState("cash");
+  const [bankId, setBankId] = useState(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { banks } = usePaymentOptions();
 
   const submit = async () => {
     const n = Number(amount) || 0;
     if (n <= 0) { setError("Vui lòng nhập số tiền thu hợp lệ."); return; }
     if (n > debt) { setError(`Khách chỉ còn nợ ${fmtVND(debt)}.`); return; }
+    if (method === "bank_transfer" && !bankId) { setError("Vui lòng chọn tài khoản nhận tiền."); return; }
     setSaving(true); setError("");
     const { data: pay, error: err } = await supabase.from("order_payments").insert({
       order_id: order.id, method, amount: n,
+      bank_account_id: method === "bank_transfer" ? bankId : null,
       note: note.trim() || "Thu công nợ",
       created_by: employee.id, store_id: employee.store_id,
     }).select().maybeSingle();
@@ -1837,6 +1925,12 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
             <option value="bank_transfer">Chuyển khoản</option>
           </select>
         </div>
+        {method === "bank_transfer" && (
+          <div>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản nhận tiền *</span>
+            <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+          </div>
+        )}
         <TextField label="Số tiền thu (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
         {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
@@ -1855,6 +1949,79 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
   );
 }
 
+function PayCustomerDiffModal({ order, employee, onClose, onDone }) {
+  const debt = Math.max(0, Number(order.shop_debt || 0));
+  const [amount, setAmount] = useState(String(debt));
+  const [method, setMethod] = useState("cash");
+  const [bankId, setBankId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { banks } = usePaymentOptions();
+
+  const submit = async () => {
+    const n = Number(amount) || 0;
+    if (n <= 0) { setError("Vui lòng nhập số tiền hợp lệ."); return; }
+    if (n > debt) { setError(`Cửa hàng chỉ còn nợ khách ${fmtVND(debt)}.`); return; }
+    if (method === "bank_transfer" && !bankId) { setError("Vui lòng chọn tài khoản chuyển tiền."); return; }
+    setSaving(true); setError("");
+    const label = method === "cash" ? "tiền mặt"
+      : `chuyển khoản ${banks.find((b) => b.id === bankId)?.short_label || ""}`.trim();
+    const { error: err } = await supabase.rpc("pay_customer_diff", {
+      p_sales_order_id: order.id, p_amount: n,
+      p_note: `Trả khách phần chênh máy đổi (${label})`,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "sales_orders", record_id: order.id, action: "update",
+      new_data: { tra_khach: n, hinh_thuc: label }, performed_by: employee.id, store_id: employee.store_id,
+    });
+    onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Trả tiền khách — {order.order_code}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="bg-indigo-50 rounded-xl px-3 py-2.5 text-xs text-indigo-800">
+            Máy khách đổi có giá trị cao hơn máy bán. Cửa hàng còn nợ khách{" "}
+            <span className="font-medium">{fmtVND(debt)}</span>.
+          </div>
+          <div>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi</span>
+            <select
+              value={method} onChange={(e) => setMethod(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="cash">Tiền mặt</option>
+              <option value="bank_transfer">Chuyển khoản</option>
+            </select>
+          </div>
+          {method === "bank_transfer" && (
+            <div>
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển tiền *</span>
+              <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+            </div>
+          )}
+          <TextField label="Số tiền trả (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={submit} disabled={saving}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận đã trả
+            </button>
+            <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function OrderRow({ order, employee, onDeleted, onReconciled }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -1862,9 +2029,14 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
   const [printType, setPrintType] = useState(null);
   const [showReconcile, setShowReconcile] = useState(false);
   const [showCollect, setShowCollect] = useState(false);
-  const orderDebt = Math.max(0, Number(order.total_amount) - Number(order.paid_amount || 0));
+  const [showPayDiff, setShowPayDiff] = useState(false);
+  const shopDebt = Math.max(0, Number(order.shop_debt || 0));
+  const orderDebt = order.customer_debt !== undefined
+    ? Math.max(0, Number(order.customer_debt))
+    : Math.max(0, Number(order.total_amount) - Number(order.paid_amount || 0));
   const overdue = orderDebt > 0 && order.due_date && new Date(order.due_date) < new Date(new Date().toDateString());
   const canCollect = employee.role !== "ke_toan" && orderDebt > 0 && order.status !== "cancelled";
+  const canPayDiff = employee.role !== "ke_toan" && shopDebt > 0 && order.status !== "cancelled";
   const canDelete = employee.role === "quan_ly" && order.status !== "completed";
   const canReconcile = employee.role === "quan_ly" && order.status === "pending_stock";
 
@@ -1903,7 +2075,11 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
               "text-xs px-2 py-0.5 rounded-full",
               overdue ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700"
             )}>
-              Nợ {fmtVND(orderDebt)}{overdue ? " · quá hạn" : ""}
+              Khách nợ {fmtVND(orderDebt)}{overdue ? " · quá hạn" : ""}
+            </span>
+          ) : shopDebt > 0 ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+              Shop nợ khách {fmtVND(shopDebt)}
             </span>
           ) : (
             <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Đã thu đủ</span>
@@ -1927,6 +2103,21 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
             >
               Thu nợ
             </button>
+          )}
+          {canPayDiff && (
+            <button
+              onClick={() => setShowPayDiff(true)}
+              className="text-xs text-indigo-600 hover:underline mr-3"
+            >
+              Trả khách
+            </button>
+          )}
+          {showPayDiff && (
+            <PayCustomerDiffModal
+              order={order} employee={employee}
+              onClose={() => setShowPayDiff(false)}
+              onDone={() => { setShowPayDiff(false); setDetail(null); onDeleted(); }}
+            />
           )}
           {showCollect && (
             <CollectDebtModal
@@ -2113,7 +2304,7 @@ function OrdersModule({ employee }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("sales_orders").select("*").order("created_at", { ascending: false }).limit(1000);
+    const { data, error } = await supabase.from("v_sales_order_debt").select("*").order("created_at", { ascending: false }).limit(1000);
     if (!error) setOrders(data || []);
     setLoading(false);
   }, []);
@@ -2126,14 +2317,15 @@ function OrdersModule({ employee }) {
   });
 
   const debtOrders = orders.filter(
-    (o) => o.status !== "cancelled" && Number(o.total_amount) - Number(o.paid_amount || 0) > 0
+    (o) => o.status !== "cancelled" && Number(o.customer_debt || 0) > 0
   );
-  const totalOrderDebt = debtOrders.reduce(
-    (s, o) => s + (Number(o.total_amount) - Number(o.paid_amount || 0)), 0
-  );
+  const totalOrderDebt = debtOrders.reduce((s, o) => s + Number(o.customer_debt || 0), 0);
   const debtOrderCount = debtOrders.length;
   const today = new Date(new Date().toDateString());
   const overdueCount = debtOrders.filter((o) => o.due_date && new Date(o.due_date) < today).length;
+
+  const shopDebtOrders = orders.filter((o) => Number(o.shop_debt || 0) > 0);
+  const totalShopDebt = shopDebtOrders.reduce((s, o) => s + Number(o.shop_debt || 0), 0);
 
   return (
     <div>
@@ -2159,6 +2351,14 @@ function OrdersModule({ employee }) {
           <Banknote size={15} className="shrink-0" />
           Khách đang nợ tổng cộng <span className="font-medium">{fmtVND(totalOrderDebt)}</span> trên {debtOrderCount} đơn
           {overdueCount > 0 && <span className="text-rose-600 font-medium">· {overdueCount} đơn quá hạn</span>}
+        </div>
+      )}
+
+      {totalShopDebt > 0 && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-indigo-800 flex items-center gap-2">
+          <Banknote size={15} className="shrink-0" />
+          Cửa hàng đang nợ khách <span className="font-medium">{fmtVND(totalShopDebt)}</span> trên {shopDebtOrders.length} đơn
+          <span className="text-slate-400">· phần chênh máy khách đổi</span>
         </div>
       )}
 
@@ -2416,12 +2616,13 @@ function SupplierPicker({ value, onSelect, employee }) {
 }
 
 function PurchaseForm({ onCancel, onSaved, employee }) {
+  const { banks } = usePaymentOptions();
   const [sourceType, setSourceType] = useState("customer"); // "customer" | "supplier"
   const [customer, setCustomer] = useState(null);
   const [supplier, setSupplier] = useState(null);
   const [form, setForm] = useState({
     imei: "", model: "", storage: "", color: "", condition: "used", condition_percent: "",
-    purchase_price: "", payment_method: "cash", notes: "",
+    purchase_price: "", payment_method: "cash", bank_account_id: null, notes: "",
     paid_amount: "", due_date: "",
   });
   const [duplicateImei, setDuplicateImei] = useState(null);
@@ -2474,6 +2675,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         supplier_id: sourceType === "supplier" ? supplier.id : null,
         device_id: newDevice.id, linked_sale_order_id: null,
         purchase_price: price, payment_method: form.payment_method,
+        bank_account_id: form.payment_method === "bank_transfer" ? (form.bank_account_id || null) : null,
         notes: form.notes.trim() || null, created_by: employee.id,
         store_id: employee.store_id,
         paid_amount: sourceType === "supplier" ? paid : price,
@@ -2579,6 +2781,16 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
             <option value="cash">Tiền mặt</option>
             <option value="bank_transfer">Chuyển khoản</option>
           </select>
+          {form.payment_method === "bank_transfer" && (
+            <div className="mt-2">
+              <BankSelect
+                banks={banks}
+                value={form.bank_account_id}
+                onChange={(v) => setForm((f) => ({ ...f, bank_account_id: v }))}
+                className="w-full !text-sm !px-3 !py-2 !rounded-xl"
+              />
+            </div>
+          )}
         </label>
 
         {sourceType === "supplier" && (
