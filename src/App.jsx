@@ -5,7 +5,7 @@ import {
   BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  LayoutDashboard, Users, Smartphone, ShoppingCart, Receipt, FileText,
+  LayoutDashboard, Users, Smartphone, ShoppingCart, Receipt,
   BarChart3, UserCog, ScrollText, Settings, LogOut, Search, Plus, X,
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
   History, Printer, Wallet, Landmark, CalendarClock, ChevronDown, FileSpreadsheet,
@@ -363,14 +363,6 @@ function DashboardModule({ employee, customerCount, inStockCount }) {
         <StatCard label="Đơn hàng hôm nay" value={loadingStats ? "…" : todayStats.orders} icon={ShoppingCart} />
         <StatCard label="Doanh thu hôm nay" value={loadingStats ? "…" : fmtVND(todayStats.revenue)} icon={BarChart3} />
       </div>
-      <Card className="p-5 mt-4">
-        <p className="text-sm font-medium text-slate-700 mb-1">Tiến độ triển khai</p>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Phase 1 (Đăng nhập, phân quyền, Khách hàng), Phase 2 (Kho hàng theo IMEI) và Phase 3
-          (Đơn hàng bán, Phiếu thu/chi, Hợp đồng) đang hoạt động. Hóa đơn thuế + Báo cáo + Audit Log
-          sẽ được bổ sung ở các lần cập nhật tiếp theo.
-        </p>
-      </Card>
     </div>
   );
 }
@@ -4858,34 +4850,6 @@ function EmployeesModule({ employee }) {
 /* Placeholder module for not-yet-built phases                           */
 /* ---------------------------------------------------------------------- */
 
-function ComingSoonModule({ title, icon: Icon, phase }) {
-  return (
-    <Card className="p-10 flex flex-col items-center text-center">
-      <Icon size={32} className="text-slate-300 mb-3" />
-      <h2 className="text-base font-semibold text-slate-700 mb-1">{title}</h2>
-      <p className="text-xs text-slate-400">Sẽ được xây dựng ở {phase}</p>
-    </Card>
-  );
-}
-
-/* ---------------------------------------------------------------------- */
-/* Shell: sidebar + bottom nav + routing between modules                 */
-/* ---------------------------------------------------------------------- */
-
-
-/* -------------------------------------------------------------- */
-/* Công nợ đối tác — đọc trực tiếp từ sổ cái                       */
-/* -------------------------------------------------------------- */
-
-const LEDGER_TYPE_LABELS = {
-  sale: "Bán máy",
-  sale_receipt: "Thu tiền khách",
-  purchase: "Nhập máy",
-  purchase_payment: "Trả tiền NCC",
-  offset: "Bù trừ công nợ",
-  adjustment: "Điều chỉnh",
-};
-
 function PartnerLedgerPanel({ partner }) {
   const [entries, setEntries] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -7401,7 +7365,6 @@ const NAV_ITEMS = [
   { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart },
   { key: "purchases", label: "Nhập máy/Thu cũ", icon: ArrowLeftRight },
   { key: "service", label: "Spa / Sửa chữa", icon: Settings },
-  { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 4" },
   { key: "expenses", label: "Chi phí", icon: Receipt },
   { key: "debts", label: "Công nợ", icon: Banknote },
   { key: "reports", label: "Báo cáo", icon: BarChart3, allowedRoles: ["quan_ly", "ke_toan"] },
@@ -7445,10 +7408,8 @@ function AppShell({ employee, onSignOut }) {
         return ["quan_ly", "ke_toan"].includes(employee.role) ? <AuditLogModule /> : null;
       case "employees":
         return employee.role === "quan_ly" ? <EmployeesModule employee={employee} /> : null;
-      default: {
-        const item = NAV_ITEMS.find((n) => n.key === tab);
-        return <ComingSoonModule title={item?.label} icon={item?.icon || Settings} phase={item?.phase || "giai đoạn sau"} />;
-      }
+      default:
+        return null;
     }
   };
 
