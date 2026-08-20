@@ -2787,22 +2787,36 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
             <option value="cash">Tiền mặt</option>
             <option value="bank_transfer">Chuyển khoản</option>
-            {partnerRec > 0 && <option value="debt_offset">Bù trừ công nợ</option>}
+            <option value="debt_offset">Bù trừ công nợ (không chi tiền)</option>
           </select>
           {form.payment_method === "debt_offset" && (
             <div className="mt-2 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5 text-xs text-indigo-800 space-y-1">
-              <p>
-                Người bán đang nợ cửa hàng <span className="font-medium">{fmtVND(partnerRec)}</span>.
-                Tiền mua máy sẽ trừ thẳng vào khoản đó, không chi tiền.
-              </p>
-              {price > 0 && (
-                <p>
-                  Trừ được <span className="font-medium">{fmtVND(Math.min(price, partnerRec))}</span>
-                  {price > partnerRec && <> — phần còn lại <span className="font-medium">{fmtVND(price - partnerRec)}</span> thành khoản cửa hàng nợ họ.</>}
-                  {price <= partnerRec && <> — sau đó họ còn nợ <span className="font-medium">{fmtVND(partnerRec - price)}</span>.</>}
-                </p>
+              {partnerRec > 0 ? (
+                <>
+                  <p>
+                    Người bán đang nợ cửa hàng <span className="font-medium">{fmtVND(partnerRec)}</span>.
+                    Tiền mua máy trừ thẳng vào khoản đó, không chi tiền.
+                  </p>
+                  {price > 0 && (
+                    <p>
+                      Trừ được <span className="font-medium">{fmtVND(Math.min(price, partnerRec))}</span>
+                      {price > partnerRec && <> — phần còn lại <span className="font-medium">{fmtVND(price - partnerRec)}</span> thành khoản cửa hàng nợ họ, sẽ tự bù trừ khi họ mua máy.</>}
+                      {price <= partnerRec && <> — sau đó họ còn nợ <span className="font-medium">{fmtVND(partnerRec - price)}</span>.</>}
+                    </p>
+                  )}
+                  <p className="text-indigo-500">Hệ thống lập biên bản bù trừ mã BT, phân bổ vào các đơn bán cũ nhất trước.</p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    Không chi tiền cho người bán.
+                    {price > 0 && <> Toàn bộ <span className="font-medium">{fmtVND(price)}</span> ghi thành khoản cửa hàng nợ họ.</>}
+                  </p>
+                  <p className="text-indigo-500">
+                    Khi khách mua máy mới, chọn "Bù trừ công nợ" ở phần thanh toán để trừ khoản này vào tiền máy — đúng luồng lên đời máy.
+                  </p>
+                </>
               )}
-              <p className="text-indigo-500">Hệ thống lập biên bản bù trừ mã BT và phân bổ vào các đơn bán cũ nhất trước.</p>
             </div>
           )}
           {partnerRec > 0 && form.payment_method !== "debt_offset" && (
