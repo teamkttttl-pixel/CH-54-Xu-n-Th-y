@@ -3195,12 +3195,14 @@ function PurchaseModule({ employee }) {
           </p>
         </div>
         {canCreate && (
-          <button onClick={() => setShowImport(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-            <FileSpreadsheet size={15} /> Nhập từ Excel
-          </button>
-          <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-            <Banknote size={15} /> Nhập máy mới
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setShowImport(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+              <FileSpreadsheet size={15} /> Nhập từ Excel
+            </button>
+            <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+              <Banknote size={15} /> Nhập máy mới
+            </button>
+          </div>
         )}
       </div>
 
