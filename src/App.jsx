@@ -1526,9 +1526,10 @@ function OrderForm({ onCancel, onSaved, employee }) {
         tradeInDeviceIds[r.trade_in_imei.trim()] = newDevice.id;
 
         const { data: purchase, error: poErr } = await supabase.from("purchase_orders").insert({
+          source_type: "customer",
           customer_id: customer.id, device_id: newDevice.id, linked_sale_order_id: order.id,
           purchase_price: Number(r.amount), payment_method: "trade_in", created_by: employee.id,
-          store_id: employee.store_id,
+          paid_amount: 0, store_id: employee.store_id,
         }).select().maybeSingle();
         if (poErr) throw poErr;
 
@@ -3455,12 +3456,80 @@ function PartnerLedgerPanel({ partner }) {
   );
 }
 
+function ManualOffsetModal({ partner, onClose, onDone }) {
+  const rec = Number(partner.receivable), pay = Number(partner.payable);
+  const maxOffset = Math.min(rec, pay);
+  const [amount, setAmount] = useState(String(maxOffset));
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(null);
+
+  const submit = async () => {
+    const n = Number(amount) || 0;
+    if (n <= 0) { setError("Số tiền bù trừ phải lớn hơn 0."); return; }
+    if (n > maxOffset) { setError(`Chỉ bù trừ được tối đa ${fmtVND(maxOffset)}.`); return; }
+    setSaving(true); setError("");
+    const { data, error: err } = await supabase.rpc("create_manual_offset", {
+      p_partner_id: partner.partner_id, p_amount: n, p_note: note.trim() || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setDone(data);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Lập biên bản bù trừ công nợ</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+
+        {done ? (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800">
+              Đã lập biên bản <span className="font-semibold">{done}</span> cho {partner.name}.
+              Cả hai bên phải thu và phải trả đều đã giảm {fmtVND(Number(amount))}.
+            </div>
+            <button onClick={onDone} className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">Xong</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-xs space-y-1">
+              <p className="font-medium text-slate-700">{partner.name}</p>
+              <div className="flex justify-between"><span className="text-slate-400">Đối tác nợ cửa hàng</span><span className="text-amber-600 font-medium">{fmtVND(rec)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Cửa hàng nợ đối tác</span><span className="text-indigo-600 font-medium">{fmtVND(pay)}</span></div>
+              <div className="flex justify-between border-t border-slate-200 pt-1 mt-1"><span className="text-slate-500">Bù trừ tối đa</span><span className="font-semibold text-slate-700">{fmtVND(maxOffset)}</span></div>
+            </div>
+            <TextField label="Số tiền bù trừ (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <TextField label="Nội dung / ghi chú" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Hai bên thống nhất bù trừ công nợ..." />
+            <p className="text-[11px] text-slate-400">
+              Hệ thống phân bổ vào các chứng từ cũ nhất trước ở cả hai bên và sinh biên bản có mã BT để tra cứu.
+            </p>
+            {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={submit} disabled={saving || maxOffset <= 0}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {saving && <Loader2 size={15} className="animate-spin" />} Lập biên bản
+              </button>
+              <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function DebtModule({ employee }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all"); // all | receivable | payable
   const [openId, setOpenId] = useState(null);
+  const [offsetting, setOffsetting] = useState(null);
+  const canOffset = employee.role !== "ke_toan";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -3575,9 +3644,19 @@ function DebtModule({ employee }) {
                         <tr>
                           <td colSpan={5} className="bg-slate-50/70 px-4 py-4">
                             {rec > 0 && pay > 0 && (
-                              <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 mb-3 text-xs text-indigo-800">
-                                Đối tác này vừa nợ cửa hàng {fmtVND(rec)} vừa được cửa hàng nợ {fmtVND(pay)} —
-                                có thể bù trừ tối đa {fmtVND(Math.min(rec, pay))} khi tạo đơn bán tiếp theo.
+                              <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-indigo-800 flex items-center justify-between gap-3 flex-wrap">
+                                <span>
+                                  Đối tác này vừa nợ cửa hàng {fmtVND(rec)} vừa được cửa hàng nợ {fmtVND(pay)} —
+                                  bù trừ được tối đa <span className="font-medium">{fmtVND(Math.min(rec, pay))}</span>.
+                                </span>
+                                {canOffset && (
+                                  <button
+                                    onClick={() => setOffsetting(r)}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap"
+                                  >
+                                    Lập biên bản bù trừ
+                                  </button>
+                                )}
                               </div>
                             )}
                             <PartnerLedgerPanel partner={r} />
@@ -3592,6 +3671,14 @@ function DebtModule({ employee }) {
           </div>
         )}
       </Card>
+
+      {offsetting && (
+        <ManualOffsetModal
+          partner={offsetting}
+          onClose={() => setOffsetting(null)}
+          onDone={() => { setOffsetting(null); setOpenId(null); load(); }}
+        />
+      )}
     </div>
   );
 }
