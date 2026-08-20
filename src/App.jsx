@@ -252,7 +252,7 @@ function LoginPage({ onLoggedIn }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
       <Card className="w-full max-w-sm p-6 sm:p-8">
         <div className="flex flex-col items-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-brand-600 flex items-center justify-center mb-3">
@@ -296,7 +296,7 @@ function LoginPage({ onLoggedIn }) {
 
 function NotProvisioned({ email, onSignOut }) {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-canvas flex items-center justify-center p-4">
       <Card className="w-full max-w-sm p-8 text-center">
         <ShieldAlert size={36} className="mx-auto text-amber-500 mb-3" />
         <h2 className="font-semibold text-slate-800 mb-1">Tài khoản chưa được cấp quyền</h2>
@@ -7384,6 +7384,13 @@ function AppShell({ employee, onSignOut }) {
     return true;
   });
 
+  const navGroups = [];
+  for (const item of visibleNav) {
+    const last = navGroups[navGroups.length - 1];
+    if (last && last.label === (item.group || null)) last.items.push(item);
+    else navGroups.push({ label: item.group || null, items: [item] });
+  }
+
   const renderModule = () => {
     switch (tab) {
       case "dashboard":
@@ -7414,12 +7421,12 @@ function AppShell({ employee, onSignOut }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/70 lg:flex">
+    <div className="min-h-screen bg-canvas lg:flex">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 shrink-0 bg-white border-r border-slate-200/80 print:hidden">
+      <aside className="hidden lg:flex flex-col w-64 shrink-0 p-3 gap-3 print:hidden">
         {/* Măng-sét: tên cửa hàng đặt như tiêu đề sổ */}
-        <div className="p-3 pb-2">
-          <div className="bg-brand-500 rounded-xl px-4 py-3.5">
+        <div>
+          <div className="bg-brand-600 rounded-2xl px-4 py-3.5 shadow-card">
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
                 <Smartphone size={18} className="text-white" />
@@ -7442,46 +7449,47 @@ function AppShell({ employee, onSignOut }) {
           </div>
         </div>
 
-        <nav className="flex-1 px-3 pb-4 overflow-y-auto">
-          {visibleNav.map((item, i) => {
-            const active = tab === item.key;
-            const newGroup = item.group && item.group !== visibleNav[i - 1]?.group;
-            return (
-              <div key={item.key}>
-                {newGroup && (
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400 px-3 pt-4 pb-1.5">
-                    {item.group}
-                  </p>
-                )}
-                <button
-                  onClick={() => setTab(item.key)}
-                  aria-current={active ? "page" : undefined}
-                  className={classNames(
-                    "w-full flex items-center gap-3 pl-3 pr-2 py-2 rounded-lg text-[13.5px] transition-colors relative",
-                    active
-                      ? "bg-brand-50 text-brand-800 font-medium"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  )}
-                >
-                  {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-brand-600" />}
-                  <item.icon size={16} className={active ? "text-brand-600" : "text-slate-400"} />
-                  <span className="flex-1 text-left">{item.label}</span>
-                </button>
-              </div>
-            );
-          })}
+        <nav className="flex-1 flex flex-col gap-3 overflow-y-auto">
+          {navGroups.map((g, gi) => (
+            <div key={gi} className="bg-white rounded-2xl shadow-card p-2">
+              {g.label && (
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400 px-3 pt-1.5 pb-1.5">
+                  {g.label}
+                </p>
+              )}
+              {g.items.map((item) => {
+                const active = tab === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => setTab(item.key)}
+                    aria-current={active ? "page" : undefined}
+                    className={classNames(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] transition-colors",
+                      active
+                        ? "bg-brand-600 text-white font-medium shadow-card"
+                        : "text-slate-600 hover:text-brand-700 hover:bg-brand-50"
+                    )}
+                  >
+                    <item.icon size={17} className={active ? "text-white" : "text-slate-400"} />
+                    <span className="flex-1 text-left">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
-        <div className="px-3 pb-4 pt-3 border-t border-slate-100">
+        <div className="bg-white rounded-2xl shadow-card p-2">
           <button onClick={onSignOut}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13.5px] text-slate-400 hover:text-rose-600 hover:bg-rose-50/60 transition-colors">
-            <LogOut size={16} /> Đăng xuất
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors">
+            <LogOut size={17} /> Đăng xuất
           </button>
         </div>
       </aside>
 
       {/* Mobile top bar */}
-      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-brand-500 sticky top-0 z-20 print:hidden">
+      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-brand-600 sticky top-0 z-20 print:hidden">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
             <Smartphone size={16} className="text-white" />
@@ -7511,10 +7519,10 @@ function AppShell({ employee, onSignOut }) {
                 onClick={() => { setTab(item.key); setMobileMenuOpen(false); }}
                 className={classNames(
                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm",
-                  tab === item.key ? "bg-brand-50 text-brand-800 font-medium" : "text-slate-500"
+                  tab === item.key ? "bg-brand-600 text-white font-medium" : "text-slate-600"
                 )}
               >
-                <item.icon size={16} className={tab === item.key ? "text-brand-600" : "text-slate-400"} />
+                <item.icon size={16} className={tab === item.key ? "text-white" : "text-slate-400"} />
                 <span className="flex-1 text-left">{item.label}</span>
                 {tab === item.key && <ChevronRight size={14} />}
               </button>
