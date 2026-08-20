@@ -2408,97 +2408,6 @@ function OrdersModule({ employee }) {
 /* Purchase module — nhập máy/thu cũ độc lập (mua trả tiền khách)         */
 /* ---------------------------------------------------------------------- */
 
-function PrintPurchaseModal({ type, purchase, customer, device, contract, storeName, onClose }) {
-  const today = fmtDate(new Date());
-  const isContract = type === "contract";
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-start sm:items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0">
-      <div className="bg-white rounded-2xl print:rounded-none shadow-xl w-full max-w-2xl p-6 sm:p-10 my-6 print:my-0 print:shadow-none print:max-w-none">
-        <div className="flex items-center justify-end gap-2 mb-4 print:hidden">
-          <button onClick={() => window.print()} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-            <Printer size={15} /> In
-          </button>
-          <button onClick={onClose} className="text-slate-400 hover:text-rose-600 rounded-xl px-3 py-2 text-sm">Đóng</button>
-        </div>
-        <div className="text-center mb-2">
-          <p className="text-xs text-slate-400 uppercase tracking-wide">Cộng hòa xã hội chủ nghĩa Việt Nam</p>
-          <p className="text-[11px] text-slate-400">Độc lập — Tự do — Hạnh phúc</p>
-        </div>
-        <div className="text-center mb-6">
-          <p className="text-xs text-slate-400 mt-3">{storeName || "Cửa hàng"} — Quản lý mua bán điện thoại</p>
-          <h2 className="text-lg font-bold text-slate-800 mt-1">
-            {isContract ? "HỢP ĐỒNG MUA BÁN TÀI SẢN (THU MUA MÁY CŨ)" : "PHIẾU CHI TIỀN (THU MUA MÁY CŨ)"}
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Số: {isContract ? contract?.contract_code : purchase.purchase_code} — Ngày {today}
-          </p>
-        </div>
-
-        {isContract && (
-          <div className="text-sm text-slate-700 space-y-3 mb-4">
-            <div>
-              <p className="font-medium text-slate-800 mb-1">BÊN A (Bên mua):</p>
-              <p className="pl-3">Cửa hàng {storeName || ""} — Kinh doanh mua bán điện thoại di động</p>
-              <p className="pl-3 text-slate-500">Đại diện: {"{Tên đại diện cửa hàng}"} — Chức vụ: {"{Chức vụ}"}</p>
-            </div>
-          </div>
-        )}
-        <div className="text-sm text-slate-700 space-y-1 mb-4">
-          {isContract ? (
-            <p className="font-medium text-slate-800 mb-1">BÊN B (Bên bán):</p>
-          ) : (
-            <p><span className="text-slate-400">Khách hàng (bên bán):</span> {customer?.full_name}</p>
-          )}
-          <div className={isContract ? "pl-3 space-y-0.5" : ""}>
-            {isContract && <p><span className="text-slate-400">Họ và tên:</span> {customer?.full_name}</p>}
-            {customer?.date_of_birth && <p><span className="text-slate-400">Ngày sinh:</span> {fmtDate(customer.date_of_birth)}</p>}
-            {customer?.phone && <p><span className="text-slate-400">SĐT:</span> {customer.phone}</p>}
-            {customer?.cccd && <p><span className="text-slate-400">Số CCCD:</span> {customer.cccd} {customer.cccd_issue_date && `— cấp ngày ${fmtDate(customer.cccd_issue_date)}`} {customer.cccd_issue_place && `tại ${customer.cccd_issue_place}`}</p>}
-            {customer?.address && <p><span className="text-slate-400">Địa chỉ thường trú:</span> {customer.address}</p>}
-          </div>
-        </div>
-        <div className="text-sm text-slate-700 space-y-1 mb-4 border-t border-dashed border-slate-200 pt-4">
-          <p className="font-medium text-slate-800">{isContract ? "Điều 1. Đối tượng hợp đồng" : "Thông tin máy thu mua"}</p>
-          <p className={isContract ? "pl-3" : ""}>Điện thoại {device?.model} {[device?.storage, device?.color].filter(Boolean).join(" · ")} — {DEVICE_CONDITION_LABELS[device?.condition]}</p>
-          <p className={isContract ? "pl-3" : ""}><span className="text-slate-400">Số IMEI:</span> {device?.imei || "Chưa có IMEI"}</p>
-        </div>
-        <div className="text-sm text-slate-700 space-y-1 mb-6 border-t border-dashed border-slate-200 pt-4">
-          {isContract && <p className="font-medium text-slate-800">Điều 2. Giá cả và phương thức thanh toán</p>}
-          <div className={classNames("flex justify-between", isContract && "pl-3")}><span className="text-slate-400">Hình thức chi trả</span><span>{PAYMENT_METHOD_LABELS[purchase.payment_method]}</span></div>
-          <div className={classNames("flex justify-between font-semibold text-slate-800", isContract && "pl-3")}><span>Số tiền {isContract ? "thu mua (đã bao gồm mọi chi phí)" : "chi"}</span><span>{fmtVND(purchase.purchase_price)}</span></div>
-        </div>
-
-        {isContract && (
-          <div className="text-xs text-slate-600 space-y-2.5 mb-6 border-t border-dashed border-slate-200 pt-4">
-            <div>
-              <p className="font-medium text-slate-700 mb-1">Điều 3. Cam kết của Bên B</p>
-              <p className="pl-3">3.1. Tài sản nêu trên thuộc quyền sở hữu hợp pháp, đầy đủ của Bên B, không có tranh chấp, không phải tài sản do phạm tội mà có, không đang bị cầm cố, thế chấp hay thuộc diện tranh chấp với bên thứ ba nào.</p>
-              <p className="pl-3">3.2. Thông tin cá nhân và giấy tờ tùy thân (CCCD) cung cấp cho Bên A là đúng sự thật, Bên B chịu trách nhiệm trước pháp luật về tính chính xác của các thông tin này.</p>
-            </div>
-            <div>
-              <p className="font-medium text-slate-700 mb-1">Điều 4. Chuyển giao quyền sở hữu</p>
-              <p className="pl-3">Ngay sau khi Bên A thanh toán đủ số tiền tại Điều 2 và Bên B bàn giao tài sản, quyền sở hữu đối với tài sản nêu trên chuyển giao hoàn toàn, không điều kiện cho Bên A.</p>
-            </div>
-            <div>
-              <p className="font-medium text-slate-700 mb-1">Điều 5. Giải quyết tranh chấp</p>
-              <p className="pl-3">Mọi tranh chấp phát sinh (nếu có) được hai bên ưu tiên giải quyết trên tinh thần thương lượng, hòa giải. Trường hợp không thỏa thuận được, tranh chấp sẽ được đưa ra cơ quan có thẩm quyền giải quyết theo quy định pháp luật.</p>
-            </div>
-            <div>
-              <p className="font-medium text-slate-700 mb-1">Điều 6. Hiệu lực hợp đồng</p>
-              <p className="pl-3">Hợp đồng có hiệu lực kể từ thời điểm hai bên ký tên, lập thành bộ hồ sơ gồm hợp đồng này kèm bản sao/ảnh chụp CCCD của Bên B.</p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-4 text-center text-sm text-slate-600 mt-10">
-          <div><p className="font-medium text-slate-700 mb-12">{isContract ? "Bên B (Khách hàng)" : "Khách hàng"}</p><p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p></div>
-          <div><p className="font-medium text-slate-700 mb-12">{isContract ? "Bên A (Cửa hàng)" : "Đại diện cửa hàng"}</p><p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p></div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SupplierPicker({ value, onSelect, employee }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -2865,12 +2774,357 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
   );
 }
 
+
+const IMPORT_TEMPLATE_COLS = [
+  "IMEI", "Model", "Dung lượng", "Màu sắc", "Tình trạng",
+  "Độ mới (%)", "Giá thu mua", "Ghi chú",
+];
+const IMPORT_CONDITIONS = { "Máy mới": "new", "Máy cũ": "used" };
+const IMPORT_STORAGES = ["64GB", "128GB", "256GB", "512GB", "1TB"];
+
+function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
+  const [rows, setRows] = useState(null);
+  const [fileName, setFileName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+
+  const downloadTemplate = () => {
+    const wb = XLSX.utils.book_new();
+
+    const sample = [IMPORT_TEMPLATE_COLS, [
+      "356789012345678", IPHONE_MODEL_LIST[0] || "iPhone 13", "128GB",
+      (coloroptionsForModel(IPHONE_MODEL_LIST[0] || "") || [])[0] || "Đen",
+      "Máy cũ", 98, 10000000, "Máy đẹp, pin 90%",
+    ]];
+    const ws = XLSX.utils.aoa_to_sheet(sample);
+    ws["!cols"] = [{ wch: 18 }, { wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 14 }, { wch: 28 }];
+    XLSX.utils.book_append_sheet(wb, ws, "NhapMay");
+
+    // Sheet danh mục giá trị hợp lệ
+    const maxLen = Math.max(IPHONE_MODEL_LIST.length, IMPORT_STORAGES.length, 2);
+    const cat = [["Model hợp lệ", "Dung lượng hợp lệ", "Tình trạng hợp lệ"]];
+    for (let i = 0; i < maxLen; i++) {
+      cat.push([
+        IPHONE_MODEL_LIST[i] || "",
+        IMPORT_STORAGES[i] || "",
+        Object.keys(IMPORT_CONDITIONS)[i] || "",
+      ]);
+    }
+    const wsCat = XLSX.utils.aoa_to_sheet(cat);
+    wsCat["!cols"] = [{ wch: 24 }, { wch: 20 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, wsCat, "DanhMuc");
+
+    XLSX.writeFile(wb, "Mau-nhap-may.xlsx");
+  };
+
+  const readFile = async (file) => {
+    setError(""); setResult(null); setFileName(file.name);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets["NhapMay"] || wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      if (raw.length === 0) { setError("File không có dòng dữ liệu nào."); return; }
+
+      const parsed = raw.map((r, idx) => {
+        const model = String(r["Model"] ?? "").trim();
+        const storage = String(r["Dung lượng"] ?? "").trim();
+        const color = String(r["Màu sắc"] ?? "").trim();
+        const condText = String(r["Tình trạng"] ?? "Máy cũ").trim();
+        const price = Number(String(r["Giá thu mua"] ?? "").replace(/[^\d.-]/g, "")) || 0;
+        const pct = String(r["Độ mới (%)"] ?? "").trim();
+        const imei = String(r["IMEI"] ?? "").trim();
+
+        const errs = [];
+        if (!model) errs.push("thiếu Model");
+        else if (!IPHONE_MODEL_LIST.includes(model)) errs.push(`Model "${model}" không có trong danh mục`);
+        if (storage && !IMPORT_STORAGES.includes(storage)) errs.push(`Dung lượng "${storage}" không hợp lệ`);
+        if (color && model && IPHONE_MODEL_LIST.includes(model)) {
+          const valid = coloroptionsForModel(model);
+          if (valid.length > 0 && !valid.includes(color)) errs.push(`Màu "${color}" không thuộc ${model}`);
+        }
+        if (!IMPORT_CONDITIONS[condText]) errs.push(`Tình trạng "${condText}" phải là Máy mới hoặc Máy cũ`);
+        if (price <= 0) errs.push("Giá thu mua phải lớn hơn 0");
+        if (pct !== "" && (Number(pct) < 0 || Number(pct) > 100)) errs.push("Độ mới phải từ 0 đến 100");
+
+        return {
+          line: idx + 2, imei, model, storage, color,
+          condition: IMPORT_CONDITIONS[condText] || "used",
+          condition_percent: pct === "" ? null : Number(pct),
+          price, notes: String(r["Ghi chú"] ?? "").trim(),
+          errors: errs,
+        };
+      });
+
+      // IMEI trùng nhau trong file
+      const seen = {};
+      for (const p of parsed) {
+        if (!p.imei) continue;
+        if (seen[p.imei]) p.errors.push(`IMEI trùng với dòng ${seen[p.imei]}`);
+        else seen[p.imei] = p.line;
+      }
+
+      // IMEI đã có trong kho
+      const imeis = parsed.map((p) => p.imei).filter(Boolean);
+      if (imeis.length > 0) {
+        const { data: dup } = await supabase.from("devices").select("imei").in("imei", imeis);
+        const dupSet = new Set((dup || []).map((x) => x.imei));
+        parsed.forEach((p) => { if (p.imei && dupSet.has(p.imei)) p.errors.push("IMEI đã có trong kho"); });
+      }
+
+      setRows(parsed);
+    } catch (e) {
+      setError("Không đọc được file. Hãy dùng đúng file mẫu (.xlsx). " + e.message);
+    }
+  };
+
+  const okRows = (rows || []).filter((r) => r.errors.length === 0);
+  const badRows = (rows || []).filter((r) => r.errors.length > 0);
+  const totalCost = okRows.reduce((s, r) => s + r.price, 0);
+
+  const doImport = async () => {
+    if (okRows.length === 0) return;
+    setSaving(true); setError(""); setProgress(0);
+    const done = []; const failed = [];
+
+    for (let i = 0; i < okRows.length; i++) {
+      const r = okRows[i];
+      try {
+        const { data: dev, error: devErr } = await supabase.from("devices").insert({
+          imei: r.imei || null, model: r.model, storage: r.storage || null, color: r.color || null,
+          condition: r.condition, condition_percent: r.condition_percent,
+          status: "in_stock", cost_price: r.price, notes: r.notes || null,
+          supplier: supplier?.name || null,
+          import_date: todayStr(), created_by: employee.id, updated_by: employee.id,
+          store_id: employee.store_id,
+        }).select().maybeSingle();
+        if (devErr) throw devErr;
+
+        const { error: poErr } = await supabase.from("purchase_orders").insert({
+          source_type: "supplier", supplier_id: supplier.id, customer_id: null,
+          device_id: dev.id, purchase_price: r.price, payment_method: "cash",
+          paid_amount: 0, notes: r.notes || "Nhập từ file Excel",
+          created_by: employee.id, store_id: employee.store_id,
+        });
+        if (poErr) throw poErr;
+
+        done.push(r.line);
+      } catch (e) {
+        failed.push({ line: r.line, msg: e.message });
+      }
+      setProgress(Math.round(((i + 1) / okRows.length) * 100));
+    }
+
+    setSaving(false);
+    setResult({ done: done.length, failed });
+    if (done.length > 0) onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
+      <Card className="w-full max-w-3xl p-5 my-8">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Nhập máy hàng loạt từ Excel</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+
+        <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-xs text-slate-600 mb-3 space-y-1">
+          <p>
+            Nhập cho nhà cung cấp <span className="font-medium text-slate-700">{supplier?.name}</span>.
+            Toàn bộ máy sẽ vào kho ở trạng thái Còn hàng, phiếu nhập ghi nhận công nợ phải trả (chưa thanh toán).
+          </p>
+          <p className="text-slate-400">
+            Cột Model, Dung lượng, Tình trạng phải khớp danh mục — xem sheet "DanhMuc" trong file mẫu. Các cột khác gõ tự do.
+          </p>
+        </div>
+
+        <div className="flex gap-2 flex-wrap mb-3">
+          <button onClick={downloadTemplate}
+            className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+            <FileSpreadsheet size={15} /> Tải file mẫu
+          </button>
+          <label className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 cursor-pointer">
+            <Plus size={15} /> Chọn file Excel
+            <input type="file" accept=".xlsx,.xls" className="hidden"
+              onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />
+          </label>
+          {fileName && <span className="text-xs text-slate-400 self-center">{fileName}</span>}
+        </div>
+
+        {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
+
+        {result && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800 mb-3">
+            <p>Đã nhập thành công <span className="font-semibold">{result.done}</span> máy.</p>
+            {result.failed.length > 0 && (
+              <div className="mt-1 text-rose-600 text-xs">
+                {result.failed.length} dòng lỗi: {result.failed.map((f) => `dòng ${f.line}`).join(", ")}
+              </div>
+            )}
+          </div>
+        )}
+
+        {rows && !result && (
+          <>
+            <div className="flex gap-3 text-xs mb-2 flex-wrap">
+              <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded">Hợp lệ: {okRows.length} máy · {fmtVND(totalCost)}</span>
+              {badRows.length > 0 && <span className="bg-rose-50 text-rose-600 px-2 py-1 rounded">Lỗi: {badRows.length} dòng</span>}
+            </div>
+            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-80 overflow-y-auto mb-3">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 sticky top-0"><tr className="text-left text-slate-400">
+                  <th className="px-2 py-1.5">Dòng</th>
+                  <th className="px-2 py-1.5">IMEI</th>
+                  <th className="px-2 py-1.5">Máy</th>
+                  <th className="px-2 py-1.5 text-right">Giá</th>
+                  <th className="px-2 py-1.5">Kết quả</th>
+                </tr></thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.line} className={classNames("border-t border-slate-100", r.errors.length > 0 && "bg-rose-50/50")}>
+                      <td className="px-2 py-1.5 text-slate-400">{r.line}</td>
+                      <td className="px-2 py-1.5 text-slate-600">{r.imei || "—"}</td>
+                      <td className="px-2 py-1.5 text-slate-700">{[r.model, r.storage, r.color].filter(Boolean).join(" ")}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-600">{fmtVND(r.price)}</td>
+                      <td className="px-2 py-1.5">
+                        {r.errors.length === 0
+                          ? <span className="text-emerald-600">Hợp lệ</span>
+                          : <span className="text-rose-600">{r.errors.join("; ")}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {saving && (
+          <div className="mb-3">
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Đang nhập... {progress}%</p>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          {rows && !result && (
+            <button onClick={doImport} disabled={saving || okRows.length === 0}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />}
+              Nhập {okRows.length} máy vào kho
+            </button>
+          )}
+          <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">
+            {result ? "Đóng" : "Hủy"}
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function EditPurchaseModal({ purchase, employee, onClose, onDone }) {
+  const d = purchase.devices || {};
+  const [form, setForm] = useState({
+    imei: d.imei || "", model: d.model || "", storage: d.storage || "", color: d.color || "",
+    condition: d.condition || "used", condition_percent: d.condition_percent ?? "",
+    notes: d.notes || "", purchase_price: String(purchase.purchase_price ?? ""),
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const oldPrice = Number(purchase.purchase_price || 0);
+  const newPrice = Number(form.purchase_price) || 0;
+  const diff = newPrice - oldPrice;
+
+  const submit = async () => {
+    if (!form.model.trim()) { setError("Model máy không được để trống."); return; }
+    if (newPrice <= 0) { setError("Giá thu mua phải lớn hơn 0."); return; }
+    setSaving(true); setError("");
+    const { error: err } = await supabase.rpc("update_purchase_order", {
+      p_purchase_order_id: purchase.id,
+      p_purchase_price: newPrice,
+      p_imei: form.imei.trim() || null,
+      p_model: form.model.trim(),
+      p_storage: form.storage.trim() || null,
+      p_color: form.color.trim() || null,
+      p_condition: form.condition,
+      p_condition_percent: form.condition_percent === "" ? null : Number(form.condition_percent),
+      p_notes: form.notes.trim() || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "purchase_orders", record_id: purchase.id, action: "update",
+      old_data: purchase, new_data: form, performed_by: employee.id, store_id: employee.store_id,
+    });
+    onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
+      <Card className="w-full max-w-lg p-5 my-8">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Sửa phiếu nhập {purchase.purchase_code}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <TextField label="Số IMEI" value={form.imei} onChange={set("imei")} />
+            <TextField label="Model máy *" value={form.model} onChange={set("model")} list="dl-models-edit" />
+            <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} list="dl-storage" />
+            <TextField label="Màu sắc" value={form.color} onChange={set("color")} list="dl-colors-edit" />
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
+              <select value={form.condition} onChange={set("condition")}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="used">Máy cũ</option>
+                <option value="new">Máy mới</option>
+              </select>
+            </label>
+            <TextField label="Độ mới (%)" type="number" value={form.condition_percent} onChange={set("condition_percent")} />
+          </div>
+          <datalist id="dl-models-edit">{IPHONE_MODEL_LIST.map((m) => <option key={m} value={m} />)}</datalist>
+          <datalist id="dl-colors-edit">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
+
+          <TextField label="Giá thu mua (đ) *" type="number" value={form.purchase_price} onChange={set("purchase_price")} />
+          {diff !== 0 && newPrice > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800">
+              Giá thay đổi {diff > 0 ? "tăng" : "giảm"} <span className="font-medium">{fmtVND(Math.abs(diff))}</span>.
+              Hệ thống ghi một bút toán điều chỉnh vào sổ công nợ, không sửa bút toán cũ.
+            </div>
+          )}
+          <TextField label="Ghi chú" value={form.notes} onChange={set("notes")} />
+
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={submit} disabled={saving}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} Lưu thay đổi
+            </button>
+            <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function PurchaseModule({ employee }) {
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [printData, setPrintData] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [showImport, setShowImport] = useState(false);
+  const [runImport, setRunImport] = useState(false);
+  const [importSupplier, setImportSupplier] = useState(null);
+  const canEdit = employee.role !== "ke_toan";
   const [payingDebt, setPayingDebt] = useState(null);
   const [payAmount, setPayAmount] = useState("");
 
@@ -2941,6 +3195,9 @@ function PurchaseModule({ employee }) {
           </p>
         </div>
         {canCreate && (
+          <button onClick={() => setShowImport(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <FileSpreadsheet size={15} /> Nhập từ Excel
+          </button>
           <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
             <Banknote size={15} /> Nhập máy mới
           </button>
@@ -3013,14 +3270,9 @@ function PurchaseModule({ employee }) {
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      {!p.sales_orders && p.source_type === "customer" && (
-                        <button onClick={() => setPrintData({ p, kind: "receipt" })} className="text-brand-600 hover:underline text-xs mr-3">
-                          <Printer size={12} className="inline mr-0.5" />Phiếu chi
-                        </button>
-                      )}
-                      {p.source_type === "customer" && (
-                        <button onClick={() => setPrintData({ p, kind: "contract" })} className="text-brand-600 hover:underline text-xs mr-3">
-                          <Printer size={12} className="inline mr-0.5" />Hợp đồng
+                      {canEdit && p.devices?.status !== "sold" && (
+                        <button onClick={() => setEditing(p)} className="text-brand-600 hover:underline text-xs mr-3">
+                          <Pencil size={12} className="inline mr-0.5" />Sửa
                         </button>
                       )}
                       {canDelete && (
@@ -3057,24 +3309,49 @@ function PurchaseModule({ employee }) {
         </div>
       )}
 
-      {printData && (
-        <PrintPurchaseModal
-          type={printData.kind}
-          purchase={printData.p}
-          customer={printData.p.customers}
-          device={printData.p.devices}
-          contract={Array.isArray(printData.p.contracts) ? printData.p.contracts[0] : printData.p.contracts}
-          storeName={employee.stores?.name}
-          onClose={() => setPrintData(null)}
+      {showImport && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="font-semibold text-slate-800 text-sm">Nhập từ Excel — chọn nhà cung cấp</p>
+              <button onClick={() => { setShowImport(false); setImportSupplier(null); }} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">
+              Nhập hàng loạt chỉ áp dụng cho hàng nhập từ nhà cung cấp. Máy thu của khách lẻ nhập từng chiếc để có đủ hồ sơ.
+            </p>
+            <SupplierPicker value={importSupplier} onSelect={setImportSupplier} employee={employee} />
+            {importSupplier && (
+              <button
+                onClick={() => { setShowImport(false); setImportSupplier(importSupplier); setRunImport(true); }}
+                className="w-full mt-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium"
+              >
+                Tiếp tục với {importSupplier.name}
+              </button>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {runImport && importSupplier && (
+        <ImportPurchaseModal
+          employee={employee}
+          supplier={importSupplier}
+          onClose={() => { setRunImport(false); setImportSupplier(null); }}
+          onDone={load}
+        />
+      )}
+
+      {editing && (
+        <EditPurchaseModal
+          purchase={editing}
+          employee={employee}
+          onClose={() => setEditing(null)}
+          onDone={() => { setEditing(null); load(); }}
         />
       )}
     </div>
   );
 }
-
-/* ---------------------------------------------------------------------- */
-/* Receipts module — global ledger of all phiếu thu/chi                  */
-/* ---------------------------------------------------------------------- */
 
 function summarizeAuditChange(log) {
   if (log.action === "delete") {
