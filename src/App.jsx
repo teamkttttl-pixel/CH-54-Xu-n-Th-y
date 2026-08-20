@@ -60,12 +60,14 @@ const DEVICE_ORIGIN_LABELS = {
   supplier: "Nhập NCC",
   customer: "Thu khách lẻ",
   returned: "Khách trả lại",
+  internal: "Nhận nội bộ",
   unknown: "Không rõ nguồn",
 };
 const DEVICE_ORIGIN_STYLES = {
   supplier: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
   customer: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
   returned: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  internal: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
   unknown: "bg-slate-100 text-slate-400 ring-1 ring-slate-200",
 };
 // Vạch màu bên trái mỗi dòng trong Kho hàng
@@ -73,6 +75,7 @@ const DEVICE_ORIGIN_ROW = {
   supplier: "",
   customer: "shadow-[inset_3px_0_0_0_#f59e0b]",
   returned: "shadow-[inset_3px_0_0_0_#e11d48] bg-rose-50/30",
+  internal: "shadow-[inset_3px_0_0_0_#7c3aed]",
   unknown: "shadow-[inset_3px_0_0_0_#cbd5e1]",
 };
 
@@ -783,6 +786,18 @@ function InventoryModule({ employee, onCountChange }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [historyImei, setHistoryImei] = useState(null);
+  const [incoming, setIncoming] = useState([]);
+  const [receiving, setReceiving] = useState(null);
+  const canReceive = employee.role !== "nhan_vien";
+
+  const loadIncoming = useCallback(async () => {
+    const { data } = await supabase.from("v_internal_transfers").select("*")
+      .eq("status", "pending").eq("to_store_id", employee.store_id)
+      .order("created_at", { ascending: true });
+    setIncoming(data || []);
+  }, [employee.store_id]);
+
+  useEffect(() => { loadIncoming(); }, [loadIncoming]);
 
   const canDelete = employee.role === "quan_ly";
   const canManage = employee.role === "quan_ly";
@@ -851,9 +866,47 @@ function InventoryModule({ employee, onCountChange }) {
         </div>
       </div>
 
+      {incoming.length > 0 && (
+        <Card className="p-4 mb-4 border-violet-200 bg-violet-50/40">
+          <div className="flex items-center gap-2 mb-3">
+            <ArrowLeftRight size={16} className="text-violet-600 shrink-0" />
+            <p className="text-sm font-medium text-violet-800">
+              {incoming.length} máy chờ nhận từ cửa hàng khác
+            </p>
+          </div>
+          <div className="space-y-2">
+            {incoming.map((t) => (
+              <div key={t.id} className="flex items-center gap-3 bg-white border border-violet-200 rounded-xl px-3 py-2.5 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-700">
+                    {[t.model, t.storage, t.color].filter(Boolean).join(" ")}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    IMEI {t.imei || "—"} · {t.transfer_code} · từ <span className="font-medium">{t.from_store_name}</span> · {fmtDate(t.created_at)}
+                  </p>
+                  {t.note && <p className="text-xs text-slate-400">Ghi chú: {t.note}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold text-slate-700">{fmtVND(t.transfer_price)}</p>
+                  <p className="text-[11px] text-slate-400">giá vốn khi nhận</p>
+                </div>
+                {canReceive ? (
+                  <button onClick={() => setReceiving(t)}
+                    className="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                    Nhận hàng
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-slate-400 whitespace-nowrap">Chờ kế toán/quản lý nhận</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 mb-3 text-xs">
         <span className="text-slate-400">Nguồn gốc:</span>
-        {["supplier", "customer", "returned", "unknown"].map((k) => {
+        {["supplier", "customer", "returned", "internal", "unknown"].map((k) => {
           const n = devices.filter((d) => d.origin === k && d.status === "in_stock").length;
           return (
             <button
@@ -885,6 +938,14 @@ function InventoryModule({ employee, onCountChange }) {
           <ShieldAlert size={15} className="shrink-0" />
           Có <span className="font-medium">{devices.filter((d) => !d.imei).length} máy</span> chưa có số IMEI — vui lòng cập nhật khi có đủ thông tin (lọc theo "Thiếu IMEI" bên dưới).
         </div>
+      )}
+
+      {receiving && (
+        <ReceiveTransferModal
+          row={receiving} employee={employee}
+          onClose={() => setReceiving(null)}
+          onDone={() => { setReceiving(null); loadIncoming(); load(); }}
+        />
       )}
 
       {canManage && showForm && editing && (
@@ -930,6 +991,7 @@ function InventoryModule({ employee, onCountChange }) {
             <option value="supplier">Nhập NCC</option>
             <option value="customer">Thu khách lẻ</option>
             <option value="returned">Khách trả lại</option>
+            <option value="internal">Nhận nội bộ</option>
             <option value="unknown">Không rõ nguồn</option>
           </select>
         </div>
@@ -970,6 +1032,8 @@ function InventoryModule({ employee, onCountChange }) {
                       <span
                         title={d.origin === "returned"
                           ? `Khách trả lại — chứng từ ${d.return_code || ""} ngày ${d.return_date ? fmtDate(d.return_date) : ""}`
+                          : d.origin === "internal"
+                          ? `Nhận nội bộ theo phiếu ${d.transfer_code || ""}`
                           : d.purchase_code ? `Phiếu nhập ${d.purchase_code}` : "Không có phiếu nhập"}
                         className={classNames(
                           "inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded",
@@ -2273,7 +2337,358 @@ function KiotVietExportModal({ onClose }) {
   );
 }
 
+/* -------------------------------------------------------------- */
+/* Xuất bán nội bộ giữa các cửa hàng                              */
+/* -------------------------------------------------------------- */
+
+const TRANSFER_STATUS_LABELS = { pending: "Chờ nhận", received: "Đã nhận", cancelled: "Đã hủy" };
+const TRANSFER_STATUS_STYLES = {
+  pending: "bg-amber-50 text-amber-700",
+  received: "bg-emerald-50 text-emerald-700",
+  cancelled: "bg-slate-100 text-slate-400",
+};
+
+function InternalTransferForm({ employee, onCancel, onSaved }) {
+  const [stores, setStores] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [toStore, setToStore] = useState("");
+  const [deviceId, setDeviceId] = useState("");
+  const [price, setPrice] = useState("");
+  const [note, setNote] = useState("");
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const canSeeCost = employee.role !== "nhan_vien";
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: s }, { data: d }] = await Promise.all([
+        supabase.from("stores").select("id, name").order("name"),
+        supabase.from("devices").select("id, imei, model, storage, color, cost_price")
+          .eq("status", "in_stock").order("created_at", { ascending: false }).limit(2000),
+      ]);
+      setStores((s || []).filter((x) => x.id !== employee.store_id));
+      setDevices(d || []);
+    })();
+  }, [employee.store_id]);
+
+  const picked = devices.find((d) => d.id === deviceId);
+  const cost = Number(picked?.cost_price || 0);
+  const margin = (Number(price) || 0) - cost;
+
+  const filtered = devices.filter((d) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return [d.imei, d.model, d.color, d.storage].some((v) => v?.toLowerCase().includes(q));
+  }).slice(0, 50);
+
+  const submit = async () => {
+    if (!deviceId) { setError("Vui lòng chọn máy cần xuất."); return; }
+    if (!toStore) { setError("Vui lòng chọn cửa hàng nhận."); return; }
+    const p = Number(price) || 0;
+    if (p <= 0) { setError("Giá xuất bán nội bộ phải lớn hơn 0."); return; }
+    setSaving(true); setError("");
+    const { data, error: err } = await supabase.rpc("create_internal_transfer", {
+      p_device_id: deviceId, p_to_store_id: toStore,
+      p_transfer_price: p, p_note: note.trim() || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "internal_transfers", record_id: deviceId, action: "create",
+      new_data: { ma: data, den: toStore, gia: p },
+      performed_by: employee.id, store_id: employee.store_id,
+    });
+    onSaved(data);
+  };
+
+  return (
+    <Card className="p-4 sm:p-5 mb-4">
+      <p className="text-sm font-medium text-slate-700 mb-1">Xuất bán nội bộ</p>
+      <p className="text-xs text-slate-400 mb-3">
+        Máy sẽ chuyển sang trạng thái Giữ chỗ cho tới khi cửa hàng nhận xác nhận.
+        Giá xuất bán ở đây sẽ thành giá vốn của cửa hàng nhận.
+      </p>
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        <label className="block">
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Cửa hàng nhận *</span>
+          <select value={toStore} onChange={(e) => setToStore(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            <option value="">— Chọn cửa hàng —</option>
+            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </label>
+        <TextField label="Giá xuất bán nội bộ (đ) *" type="number" value={price}
+          onChange={(e) => setPrice(e.target.value)} />
+      </div>
+
+      <div className="mt-3">
+        <span className="text-xs font-medium text-slate-500 mb-1 block">Máy cần xuất *</span>
+        <div className="relative mb-2">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo IMEI, model, màu..."
+            className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
+        </div>
+        <div className="border border-slate-200 rounded-xl max-h-56 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="text-xs text-slate-400 py-4 text-center">Không có máy nào Còn hàng khớp tìm kiếm.</p>
+          ) : filtered.map((d) => (
+            <button key={d.id} type="button" onClick={() => { setDeviceId(d.id); setError(""); }}
+              className={classNames("w-full text-left px-3 py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50",
+                deviceId === d.id && "bg-brand-50")}>
+              <p className="text-sm text-slate-700">{[d.model, d.storage, d.color].filter(Boolean).join(" ")}</p>
+              <p className="text-xs text-slate-400">
+                IMEI {d.imei || "—"}{canSeeCost && d.cost_price ? ` · giá vốn ${fmtVND(d.cost_price)}` : ""}
+              </p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {picked && canSeeCost && Number(price) > 0 && (
+        <div className={classNames("mt-3 rounded-xl px-3 py-2 text-xs",
+          margin >= 0 ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-700")}>
+          Giá vốn {fmtVND(cost)} → xuất {fmtVND(Number(price))} ·
+          lãi nội bộ <span className="font-medium">{fmtVND(margin)}</span>
+          {margin < 0 && " — đang xuất dưới giá vốn"}
+        </div>
+      )}
+
+      <div className="mt-3">
+        <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)}
+          placeholder="Điều chuyển theo yêu cầu CH nhận..." />
+      </div>
+
+      {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
+
+      <div className="flex gap-2 mt-3">
+        <button onClick={submit} disabled={saving}
+          className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+          {saving && <Loader2 size={15} className="animate-spin" />} Lập phiếu xuất
+        </button>
+        <button onClick={onCancel} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+      </div>
+    </Card>
+  );
+}
+
+function InternalTransferTab({ employee }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [okCode, setOkCode] = useState(null);
+
+  const canSeeCost = employee.role !== "nhan_vien";
+  const canCancel = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from("v_internal_transfers").select("*")
+      .order("created_at", { ascending: false }).limit(500);
+    setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const outRows = rows.filter((r) => r.from_store_id === employee.store_id);
+  const pendingOut = outRows.filter((r) => r.status === "pending");
+  const receivedOut = outRows.filter((r) => r.status === "received");
+  const internalRevenue = receivedOut.reduce((s, r) => s + Number(r.transfer_price || 0), 0);
+  const internalMargin = receivedOut.reduce((s, r) => s + Number(r.internal_margin || 0), 0);
+
+  const cancel = async (r) => {
+    const reason = prompt(`Hủy phiếu ${r.transfer_code}? Nhập lý do:`);
+    if (reason === null) return;
+    const { error } = await supabase.rpc("cancel_internal_transfer", {
+      p_transfer_id: r.id, p_reason: reason || null,
+    });
+    if (error) { alert(error.message); return; }
+    load();
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <Card className="p-4">
+          <p className="text-xs text-slate-400 mb-1">Doanh thu nội bộ đã xuất</p>
+          <p className="text-lg font-semibold text-slate-800">{fmtVND(internalRevenue)}</p>
+          <p className="text-[11px] text-slate-400">{receivedOut.length} máy đã được nhận</p>
+        </Card>
+        {canSeeCost && (
+          <Card className="p-4">
+            <p className="text-xs text-slate-400 mb-1">Lãi nội bộ</p>
+            <p className={classNames("text-lg font-semibold", internalMargin >= 0 ? "text-emerald-700" : "text-rose-600")}>
+              {fmtVND(internalMargin)}
+            </p>
+          </Card>
+        )}
+        <Card className="p-4">
+          <p className="text-xs text-slate-400 mb-1">Đang chờ bên kia nhận</p>
+          <p className="text-lg font-semibold text-amber-600">{pendingOut.length} máy</p>
+        </Card>
+      </div>
+
+      {!showForm && (
+        <button onClick={() => { setShowForm(true); setOkCode(null); }}
+          className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+          <ArrowLeftRight size={15} /> Xuất bán nội bộ
+        </button>
+      )}
+
+      {okCode && (
+        <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+          Đã lập phiếu <span className="font-semibold">{okCode}</span>. Chờ cửa hàng nhận xác nhận trong mục Kho hàng của họ.
+        </p>
+      )}
+
+      {showForm && (
+        <InternalTransferForm employee={employee}
+          onCancel={() => setShowForm(false)}
+          onSaved={(code) => { setShowForm(false); setOkCode(code); load(); }} />
+      )}
+
+      <Card className="p-0 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : rows.length === 0 ? (
+          <EmptyState icon={ArrowLeftRight} text="Chưa có phiếu xuất bán nội bộ nào." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã</th>
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2">Chiều</th>
+                <th className="px-3 py-2">Máy</th>
+                <th className="px-3 py-2 text-right">Giá xuất</th>
+                <th className="px-3 py-2">Trạng thái</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {rows.map((r) => {
+                  const isOut = r.from_store_id === employee.store_id;
+                  return (
+                    <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.transfer_code}</td>
+                      <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.created_at)}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={classNames("text-xs px-2 py-0.5 rounded",
+                          isOut ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700")}>
+                          {isOut ? `Xuất → ${r.to_store_name}` : `Nhận ← ${r.from_store_name}`}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <p className="text-slate-700">{[r.model, r.storage, r.color].filter(Boolean).join(" ")}</p>
+                        <p className="text-xs text-slate-400">IMEI {r.imei || "—"}</p>
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <p className="font-medium text-slate-700">{fmtVND(r.transfer_price)}</p>
+                        {canSeeCost && isOut && (
+                          <p className={classNames("text-xs", Number(r.internal_margin) >= 0 ? "text-emerald-600" : "text-rose-500")}>
+                            lãi {fmtVND(r.internal_margin)}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={classNames("text-xs px-2 py-0.5 rounded-full", TRANSFER_STATUS_STYLES[r.status])}>
+                          {TRANSFER_STATUS_LABELS[r.status]}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        {canCancel && r.status === "pending" && (
+                          <button onClick={() => cancel(r)} className="text-xs text-rose-500 hover:underline">Hủy phiếu</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function ReceiveTransferModal({ row, employee, onClose, onDone }) {
+  const [salePrice, setSalePrice] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [okCode, setOkCode] = useState(null);
+
+  const submit = async () => {
+    setSaving(true); setError("");
+    const { data, error: err } = await supabase.rpc("receive_internal_transfer", {
+      p_transfer_id: row.id,
+      p_sale_price: salePrice === "" ? null : Number(salePrice),
+      p_note: note.trim() || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setOkCode(data);
+    await supabase.from("audit_logs").insert({
+      table_name: "internal_transfers", record_id: row.id, action: "update",
+      new_data: { nhan: data }, performed_by: employee.id, store_id: employee.store_id,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Nhận hàng nội bộ — {row.transfer_code}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+
+        {okCode ? (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800 space-y-1">
+              <p>Đã nhận máy vào kho theo phiếu <span className="font-semibold">{okCode}</span>.</p>
+              <p className="text-xs">Giá vốn ghi nhận {fmtVND(row.transfer_price)}. Công nợ nội bộ với {row.from_store_name} đã được treo.</p>
+            </div>
+            <button onClick={onDone} className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">Xong</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-xs space-y-0.5">
+              <p className="font-medium text-slate-700">{[row.model, row.storage, row.color].filter(Boolean).join(" ")}</p>
+              <p className="text-slate-400">IMEI {row.imei || "—"}</p>
+              <p className="text-slate-400">Từ {row.from_store_name} · lập ngày {fmtDate(row.created_at)}</p>
+              {row.note && <p className="text-slate-400">Ghi chú: {row.note}</p>}
+              <div className="flex justify-between pt-1 mt-1 border-t border-slate-200">
+                <span className="text-slate-500">Giá vốn khi vào kho</span>
+                <span className="font-semibold text-slate-800">{fmtVND(row.transfer_price)}</span>
+              </div>
+            </div>
+            <TextField label="Giá bán dự kiến (đ)" type="number" value={salePrice}
+              onChange={(e) => setSalePrice(e.target.value)} placeholder="Để trống nếu chưa định giá" />
+            <TextField label="Ghi chú khi nhận" value={note} onChange={(e) => setNote(e.target.value)} />
+            <p className="text-[11px] text-slate-400">
+              Xác nhận sẽ đưa máy vào kho và treo khoản phải trả {fmtVND(row.transfer_price)} với {row.from_store_name}.
+            </p>
+            {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={submit} disabled={saving}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận nhận hàng
+              </button>
+              <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function OrdersModule({ employee }) {
+  const [tab, setTab] = useState("orders");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -2312,19 +2727,35 @@ function OrdersModule({ employee }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Đơn hàng bán</h2>
-          <p className="text-xs text-slate-400">{orders.length} đơn hàng</p>
+          <p className="text-xs text-slate-400">
+            {tab === "orders" ? `${orders.length} đơn hàng` : "Điều chuyển máy giữa các cửa hàng trong hệ thống"}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowExport(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-            <FileSpreadsheet size={15} /> Xuất Excel KiotViet
-          </button>
-          {canCreate && (
-            <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-              <Plus size={15} /> Tạo đơn hàng
+        {tab === "orders" && (
+          <div className="flex gap-2">
+            <button onClick={() => setShowExport(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+              <FileSpreadsheet size={15} /> Xuất Excel KiotViet
             </button>
-          )}
-        </div>
+            {canCreate && (
+              <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+                <Plus size={15} /> Tạo đơn hàng
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      <div className="flex gap-2 mb-4">
+        {[["orders", "Đơn bán khách"], ["internal", "Xuất bán nội bộ"]].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={classNames("px-4 py-2 rounded-xl text-sm border font-medium",
+              tab === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50")}
+          >{label}</button>
+        ))}
+      </div>
+
+      {tab === "internal" && <InternalTransferTab employee={employee} />}
+      {tab === "orders" && (<>
 
       {totalOrderDebt > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-800 flex items-center gap-2">
@@ -2389,6 +2820,7 @@ function OrdersModule({ employee }) {
           </div>
         )}
       </Card>
+      </>)}
     </div>
   );
 }
