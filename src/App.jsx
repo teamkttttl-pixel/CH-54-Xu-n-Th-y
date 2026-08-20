@@ -131,12 +131,14 @@ const PAYMENT_METHOD_LABELS = {
   bank_transfer: "Chuyển khoản",
   installment: "Trả góp",
   trade_in: "Đổi máy cũ",
+  debt_offset: "Bù trừ công nợ",
 };
 const PAYMENT_METHOD_ICONS = {
   cash: Wallet,
   bank_transfer: Landmark,
   installment: CalendarClock,
   trade_in: ArrowLeftRight,
+  debt_offset: Banknote,
 };
 
 // Tạo "Mã hàng" KiotViet từ model+dung lượng+màu (gom các máy cùng loại về
@@ -1242,9 +1244,12 @@ function ModelPicker({ value, onSelect, placeholder, disabled }) {
   );
 }
 
-function PaymentRows({ rows, setRows, total }) {
+function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = "" }) {
   const paid = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const remaining = total - paid;
+  const offsetUsed = rows.filter((r) => r.method === "debt_offset")
+    .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const offsetLeft = supplierDebt - offsetUsed;
 
   const update = (i, patch) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const addRow = () => setRows((rs) => [...rs, {
@@ -1271,18 +1276,39 @@ function PaymentRows({ rows, setRows, total }) {
                 <option value="bank_transfer">Chuyển khoản</option>
                 <option value="installment">Trả góp</option>
                 <option value="trade_in">Đổi máy cũ</option>
+                {supplierDebt > 0 && <option value="debt_offset">Bù trừ công nợ</option>}
               </select>
               <input
                 type="number"
                 value={r.amount}
                 onChange={(e) => update(i, { amount: e.target.value })}
-                placeholder={r.method === "trade_in" ? "Giá thu mua" : "Số tiền"}
+                placeholder={r.method === "trade_in" ? "Giá thu mua" : r.method === "debt_offset" ? "Số tiền cấn trừ" : "Số tiền"}
                 className="w-32 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
               />
               {rows.length > 1 && (
                 <button type="button" onClick={() => removeRow(i)} className="text-rose-400 hover:text-rose-600"><X size={15} /></button>
               )}
             </div>
+            {r.method === "debt_offset" && (
+              <div className="pl-6 space-y-1.5">
+                <p className="text-[11px] text-slate-400">
+                  Trừ vào khoản phải trả với <span className="font-medium text-slate-500">{supplierName}</span>.
+                  Hệ thống lập biên bản bù trừ và phân bổ vào các phiếu nhập máy còn nợ, cũ nhất trước.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => update(i, { amount: String(Math.max(0, Math.min(supplierDebt, (Number(r.amount) || 0) + offsetLeft, total))) })}
+                  className="text-[11px] text-brand-600 hover:underline"
+                >
+                  Bù trừ tối đa ({fmtVND(Math.max(0, Math.min(supplierDebt, total)))})
+                </button>
+                {offsetLeft < 0 && (
+                  <p className="text-[11px] text-rose-500">
+                    Vượt quá công nợ hiện có {fmtVND(supplierDebt)} — giảm bớt {fmtVND(-offsetLeft)}.
+                  </p>
+                )}
+              </div>
+            )}
             {r.method === "installment" && (
               <div className="grid grid-cols-2 gap-2 pl-6">
                 <input
@@ -1343,9 +1369,13 @@ function PaymentRows({ rows, setRows, total }) {
       </button>
       <div className={classNames(
         "text-xs px-3 py-2 rounded-lg",
-        remaining === 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+        remaining === 0 ? "bg-emerald-50 text-emerald-700"
+          : remaining > 0 ? "bg-amber-50 text-amber-700"
+          : "bg-rose-50 text-rose-600"
       )}>
-        Đã phân bổ {fmtVND(paid)} / {fmtVND(total)} {remaining !== 0 && `— còn thiếu ${fmtVND(remaining)}`}
+        Đã phân bổ {fmtVND(paid)} / {fmtVND(total)}
+        {remaining > 0 && ` — khách còn nợ ${fmtVND(remaining)}`}
+        {remaining < 0 && ` — thừa ${fmtVND(-remaining)}, vui lòng giảm bớt`}
       </div>
     </div>
   );
@@ -1365,12 +1395,33 @@ function OrderForm({ onCancel, onSaved, employee }) {
   }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [linkedSupplier, setLinkedSupplier] = useState(null);
+  const [supplierDebt, setSupplierDebt] = useState(0);
 
   useEffect(() => {
     if (device && !salePrice) setSalePrice(device.sale_price ?? "");
   }, [device]); // eslint-disable-line
 
+  // Khách này có đồng thời là Nhà cung cấp không? Nếu có, lấy số cửa hàng đang nợ họ.
+  useEffect(() => {
+    let active = true;
+    if (!customer) { setLinkedSupplier(null); setSupplierDebt(0); return; }
+    (async () => {
+      // Số dư lấy từ SỔ CÁI, không đọc cột cache
+      const { data: rows } = await supabase.rpc("partner_balance_by_customer", { p_customer_id: customer.id });
+      if (!active) return;
+      const bal = Array.isArray(rows) ? rows[0] : rows;
+      if (!bal) { setLinkedSupplier(null); setSupplierDebt(0); return; }
+      const payable = Number(bal.payable) || 0;   // >0 = cửa hàng đang nợ họ
+      setLinkedSupplier(payable > 0 ? { id: bal.partner_id, name: bal.partner_name } : null);
+      setSupplierDebt(Math.max(0, payable));
+    })();
+    return () => { active = false; };
+  }, [customer]);
+
   const total = Math.max(0, (Number(salePrice) || 0) - (Number(discount) || 0));
+  const paidNow = payments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -1382,10 +1433,26 @@ function OrderForm({ onCancel, onSaved, employee }) {
       return;
     }
     if (!salePrice || Number(salePrice) <= 0) { setError("Vui lòng nhập giá bán hợp lệ."); return; }
-    const paidTotal = payments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    if (Math.round(paidTotal) !== Math.round(total)) { setError("Tổng các hình thức thanh toán phải bằng tổng tiền đơn hàng."); return; }
-    if (payments.some((r) => !r.amount || Number(r.amount) <= 0)) { setError("Mỗi hình thức thanh toán cần nhập số tiền hợp lệ."); return; }
-    const tradeInRows = payments.filter((r) => r.method === "trade_in");
+    // Dòng để trống = chưa thu -> bỏ qua, cho phép đơn nợ toàn bộ
+    const activePayments = payments.filter((r) => String(r.amount).trim() !== "");
+    const paidTotal = activePayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    if (Math.round(paidTotal) > Math.round(total)) { setError("Tổng các hình thức thanh toán đang lớn hơn tổng tiền đơn hàng."); return; }
+    if (activePayments.some((r) => Number(r.amount) <= 0)) { setError("Số tiền thanh toán phải lớn hơn 0."); return; }
+
+    const offsetTotal = activePayments.filter((r) => r.method === "debt_offset")
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    if (offsetTotal > 0) {
+      if (!linkedSupplier) { setError("Cửa hàng không có khoản phải trả nào với đối tác này nên không bù trừ được."); return; }
+      const { data: rows } = await supabase.rpc("partner_balance_by_customer", { p_customer_id: customer.id });
+      const bal = Array.isArray(rows) ? rows[0] : rows;
+      const available = Math.max(0, Number(bal?.payable) || 0);
+      setSupplierDebt(available);
+      if (offsetTotal > available) {
+        setError(`Cửa hàng chỉ đang nợ ${fmtVND(available)} — không cấn trừ được ${fmtVND(offsetTotal)}.`);
+        return;
+      }
+    }
+    const tradeInRows = activePayments.filter((r) => r.method === "trade_in");
     for (const r of tradeInRows) {
       if (!r.trade_in_imei?.trim() || !r.trade_in_model?.trim()) {
         setError("Vui lòng nhập đủ IMEI và model cho máy khách đổi.");
@@ -1436,6 +1503,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
         discount: Number(discount) || 0,
         total_amount: total,
         notes: notes.trim() || null,
+        due_date: Math.round(paidTotal) < Math.round(total) ? (dueDate || null) : null,
         status: manualDeviceMode ? "pending_stock" : "completed",
         created_by: employee.id,
         updated_by: employee.id,
@@ -1472,7 +1540,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
         });
       }
 
-      const paymentRows = payments.map((r) => ({
+      const paymentRows = activePayments.map((r) => ({
         order_id: order.id,
         method: r.method,
         amount: Number(r.amount),
@@ -1483,8 +1551,12 @@ function OrderForm({ onCancel, onSaved, employee }) {
         created_by: employee.id,
         store_id: employee.store_id,
       }));
-      const { error: payErr } = await supabase.from("order_payments").insert(paymentRows);
-      if (payErr) throw payErr;
+      // Sổ cái tự ghi bút toán khi phiếu thu được tạo. Riêng dòng "Cấn trừ công nợ"
+      // sẽ tự lập BIÊN BẢN BÙ TRỪ và giảm cả hai bên phải thu/phải trả.
+      if (paymentRows.length > 0) {
+        const { error: payErr } = await supabase.from("order_payments").insert(paymentRows);
+        if (payErr) throw payErr;
+      }
 
       const { error: contractErr } = await supabase.from("contracts").insert({ order_id: order.id, created_by: employee.id, store_id: employee.store_id });
       if (contractErr) throw contractErr;
@@ -1582,10 +1654,31 @@ function OrderForm({ onCancel, onSaved, employee }) {
           <span className="text-slate-500">Tổng tiền đơn hàng</span>
           <span className="font-semibold text-brand-700">{fmtVND(total)}</span>
         </div>
+        {linkedSupplier && supplierDebt > 0 && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5 text-xs text-indigo-800 flex items-start gap-2">
+            <Banknote size={15} className="shrink-0 mt-0.5" />
+            <span>
+              Cửa hàng đang có khoản <span className="font-medium">phải trả {fmtVND(supplierDebt)}</span> với
+              đối tác <span className="font-medium">{linkedSupplier.name}</span> (họ từng bán máy cho cửa hàng).
+              Chọn hình thức <span className="font-medium">Bù trừ công nợ</span> bên dưới để lập biên bản bù trừ.
+            </span>
+          </div>
+        )}
         <div>
           <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức thanh toán *</span>
-          <PaymentRows rows={payments} setRows={setPayments} total={total} />
+          <PaymentRows
+            rows={payments} setRows={setPayments} total={total}
+            supplierDebt={supplierDebt} supplierName={linkedSupplier?.name || ""}
+          />
         </div>
+        {paidNow < total && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+            <p className="text-xs text-amber-800">
+              Khách còn nợ <span className="font-medium">{fmtVND(total - paidNow)}</span> — đơn sẽ được ghi nhận là công nợ và thu sau ở màn Đơn hàng bán.
+            </p>
+            <TextField label="Hẹn ngày thanh toán" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
+        )}
         <TextField label="Ghi chú" value={notes} onChange={(e) => setNotes(e.target.value)} />
         {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
         <div className="flex gap-2">
@@ -1693,12 +1786,84 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
 }
 
 
+function CollectDebtModal({ order, employee, onClose, onDone }) {
+  const debt = Math.max(0, Number(order.total_amount) - Number(order.paid_amount || 0));
+  const [amount, setAmount] = useState(String(debt));
+  const [method, setMethod] = useState("cash");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    const n = Number(amount) || 0;
+    if (n <= 0) { setError("Vui lòng nhập số tiền thu hợp lệ."); return; }
+    if (n > debt) { setError(`Khách chỉ còn nợ ${fmtVND(debt)}.`); return; }
+    setSaving(true); setError("");
+    const { data: pay, error: err } = await supabase.from("order_payments").insert({
+      order_id: order.id, method, amount: n,
+      note: note.trim() || "Thu công nợ",
+      created_by: employee.id, store_id: employee.store_id,
+    }).select().maybeSingle();
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "order_payments", record_id: pay?.id, action: "create",
+      new_data: pay, performed_by: employee.id, store_id: employee.store_id,
+    });
+    onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Thu công nợ — {order.order_code}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+        <div className="bg-amber-50 rounded-xl px-3 py-2.5 text-xs text-amber-800">
+          Tổng đơn {fmtVND(order.total_amount)} · đã thu {fmtVND(order.paid_amount || 0)} ·
+          <span className="font-medium"> còn nợ {fmtVND(debt)}</span>
+          {order.due_date && <> · hẹn trả {fmtDate(order.due_date)}</>}
+        </div>
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức thu</span>
+          <select
+            value={method} onChange={(e) => setMethod(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="cash">Tiền mặt</option>
+            <option value="bank_transfer">Chuyển khoản</option>
+          </select>
+        </div>
+        <TextField label="Số tiền thu (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
+        {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex gap-2">
+          <button
+            onClick={submit} disabled={saving}
+            className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2"
+          >
+            {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận thu
+          </button>
+          <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+        </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function OrderRow({ order, employee, onDeleted, onReconciled }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [printType, setPrintType] = useState(null);
   const [showReconcile, setShowReconcile] = useState(false);
+  const [showCollect, setShowCollect] = useState(false);
+  const orderDebt = Math.max(0, Number(order.total_amount) - Number(order.paid_amount || 0));
+  const overdue = orderDebt > 0 && order.due_date && new Date(order.due_date) < new Date(new Date().toDateString());
+  const canCollect = employee.role !== "ke_toan" && orderDebt > 0 && order.status !== "cancelled";
   const canDelete = employee.role === "quan_ly" && order.status !== "completed";
   const canReconcile = employee.role === "quan_ly" && order.status === "pending_stock";
 
@@ -1731,6 +1896,18 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
         <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{order.order_code}</td>
         <td className="px-3 py-2.5 text-slate-500">{fmtDate(order.created_at)}</td>
         <td className="px-3 py-2.5 text-slate-600">{fmtVND(order.total_amount)}</td>
+        <td className="px-3 py-2.5 whitespace-nowrap">
+          {orderDebt > 0 ? (
+            <span className={classNames(
+              "text-xs px-2 py-0.5 rounded-full",
+              overdue ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700"
+            )}>
+              Nợ {fmtVND(orderDebt)}{overdue ? " · quá hạn" : ""}
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Đã thu đủ</span>
+          )}
+        </td>
         <td className="px-3 py-2.5">
           <span className={classNames(
             "text-xs px-2 py-0.5 rounded-full",
@@ -1741,7 +1918,22 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
             {order.status === "completed" ? "Hoàn tất" : order.status === "pending_stock" ? "Chờ đối soát kho" : "Đã hủy"}
           </span>
         </td>
-        <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+        <td className="px-3 py-2.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+          {canCollect && (
+            <button
+              onClick={() => setShowCollect(true)}
+              className="text-xs text-brand-600 hover:underline mr-3"
+            >
+              Thu nợ
+            </button>
+          )}
+          {showCollect && (
+            <CollectDebtModal
+              order={order} employee={employee}
+              onClose={() => setShowCollect(false)}
+              onDone={() => { setShowCollect(false); setDetail(null); onDeleted(); }}
+            />
+          )}
           {loadingDetail ? <Loader2 size={14} className="animate-spin inline text-slate-300" /> : (
             <ChevronDown size={15} className={classNames("inline text-slate-300 transition-transform", expanded && "rotate-180")} onClick={loadDetail} />
           )}
@@ -1749,7 +1941,7 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
       </tr>
       {expanded && detail && (
         <tr>
-          <td colSpan={5} className="bg-slate-50/70 px-4 py-4">
+          <td colSpan={6} className="bg-slate-50/70 px-4 py-4">
             {order.status === "pending_stock" && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-amber-800 flex items-center gap-2">
                 <ShieldAlert size={15} className="shrink-0" />
@@ -1932,6 +2124,16 @@ function OrdersModule({ employee }) {
     return o.order_code?.toLowerCase().includes(search.trim().toLowerCase());
   });
 
+  const debtOrders = orders.filter(
+    (o) => o.status !== "cancelled" && Number(o.total_amount) - Number(o.paid_amount || 0) > 0
+  );
+  const totalOrderDebt = debtOrders.reduce(
+    (s, o) => s + (Number(o.total_amount) - Number(o.paid_amount || 0)), 0
+  );
+  const debtOrderCount = debtOrders.length;
+  const today = new Date(new Date().toDateString());
+  const overdueCount = debtOrders.filter((o) => o.due_date && new Date(o.due_date) < today).length;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
@@ -1950,6 +2152,14 @@ function OrdersModule({ employee }) {
           )}
         </div>
       </div>
+
+      {totalOrderDebt > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-800 flex items-center gap-2">
+          <Banknote size={15} className="shrink-0" />
+          Khách đang nợ tổng cộng <span className="font-medium">{fmtVND(totalOrderDebt)}</span> trên {debtOrderCount} đơn
+          {overdueCount > 0 && <span className="text-rose-600 font-medium">· {overdueCount} đơn quá hạn</span>}
+        </div>
+      )}
 
       {employee.role === "quan_ly" && orders.some((o) => o.status === "pending_stock") && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-800 flex items-center gap-2">
@@ -1987,6 +2197,7 @@ function OrdersModule({ employee }) {
                 <th className="px-3 py-2">Mã đơn</th>
                 <th className="px-3 py-2">Ngày tạo</th>
                 <th className="px-3 py-2">Tổng tiền</th>
+                <th className="px-3 py-2">Công nợ</th>
                 <th className="px-3 py-2">Trạng thái</th>
                 <th className="px-3 py-2"></th>
               </tr></thead>
@@ -2104,6 +2315,7 @@ function SupplierPicker({ value, onSelect, employee }) {
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [linkCustomer, setLinkCustomer] = useState(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -2122,13 +2334,14 @@ function SupplierPicker({ value, onSelect, employee }) {
     if (!newName.trim()) return;
     setCreating(true);
     const { data, error } = await supabase.from("suppliers").insert({
-      name: newName.trim(), phone: newPhone.trim() || null, store_id: employee.store_id, created_by: employee.id,
+      name: newName.trim(), phone: newPhone.trim() || null, customer_id: linkCustomer?.id || null,
+      store_id: employee.store_id, created_by: employee.id,
     }).select().maybeSingle();
     setCreating(false);
     if (error) { alert(error.message); return; }
     onSelect(data);
     setShowNew(false);
-    setNewName(""); setNewPhone("");
+    setNewName(""); setNewPhone(""); setLinkCustomer(null);
   };
 
   if (value) {
@@ -2181,6 +2394,12 @@ function SupplierPicker({ value, onSelect, employee }) {
             <div className="p-3 border-t border-slate-100 space-y-2">
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Tên NCC *" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
               <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="SĐT" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+              <div className="pt-1">
+                <p className="text-[11px] text-slate-400 mb-1">
+                  NCC này cũng mua máy của cửa hàng? Liên kết hồ sơ khách hàng để cấn trừ công nợ được.
+                </p>
+                <CustomerPicker value={linkCustomer} onSelect={setLinkCustomer} />
+              </div>
               <div className="flex gap-2">
                 <button type="button" onClick={createNew} disabled={creating || !newName.trim()} className="bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-50">
                   {creating ? "Đang lưu..." : "Lưu NCC"}
@@ -2440,15 +2659,14 @@ function PurchaseModule({ employee }) {
     const p = payingDebt;
     const addAmount = Number(payAmount) || 0;
     if (addAmount <= 0) return;
-    const newPaid = Math.min(Number(p.purchase_price), Number(p.paid_amount ?? 0) + addAmount);
-    const newDebt = Number(p.purchase_price) - newPaid;
-    const newStatus = newDebt === 0 ? "paid" : (newPaid === 0 ? "unpaid" : "partial");
-    const { data: updated, error } = await supabase.from("purchase_orders")
-      .update({ paid_amount: newPaid, debt_status: newStatus }).eq("id", p.id).select().maybeSingle();
+    // Ghi vào SỔ CÁI qua RPC — cột paid_amount do trigger tự tính lại
+    const { data: remain, error } = await supabase.rpc("pay_supplier_debt", {
+      p_purchase_order_id: p.id, p_amount: addAmount, p_note: "Trả tiền nhà cung cấp",
+    });
     if (error) { alert(error.message); return; }
     await supabase.from("audit_logs").insert({
       table_name: "purchase_orders", record_id: p.id, action: "update",
-      old_data: p, new_data: updated, performed_by: employee.id, store_id: employee.store_id,
+      old_data: p, new_data: { ...p, con_no: remain }, performed_by: employee.id, store_id: employee.store_id,
     });
     setPayingDebt(null);
     load();
