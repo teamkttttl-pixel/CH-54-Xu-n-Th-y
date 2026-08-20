@@ -259,7 +259,7 @@ function LoginPage({ onLoggedIn }) {
             <Smartphone className="text-white" size={26} />
           </div>
           <h1 className="text-lg font-semibold text-slate-800">Quản lý mua bán điện thoại</h1>
-          <p className="text-xs text-slate-400 mt-1">Hệ thống dùng chung cho nhiều cửa hàng</p>
+          <p className="text-xs text-slate-500 mt-1">Hệ thống dùng chung cho nhiều cửa hàng</p>
         </div>
 
         <form onSubmit={submit} className="space-y-3">
@@ -283,7 +283,7 @@ function LoginPage({ onLoggedIn }) {
         <button
           type="button"
           onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setInfo(""); }}
-          className="w-full text-center text-xs text-slate-400 hover:text-brand-600 mt-4"
+          className="w-full text-center text-xs text-slate-500 hover:text-brand-600 mt-4"
         >
           {mode === "login"
             ? "Được cấp tên đăng nhập nhưng chưa có mật khẩu? Tạo tài khoản lần đầu"
@@ -322,7 +322,7 @@ function StatCard({ label, value, icon: Icon, comingSoon }) {
         <Icon size={16} className="text-slate-300" />
       </div>
       {comingSoon ? (
-        <p className="text-xs text-slate-400">Sẽ có ở Phase sau</p>
+        <p className="text-xs text-slate-500">Sẽ có ở Phase sau</p>
       ) : (
         <p className="text-2xl font-semibold text-slate-800">{value}</p>
       )}
@@ -509,7 +509,7 @@ function CustomersModule({ employee, onCountChange }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Khách hàng</h2>
-          <p className="text-xs text-slate-400">{customers.length} khách hàng</p>
+          <p className="text-xs text-slate-500">{customers.length} khách hàng</p>
         </div>
         <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
           <Plus size={15} /> Thêm khách hàng
@@ -549,7 +549,7 @@ function CustomersModule({ employee, onCountChange }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Họ tên</th>
                 <th className="px-3 py-2">SĐT</th>
                 <th className="px-3 py-2">CCCD</th>
@@ -560,9 +560,9 @@ function CustomersModule({ employee, onCountChange }) {
                 {filtered.map((c) => (
                   <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-3 py-2.5 font-medium text-slate-700">{c.full_name}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{c.phone || "—"}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{c.cccd || "—"}</td>
-                    <td className="px-3 py-2.5 text-slate-500 max-w-[220px] truncate">{c.address || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{c.phone || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{c.cccd || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-600 max-w-[220px] truncate">{c.address || "—"}</td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       <button onClick={() => openEdit(c)} className="text-brand-600 hover:underline text-xs mr-3">Sửa</button>
                       {canDelete && <button onClick={() => remove(c)} className="text-rose-500 hover:underline text-xs">Xóa</button>}
@@ -690,7 +690,7 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
       <form onSubmit={submit} className="grid sm:grid-cols-2 gap-3">
         <TextField label="Số IMEI (để trống nếu chưa có)" value={form.imei} onChange={set("imei")} disabled={lockedForStaff || (!!initial?.id && !isSold)} />
         <label className="block">
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Model máy *</span>
           <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 14 Pro Max" disabled={isSold} />
         </label>
         <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="256GB" list="dl-storage" disabled={isSold} />
@@ -698,7 +698,7 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
         <datalist id="dl-colors-device">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
         <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
         <label className="block">
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Tình trạng</span>
           <select value={form.condition} onChange={set("condition")} disabled={isSold} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400">
             <option value="new">Máy mới</option>
             <option value="used">Máy cũ</option>
@@ -759,14 +759,14 @@ function DeviceHistoryPanel({ device, employee, onClose }) {
           <p className="font-semibold text-slate-800 text-sm">Lý lịch máy</p>
           <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
         </div>
-        <p className="text-xs text-slate-400 mb-4">
+        <p className="text-xs text-slate-500 mb-4">
           {[device.model, device.storage, device.color].filter(Boolean).join(" ")} · IMEI {device.imei || "—"}
         </p>
 
         {services.length > 0 && canSeeCost && (
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="bg-slate-50 rounded-xl p-3">
-              <p className="text-xs text-slate-400 mb-1">Số lần dịch vụ</p>
+              <p className="text-xs text-slate-500 mb-1">Số lần dịch vụ</p>
               <p className="text-base font-semibold text-slate-800">{services.length}</p>
             </div>
             <div className="bg-fuchsia-50 rounded-xl p-3">
@@ -785,7 +785,7 @@ function DeviceHistoryPanel({ device, employee, onClose }) {
         {loading ? (
           <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-300" /></div>
         ) : !rows || rows.length === 0 ? (
-          <p className="text-xs text-slate-400 py-6 text-center">Chưa có sự kiện nào cho máy này.</p>
+          <p className="text-xs text-slate-500 py-6 text-center">Chưa có sự kiện nào cho máy này.</p>
         ) : (
           <ol className="relative border-l-2 border-slate-100 ml-2 space-y-4">
             {rows.map((r, i) => {
@@ -799,8 +799,8 @@ function DeviceHistoryPanel({ device, employee, onClose }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={classNames("text-[10px] px-1.5 py-0.5 rounded", st.chip)}>{st.label}</span>
                     <span className="text-sm font-medium text-slate-700">{r.title}</span>
-                    {r.code && <span className="text-xs text-slate-400">{r.code}</span>}
-                    <span className="text-xs text-slate-400">· {fmtDate(r.event_date)}</span>
+                    {r.code && <span className="text-xs text-slate-500">{r.code}</span>}
+                    <span className="text-xs text-slate-500">· {fmtDate(r.event_date)}</span>
                   </div>
                   {r.detail && <p className="text-xs text-slate-500 mt-0.5">{r.detail}</p>}
                   {canSeeCost && changed && (
@@ -845,13 +845,13 @@ function ScreenHistoryPanel({ screen, onClose }) {
           <p className="font-semibold text-slate-800 text-sm">Lý lịch màn {screen.screen_code}</p>
           <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
         </div>
-        <p className="text-xs text-slate-400 mb-4">
+        <p className="text-xs text-slate-500 mb-4">
           {screen.model || "—"} · {screen.grade || "chưa đánh giá"} · {fmtVND(screen.unit_price)}
         </p>
         {loading ? (
           <div className="flex justify-center py-6"><Loader2 className="animate-spin text-slate-300" /></div>
         ) : !rows || rows.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">Chưa có sự kiện nào.</p>
+          <p className="text-xs text-slate-500 py-4 text-center">Chưa có sự kiện nào.</p>
         ) : (
           <ol className="relative border-l-2 border-slate-100 ml-2 space-y-3">
             {rows.map((r, i) => (
@@ -860,7 +860,7 @@ function ScreenHistoryPanel({ screen, onClose }) {
                   r.event_type === "installed_to" ? "bg-sky-500" : "bg-slate-400")} />
                 <p className="text-sm font-medium text-slate-700">{r.title}</p>
                 <p className="text-xs text-slate-500">{r.detail}</p>
-                <p className="text-xs text-slate-400">{fmtDate(r.event_date)}{r.code ? ` · ${r.code}` : ""}</p>
+                <p className="text-xs text-slate-500">{fmtDate(r.event_date)}{r.code ? ` · ${r.code}` : ""}</p>
               </li>
             ))}
           </ol>
@@ -940,7 +940,7 @@ function InventoryModule({ employee, onCountChange }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Kho hàng (IMEI)</h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {devices.length} máy · {devices.filter((d) => d.status === "in_stock").length} còn hàng
           </p>
         </div>
@@ -961,14 +961,14 @@ function InventoryModule({ employee, onCountChange }) {
                   <p className="text-sm font-medium text-slate-700">
                     {[t.model, t.storage, t.color].filter(Boolean).join(" ")}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     IMEI {t.imei || "—"} · {t.transfer_code} · từ <span className="font-medium">{t.from_store_name}</span> · {fmtDate(t.created_at)}
                   </p>
-                  {t.note && <p className="text-xs text-slate-400">Ghi chú: {t.note}</p>}
+                  {t.note && <p className="text-xs text-slate-500">Ghi chú: {t.note}</p>}
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-semibold text-slate-700">{fmtVND(t.transfer_price)}</p>
-                  <p className="text-[11px] text-slate-400">giá vốn khi nhận</p>
+                  <p className="text-[11px] text-slate-500">giá vốn khi nhận</p>
                 </div>
                 {canReceive ? (
                   <button onClick={() => setReceiving(t)}
@@ -976,7 +976,7 @@ function InventoryModule({ employee, onCountChange }) {
                     Nhận hàng
                   </button>
                 ) : (
-                  <span className="text-[11px] text-slate-400 whitespace-nowrap">Chờ kế toán/quản lý nhận</span>
+                  <span className="text-[11px] text-slate-500 whitespace-nowrap">Chờ kế toán/quản lý nhận</span>
                 )}
               </div>
             ))}
@@ -1084,7 +1084,7 @@ function InventoryModule({ employee, onCountChange }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">IMEI</th>
                 <th className="px-3 py-2">Model</th>
                 <th className="px-3 py-2">Tình trạng</th>
@@ -1125,12 +1125,12 @@ function InventoryModule({ employee, onCountChange }) {
                         {DEVICE_ORIGIN_LABELS[d.origin] || "Không rõ nguồn"}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-slate-500">
+                    <td className="px-3 py-2.5 text-slate-600">
                       {DEVICE_CONDITION_LABELS[d.condition] || "—"}
                       {d.condition_percent != null && <span className="text-slate-400"> · {d.condition_percent}%</span>}
                     </td>
-                    {canSeeCost && <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.cost_price)}</td>}
-                    <td className="px-3 py-2.5 text-slate-500">{fmtVND(d.sale_price)}</td>
+                    {canSeeCost && <td className="px-3 py-2.5 text-slate-600">{fmtVND(d.cost_price)}</td>}
+                    <td className="px-3 py-2.5 text-slate-600">{fmtVND(d.sale_price)}</td>
                     <td className="px-3 py-2.5">
                       <span
                         className={classNames("text-xs px-2 py-0.5 rounded-full", DEVICE_STATUS_STYLES[d.status])}
@@ -1183,11 +1183,11 @@ function PrintDocModal({ type, order, customer, device, payments, contract, stor
         </div>
 
         <div className="text-center mb-6">
-          <p className="text-xs text-slate-400">{storeName || "Cửa hàng"} — Quản lý mua bán điện thoại</p>
+          <p className="text-xs text-slate-500">{storeName || "Cửa hàng"} — Quản lý mua bán điện thoại</p>
           <h2 className="text-lg font-bold text-slate-800 mt-1">
             {type === "contract" ? "HỢP ĐỒNG MUA BÁN ĐIỆN THOẠI" : "PHIẾU THU TIỀN"}
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Số: {type === "contract" ? contract?.contract_code : (payments || []).map((p) => p.payment_code).join(", ")} — Ngày {today}
           </p>
         </div>
@@ -1230,11 +1230,11 @@ function PrintDocModal({ type, order, customer, device, payments, contract, stor
         <div className="grid grid-cols-2 gap-4 text-center text-sm text-slate-600 mt-10">
           <div>
             <p className="font-medium text-slate-700 mb-12">Khách hàng</p>
-            <p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
+            <p className="text-xs text-slate-500">(Ký, ghi rõ họ tên)</p>
           </div>
           <div>
             <p className="font-medium text-slate-700 mb-12">Đại diện cửa hàng</p>
-            <p className="text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
+            <p className="text-xs text-slate-500">(Ký, ghi rõ họ tên)</p>
           </div>
         </div>
       </div>
@@ -1273,7 +1273,7 @@ function CustomerPicker({ value, onSelect }) {
       <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
         <div>
           <p className="text-sm font-medium text-slate-700">{value.full_name}</p>
-          <p className="text-xs text-slate-400">{value.phone || value.cccd || "—"}</p>
+          <p className="text-xs text-slate-500">{value.phone || value.cccd || "—"}</p>
         </div>
         <button type="button" onClick={() => onSelect(null)} className="text-xs text-brand-600 hover:underline">Đổi</button>
       </div>
@@ -1295,9 +1295,9 @@ function CustomerPicker({ value, onSelect }) {
       {open && query.trim() && (
         <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
           {loading ? (
-            <div className="p-3 text-xs text-slate-400 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
+            <div className="p-3 text-xs text-slate-500 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
           ) : results.length === 0 ? (
-            <div className="p-3 text-xs text-slate-400">Không tìm thấy — kiểm tra lại tên/SĐT/CCCD.</div>
+            <div className="p-3 text-xs text-slate-500">Không tìm thấy — kiểm tra lại tên/SĐT/CCCD.</div>
           ) : (
             results.map((c) => (
               <button
@@ -1307,11 +1307,11 @@ function CustomerPicker({ value, onSelect }) {
                 className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
               >
                 <p className="font-medium text-slate-700">{c.full_name}</p>
-                <p className="text-xs text-slate-400">{c.phone || "—"} {c.cccd ? `· CCCD ${c.cccd}` : ""}</p>
+                <p className="text-xs text-slate-500">{c.phone || "—"} {c.cccd ? `· CCCD ${c.cccd}` : ""}</p>
               </button>
             ))
           )}
-          <p className="px-3 py-2 text-xs text-slate-400 border-t border-slate-50">
+          <p className="px-3 py-2 text-xs text-slate-500 border-t border-slate-50">
             Không thấy khách? Vào mục Khách hàng để thêm mới trước.
           </p>
         </div>
@@ -1343,7 +1343,7 @@ function DevicePicker({ value, onSelect }) {
       <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
         <div>
           <p className="text-sm font-medium text-slate-700">{value.model} {[value.storage, value.color].filter(Boolean).join(" · ")}</p>
-          <p className="text-xs text-slate-400">{value.imei ? `IMEI ${value.imei}` : "⚠ Chưa có IMEI"}</p>
+          <p className="text-xs text-slate-500">{value.imei ? `IMEI ${value.imei}` : "⚠ Chưa có IMEI"}</p>
         </div>
         <button type="button" onClick={() => onSelect(null)} className="text-xs text-brand-600 hover:underline">Đổi</button>
       </div>
@@ -1365,9 +1365,9 @@ function DevicePicker({ value, onSelect }) {
       {open && (
         <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
           {loading ? (
-            <div className="p-3 text-xs text-slate-400 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
+            <div className="p-3 text-xs text-slate-500 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
           ) : results.length === 0 ? (
-            <div className="p-3 text-xs text-slate-400">Không có máy còn hàng khớp tìm kiếm.</div>
+            <div className="p-3 text-xs text-slate-500">Không có máy còn hàng khớp tìm kiếm.</div>
           ) : (
             results.map((d) => (
               <button
@@ -1377,7 +1377,7 @@ function DevicePicker({ value, onSelect }) {
                 className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
               >
                 <p className="font-medium text-slate-700">{d.model} {[d.storage, d.color].filter(Boolean).join(" · ")}</p>
-                <p className="text-xs text-slate-400">{d.imei ? `IMEI ${d.imei}` : "⚠ Chưa có IMEI"} · Giá đề xuất {fmtVND(d.sale_price)}</p>
+                <p className="text-xs text-slate-500">{d.imei ? `IMEI ${d.imei}` : "⚠ Chưa có IMEI"} · Giá đề xuất {fmtVND(d.sale_price)}</p>
               </button>
             ))
           )}
@@ -1416,7 +1416,7 @@ function ModelPicker({ value, onSelect, placeholder, disabled }) {
       {open && !disabled && (
         <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
           {filtered.length === 0 ? (
-            <div className="p-3 text-xs text-slate-400">Không có trong danh mục — vẫn dùng được đúng tên bạn vừa gõ (máy hãng khác/đời cũ).</div>
+            <div className="p-3 text-xs text-slate-500">Không có trong danh mục — vẫn dùng được đúng tên bạn vừa gõ (máy hãng khác/đời cũ).</div>
           ) : (
             filtered.map((m) => (
               <button
@@ -1429,7 +1429,7 @@ function ModelPicker({ value, onSelect, placeholder, disabled }) {
               </button>
             ))
           )}
-          <button type="button" onClick={() => setOpen(false)} className="w-full text-center px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-t border-slate-100">
+          <button type="button" onClick={() => setOpen(false)} className="w-full text-center px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50 border-t border-slate-100">
             Đóng danh sách
           </button>
         </div>
@@ -1524,7 +1524,7 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
             </div>
             {r.method === "debt" && (
               <div className="pl-6 space-y-1.5">
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-slate-500">
                   Không thu tiền. Khoản này hiện ở cột Công nợ của đơn, thu dần sau bằng nút "Thu nợ".
                 </p>
                 <button
@@ -1553,7 +1553,7 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
             )}
             {r.method === "debt_offset" && (
               <div className="pl-6 space-y-1.5">
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-slate-500">
                   Trừ vào khoản phải trả với <span className="font-medium text-slate-500">{supplierName}</span>.
                   Hệ thống lập biên bản bù trừ và phân bổ vào các phiếu nhập máy còn nợ, cũ nhất trước.
                 </p>
@@ -1800,12 +1800,12 @@ function OrderForm({ onCancel, onSaved, employee }) {
       </div>
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Khách hàng *</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Khách hàng *</span>
           <CustomerPicker value={customer} onSelect={setCustomer} />
         </div>
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-slate-500 block">Máy bán (IMEI) *</span>
+            <span className="text-xs font-medium text-slate-600 block">Máy bán (IMEI) *</span>
             <button
               type="button"
               onClick={() => { setManualDeviceMode((s) => !s); setDevice(null); }}
@@ -1875,7 +1875,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
           </div>
         )}
         <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức thanh toán *</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Hình thức thanh toán *</span>
           <PaymentRows
             rows={payments} setRows={setPayments} total={total}
             supplierDebt={supplierDebt} supplierName={linkedSupplier?.name || ""}
@@ -1959,13 +1959,13 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
           <p className="font-semibold text-slate-800 text-sm">Đối soát kho — {order.order_code}</p>
           <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
         </div>
-        <p className="text-xs text-slate-400 mb-3">
+        <p className="text-xs text-slate-500 mb-3">
           Kiểm tra lại thông tin máy nhân viên đã nhập lúc bán, sửa nếu cần, bổ sung giá vốn rồi xác nhận — đơn hàng sẽ chuyển thành "Hoàn tất" và máy chuyển "Đã bán" trong Kho.
         </p>
         <form onSubmit={submit} className="grid grid-cols-2 gap-3">
           <TextField label="Số IMEI *" value={form.imei} onChange={set("imei")} className="col-span-2" />
           <label className="block col-span-2">
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Model máy *</span>
             <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} />
           </label>
           <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} list="dl-storage" />
@@ -1973,7 +1973,7 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
           <datalist id="dl-colors-reconcile">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
           <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
           <label className="block">
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Tình trạng</span>
             <select value={form.condition} onChange={set("condition")} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="new">Máy mới</option>
               <option value="used">Máy cũ</option>
@@ -2041,7 +2041,7 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
           {order.due_date && <> · hẹn trả {fmtDate(order.due_date)}</>}
         </div>
         <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức thu</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Hình thức thu</span>
           <select
             value={method} onChange={(e) => setMethod(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
@@ -2052,7 +2052,7 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
         </div>
         {method === "bank_transfer" && (
           <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản nhận tiền *</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản nhận tiền *</span>
             <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
           </div>
         )}
@@ -2117,9 +2117,9 @@ function PayCustomerDiffModal({ order, employee, onClose, onDone }) {
             <span className="font-medium">{fmtVND(debt)}</span>.
           </div>
           <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển tiền *</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chuyển tiền *</span>
             <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
-            <p className="text-[11px] text-slate-400 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
+            <p className="text-[11px] text-slate-500 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
           </div>
           <TextField label="Số tiền trả (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
           {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
@@ -2181,7 +2181,7 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
     <>
       <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 cursor-pointer" onClick={loadDetail}>
         <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{order.order_code}</td>
-        <td className="px-3 py-2.5 text-slate-500">{fmtDate(order.created_at)}</td>
+        <td className="px-3 py-2.5 text-slate-600">{fmtDate(order.created_at)}</td>
         <td className="px-3 py-2.5 text-slate-600">{fmtVND(order.total_amount)}</td>
         <td className="px-3 py-2.5 whitespace-nowrap">
           {orderDebt > 0 ? (
@@ -2256,19 +2256,19 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
             )}
             <div className="grid sm:grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-xs text-slate-400 mb-1">Khách hàng</p>
+                <p className="text-xs text-slate-500 mb-1">Khách hàng</p>
                 <p className="font-medium text-slate-700">{detail.customer?.full_name}</p>
-                <p className="text-xs text-slate-400">{detail.customer?.phone}</p>
+                <p className="text-xs text-slate-500">{detail.customer?.phone}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400 mb-1">Máy đã bán</p>
+                <p className="text-xs text-slate-500 mb-1">Máy đã bán</p>
                 <p className="font-medium text-slate-700">{detail.device?.model} {[detail.device?.storage, detail.device?.color].filter(Boolean).join(" · ")}</p>
-                <p className="text-xs text-slate-400">{detail.device?.imei ? `IMEI ${detail.device.imei}` : "Chưa có IMEI"}</p>
+                <p className="text-xs text-slate-500">{detail.device?.imei ? `IMEI ${detail.device.imei}` : "Chưa có IMEI"}</p>
               </div>
             </div>
             <div className="mt-3 space-y-1">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-slate-400">Thanh toán ({detail.payments.length} hình thức)</p>
+                <p className="text-xs text-slate-500">Thanh toán ({detail.payments.length} hình thức)</p>
                 {detail.payments.length > 1 && (
                   <button onClick={() => setPrintType({ kind: "receipt", payments: detail.payments })} className="text-brand-600 hover:underline text-xs flex items-center gap-1">
                     <Printer size={12} /> In phiếu thu gộp ({detail.payments.length} hình thức)
@@ -2287,7 +2287,7 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
                 </div>
               ))}
             </div>
-            {order.notes && <p className="text-xs text-slate-400 mt-2">Ghi chú: {order.notes}</p>}
+            {order.notes && <p className="text-xs text-slate-500 mt-2">Ghi chú: {order.notes}</p>}
             <div className="flex gap-3 mt-3 items-center">
               <button onClick={() => setPrintType({ kind: "contract" })} className="text-brand-600 hover:underline text-xs flex items-center gap-1">
                 <Printer size={12} /> In hợp đồng
@@ -2388,7 +2388,7 @@ function KiotVietExportModal({ onClose }) {
           <p className="font-semibold text-slate-800 text-sm">Xuất Excel KiotViet</p>
           <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
         </div>
-        <p className="text-xs text-slate-400 mb-3">
+        <p className="text-xs text-slate-500 mb-3">
           Xuất danh sách đơn hàng đã hoàn tất theo đúng cấu trúc file mẫu import KiotViet (để trống ngày = xuất toàn bộ).
         </p>
         <div className="grid grid-cols-2 gap-3 mb-4">
@@ -2476,14 +2476,14 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
   return (
     <Card className="p-4 sm:p-5 mb-4">
       <p className="text-sm font-medium text-slate-700 mb-1">Xuất bán nội bộ</p>
-      <p className="text-xs text-slate-400 mb-3">
+      <p className="text-xs text-slate-500 mb-3">
         Máy sẽ chuyển sang trạng thái Giữ chỗ cho tới khi cửa hàng nhận xác nhận.
         Giá xuất bán ở đây sẽ thành giá vốn của cửa hàng nhận.
       </p>
 
       <div className="grid sm:grid-cols-2 gap-3">
         <label className="block">
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Cửa hàng nhận *</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Cửa hàng nhận *</span>
           <select value={toStore} onChange={(e) => setToStore(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
             <option value="">— Chọn cửa hàng —</option>
@@ -2495,7 +2495,7 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
       </div>
 
       <div className="mt-3">
-        <span className="text-xs font-medium text-slate-500 mb-1 block">Máy cần xuất *</span>
+        <span className="text-xs font-medium text-slate-600 mb-1 block">Máy cần xuất *</span>
         <div className="relative mb-2">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
@@ -2504,13 +2504,13 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
         </div>
         <div className="border border-slate-200 rounded-xl max-h-56 overflow-y-auto">
           {filtered.length === 0 ? (
-            <p className="text-xs text-slate-400 py-4 text-center">Không có máy nào Còn hàng khớp tìm kiếm.</p>
+            <p className="text-xs text-slate-500 py-4 text-center">Không có máy nào Còn hàng khớp tìm kiếm.</p>
           ) : filtered.map((d) => (
             <button key={d.id} type="button" onClick={() => { setDeviceId(d.id); setError(""); }}
               className={classNames("w-full text-left px-3 py-2 border-b border-slate-50 last:border-0 hover:bg-slate-50",
                 deviceId === d.id && "bg-brand-50")}>
               <p className="text-sm text-slate-700">{[d.model, d.storage, d.color].filter(Boolean).join(" ")}</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500">
                 IMEI {d.imei || "—"}{canSeeCost && d.cost_price ? ` · giá vốn ${fmtVND(d.cost_price)}` : ""}
               </p>
             </button>
@@ -2584,20 +2584,20 @@ function InternalTransferTab({ employee }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <Card className="p-4">
-          <p className="text-xs text-slate-400 mb-1">Doanh thu nội bộ đã xuất</p>
+          <p className="text-xs text-slate-500 mb-1">Doanh thu nội bộ đã xuất</p>
           <p className="text-lg font-semibold text-slate-800">{fmtVND(internalRevenue)}</p>
-          <p className="text-[11px] text-slate-400">{receivedOut.length} máy đã được nhận</p>
+          <p className="text-[11px] text-slate-500">{receivedOut.length} máy đã được nhận</p>
         </Card>
         {canSeeCost && (
           <Card className="p-4">
-            <p className="text-xs text-slate-400 mb-1">Lãi nội bộ</p>
+            <p className="text-xs text-slate-500 mb-1">Lãi nội bộ</p>
             <p className={classNames("text-lg font-semibold", internalMargin >= 0 ? "text-emerald-700" : "text-rose-600")}>
               {fmtVND(internalMargin)}
             </p>
           </Card>
         )}
         <Card className="p-4">
-          <p className="text-xs text-slate-400 mb-1">Đang chờ bên kia nhận</p>
+          <p className="text-xs text-slate-500 mb-1">Đang chờ bên kia nhận</p>
           <p className="text-lg font-semibold text-amber-600">{pendingOut.length} máy</p>
         </Card>
       </div>
@@ -2629,7 +2629,7 @@ function InternalTransferTab({ employee }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã</th>
                 <th className="px-3 py-2">Ngày</th>
                 <th className="px-3 py-2">Chiều</th>
@@ -2643,8 +2643,8 @@ function InternalTransferTab({ employee }) {
                   const isOut = r.from_store_id === employee.store_id;
                   return (
                     <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.transfer_code}</td>
-                      <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.created_at)}</td>
+                      <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.transfer_code}</td>
+                      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.created_at)}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <span className={classNames("text-xs px-2 py-0.5 rounded",
                           isOut ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700")}>
@@ -2653,7 +2653,7 @@ function InternalTransferTab({ employee }) {
                       </td>
                       <td className="px-3 py-2.5">
                         <p className="text-slate-700">{[r.model, r.storage, r.color].filter(Boolean).join(" ")}</p>
-                        <p className="text-xs text-slate-400">IMEI {r.imei || "—"}</p>
+                        <p className="text-xs text-slate-500">IMEI {r.imei || "—"}</p>
                       </td>
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <p className="font-medium text-slate-700">{fmtVND(r.transfer_price)}</p>
@@ -2739,7 +2739,7 @@ function ReceiveTransferModal({ row, employee, onClose, onDone }) {
             <TextField label="Giá bán dự kiến (đ)" type="number" value={salePrice}
               onChange={(e) => setSalePrice(e.target.value)} placeholder="Để trống nếu chưa định giá" />
             <TextField label="Ghi chú khi nhận" value={note} onChange={(e) => setNote(e.target.value)} />
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-500">
               Xác nhận sẽ đưa máy vào kho và treo khoản phải trả {fmtVND(row.transfer_price)} với {row.from_store_name}.
             </p>
             {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
@@ -2797,7 +2797,7 @@ function OrdersModule({ employee }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Đơn hàng bán</h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {tab === "orders" ? `${orders.length} đơn hàng` : "Điều chuyển máy giữa các cửa hàng trong hệ thống"}
           </p>
         </div>
@@ -2875,7 +2875,7 @@ function OrdersModule({ employee }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã đơn</th>
                 <th className="px-3 py-2">Ngày tạo</th>
                 <th className="px-3 py-2">Tổng tiền</th>
@@ -2941,7 +2941,7 @@ function SupplierPicker({ value, onSelect, employee }) {
       <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
         <div>
           <p className="text-sm font-medium text-slate-700">{value.name}</p>
-          <p className="text-xs text-slate-400">{value.phone || "—"}</p>
+          <p className="text-xs text-slate-500">{value.phone || "—"}</p>
         </div>
         <button type="button" onClick={() => onSelect(null)} className="text-xs text-brand-600 hover:underline">Đổi</button>
       </div>
@@ -2963,9 +2963,9 @@ function SupplierPicker({ value, onSelect, employee }) {
       {open && (
         <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-72 overflow-y-auto">
           {loading ? (
-            <div className="p-3 text-xs text-slate-400 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
+            <div className="p-3 text-xs text-slate-500 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Đang tìm...</div>
           ) : results.length === 0 && !showNew ? (
-            <div className="p-3 text-xs text-slate-400">Chưa có NCC nào khớp.</div>
+            <div className="p-3 text-xs text-slate-500">Chưa có NCC nào khớp.</div>
           ) : (
             results.map((s) => (
               <button
@@ -2974,7 +2974,7 @@ function SupplierPicker({ value, onSelect, employee }) {
                 className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
               >
                 <p className="font-medium text-slate-700">{s.name}</p>
-                <p className="text-xs text-slate-400">{s.phone || "—"}</p>
+                <p className="text-xs text-slate-500">{s.phone || "—"}</p>
               </button>
             ))
           )}
@@ -2987,7 +2987,7 @@ function SupplierPicker({ value, onSelect, employee }) {
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Tên NCC *" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
               <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="SĐT" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
               <div className="pt-1">
-                <p className="text-[11px] text-slate-400 mb-1">
+                <p className="text-[11px] text-slate-500 mb-1">
                   NCC này cũng mua máy của cửa hàng? Liên kết hồ sơ khách hàng để cấn trừ công nợ được.
                 </p>
                 <CustomerPicker value={linkCustomer} onSelect={setLinkCustomer} />
@@ -2996,7 +2996,7 @@ function SupplierPicker({ value, onSelect, employee }) {
                 <button type="button" onClick={createNew} disabled={creating || !newName.trim()} className="bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-50">
                   {creating ? "Đang lưu..." : "Lưu NCC"}
                 </button>
-                <button type="button" onClick={() => setShowNew(false)} className="text-xs text-slate-400 px-3 py-1.5">Hủy</button>
+                <button type="button" onClick={() => setShowNew(false)} className="text-xs text-slate-500 px-3 py-1.5">Hủy</button>
               </div>
             </div>
           )}
@@ -3143,7 +3143,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
       <form onSubmit={submit} className="space-y-4">
         {sourceType === "customer" ? (
           <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Khách hàng (bên bán máy) *</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Khách hàng (bên bán máy) *</span>
             <CustomerPicker value={customer} onSelect={setCustomer} />
             {customer && !customer.cccd && (
               <p className="text-xs text-amber-600 mt-1.5">⚠ Khách này chưa có CCCD trong hồ sơ — cần vào mục Khách hàng bổ sung trước.</p>
@@ -3151,7 +3151,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           </div>
         ) : (
           <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Nhà cung cấp *</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Nhà cung cấp *</span>
             <SupplierPicker value={supplier} onSelect={setSupplier} employee={employee} />
           </div>
         )}
@@ -3166,7 +3166,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         <div className="grid sm:grid-cols-2 gap-3">
           <TextField label="Số IMEI (để trống nếu chưa có)" value={form.imei} onChange={(e) => { set("imei")(e); checkImei(e.target.value); }} />
           <label className="block">
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Model máy *</span>
             <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 13 128GB" />
           </label>
           <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} placeholder="128GB" list="dl-storage" />
@@ -3174,7 +3174,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           <datalist id="dl-colors-purchase">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
           <datalist id="dl-storage"><option value="64GB" /><option value="128GB" /><option value="256GB" /><option value="512GB" /><option value="1TB" /></datalist>
           <label className="block">
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Tình trạng</span>
             <select value={form.condition} onChange={set("condition")} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="used">Máy cũ</option>
               <option value="new">Máy mới</option>
@@ -3185,7 +3185,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         </div>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi trả</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Hình thức chi trả</span>
           <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
             <option value="bank_transfer">Chuyển khoản</option>
             <option value="debt_offset">Bù trừ công nợ (không chi tiền)</option>
@@ -3409,7 +3409,7 @@ function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
             <input type="file" accept=".xlsx,.xls" className="hidden"
               onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />
           </label>
-          {fileName && <span className="text-xs text-slate-400 self-center">{fileName}</span>}
+          {fileName && <span className="text-xs text-slate-500 self-center">{fileName}</span>}
         </div>
 
         {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
@@ -3466,7 +3466,7 @@ function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
             <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
               <div className="h-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
             </div>
-            <p className="text-xs text-slate-400 mt-1">Đang nhập... {progress}%</p>
+            <p className="text-xs text-slate-500 mt-1">Đang nhập... {progress}%</p>
           </div>
         )}
 
@@ -3540,7 +3540,7 @@ function EditPurchaseModal({ purchase, employee, onClose, onDone }) {
             <TextField label="Dung lượng" value={form.storage} onChange={set("storage")} list="dl-storage" />
             <TextField label="Màu sắc" value={form.color} onChange={set("color")} list="dl-colors-edit" />
             <label className="block">
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Tình trạng</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Tình trạng</span>
               <select value={form.condition} onChange={set("condition")}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="used">Máy cũ</option>
@@ -3654,7 +3654,7 @@ function PurchaseModule({ employee }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Nhập máy / Thu cũ</h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {purchases.length} phiếu — Khách lẻ / NCC / đổi trừ khi bán
             {totalDebt > 0 && <span className="text-amber-600 font-medium"> · Tổng công nợ NCC: {fmtVND(totalDebt)}</span>}
           </p>
@@ -3696,7 +3696,7 @@ function PurchaseModule({ employee }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã phiếu</th>
                 <th className="px-3 py-2">Ngày</th>
                 <th className="px-3 py-2">Đối tác</th>
@@ -3712,9 +3712,9 @@ function PurchaseModule({ employee }) {
                   return (
                   <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{p.purchase_code}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{fmtDate(p.created_at)}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{fmtDate(p.created_at)}</td>
                     <td className="px-3 py-2.5 text-slate-600">{p.customers?.full_name || p.suppliers?.name}</td>
-                    <td className="px-3 py-2.5 text-slate-500">
+                    <td className="px-3 py-2.5 text-slate-600">
                       {p.devices?.model} <span className="text-slate-400">· {p.devices?.imei ? `IMEI ${p.devices.imei}` : "Chưa có IMEI"}</span>
                     </td>
                     <td className="px-3 py-2.5 text-slate-600">{fmtVND(p.purchase_price)}</td>
@@ -3766,14 +3766,14 @@ function PurchaseModule({ employee }) {
               <p className="font-semibold text-slate-800 text-sm">Thanh toán công nợ — {payingDebt.purchase_code}</p>
               <button onClick={() => setPayingDebt(null)} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
             </div>
-            <p className="text-xs text-slate-400 mb-3">
+            <p className="text-xs text-slate-500 mb-3">
               NCC: {payingDebt.suppliers?.name} · Còn nợ: {fmtVND(Math.max(0, Number(payingDebt.purchase_price) - Number(payingDebt.paid_amount ?? 0)))}
             </p>
             <TextField label="Số tiền thanh toán thêm (đ)" type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
             <div className="mt-3">
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển tiền *</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chuyển tiền *</span>
               <BankSelect banks={banks} value={payBankId} onChange={setPayBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
-              <p className="text-[11px] text-slate-400 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
+              <p className="text-[11px] text-slate-500 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={submitPayDebt} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium">Xác nhận thanh toán</button>
@@ -3790,7 +3790,7 @@ function PurchaseModule({ employee }) {
               <p className="font-semibold text-slate-800 text-sm">Nhập từ Excel — chọn nhà cung cấp</p>
               <button onClick={() => { setShowImport(false); setImportSupplier(null); }} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
             </div>
-            <p className="text-xs text-slate-400 mb-3">
+            <p className="text-xs text-slate-500 mb-3">
               Nhập hàng loạt chỉ áp dụng cho hàng nhập từ nhà cung cấp. Máy thu của khách lẻ nhập từng chiếc để có đủ hồ sơ.
             </p>
             <SupplierPicker value={importSupplier} onSelect={setImportSupplier} employee={employee} />
@@ -3883,7 +3883,7 @@ function AuditLogModule() {
     <div>
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-800">Audit Log</h2>
-        <p className="text-xs text-slate-400">Lịch sử thao tác trên toàn hệ thống — chỉ Quản lý & Kế toán xem được</p>
+        <p className="text-xs text-slate-500">Lịch sử thao tác trên toàn hệ thống — chỉ Quản lý & Kế toán xem được</p>
       </div>
       <Card className="p-0 overflow-hidden">
         <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-2">
@@ -3910,7 +3910,7 @@ function AuditLogModule() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Thời gian</th>
                 <th className="px-3 py-2">Bảng</th>
                 <th className="px-3 py-2">Hành động</th>
@@ -3920,15 +3920,15 @@ function AuditLogModule() {
               <tbody>
                 {filtered.map((l) => (
                   <tr key={l.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(l.created_at)} {new Date(l.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(l.created_at)} {new Date(l.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</td>
                     <td className="px-3 py-2.5 text-slate-600">{AUDIT_TABLE_LABELS[l.table_name] || l.table_name}</td>
                     <td className="px-3 py-2.5">
                       <span className={classNames("text-xs px-2 py-0.5 rounded-full", AUDIT_ACTION_STYLES[l.action])}>
                         {AUDIT_ACTION_LABELS[l.action] || l.action}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-slate-500 max-w-[320px] truncate" title={summarizeAuditChange(l)}>{summarizeAuditChange(l)}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{l.employees?.full_name || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-600 max-w-[320px] truncate" title={summarizeAuditChange(l)}>{summarizeAuditChange(l)}</td>
+                    <td className="px-3 py-2.5 text-slate-600">{l.employees?.full_name || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -3960,7 +3960,7 @@ function ReportKpiCard({ label, value, icon: Icon, sub }) {
         <Icon size={16} className="text-slate-300" />
       </div>
       <p className="text-xl font-semibold text-slate-800">{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
     </Card>
   );
 }
@@ -4029,7 +4029,7 @@ function CapitalCard({ employee }) {
           </button>
         )}
       </div>
-      <p className="text-[11px] text-slate-400 mb-3">
+      <p className="text-[11px] text-slate-500 mb-3">
         Vốn góp không phải chi phí, không trừ vào lợi nhuận. Dùng làm mẫu số đánh giá hiệu quả kinh doanh.
       </p>
 
@@ -4042,9 +4042,9 @@ function CapitalCard({ employee }) {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
           {people.map(([name, amt]) => (
             <div key={name} className="bg-slate-50 rounded-lg px-3 py-2">
-              <p className="text-xs text-slate-400 truncate">{name}</p>
+              <p className="text-xs text-slate-500 truncate">{name}</p>
               <p className="text-sm font-medium text-slate-700">{fmtVND(amt)}</p>
-              {total > 0 && <p className="text-[11px] text-slate-400">{((amt / total) * 100).toFixed(1)}%</p>}
+              {total > 0 && <p className="text-[11px] text-slate-500">{((amt / total) * 100).toFixed(1)}%</p>}
             </div>
           ))}
         </div>
@@ -4059,7 +4059,7 @@ function CapitalCard({ employee }) {
               placeholder="Nguyễn Văn A"
               onChange={(e) => setForm((f) => ({ ...f, contributor_name: e.target.value }))} />
             <label className="block">
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Loại</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Loại</span>
               <select value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="in">Góp thêm vốn</option>
@@ -4085,11 +4085,11 @@ function CapitalCard({ employee }) {
       {loading ? (
         <div className="flex justify-center py-6"><Loader2 className="animate-spin text-slate-300" /></div>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-slate-400 py-4 text-center">Chưa ghi nhận vốn góp nào.</p>
+        <p className="text-xs text-slate-500 py-4 text-center">Chưa ghi nhận vốn góp nào.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+            <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
               <th className="px-2 py-2">Mã</th>
               <th className="px-2 py-2">Ngày</th>
               <th className="px-2 py-2">Người góp</th>
@@ -4100,10 +4100,10 @@ function CapitalCard({ employee }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                  <td className="px-2 py-2 text-slate-400 doc-code whitespace-nowrap">{r.capital_code}</td>
-                  <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{fmtDate(r.contribution_date)}</td>
+                  <td className="px-2 py-2 text-slate-600 doc-code whitespace-nowrap">{r.capital_code}</td>
+                  <td className="px-2 py-2 text-slate-600 whitespace-nowrap">{fmtDate(r.contribution_date)}</td>
                   <td className="px-2 py-2 text-slate-700">{r.contributor_name}</td>
-                  <td className="px-2 py-2 text-slate-400 text-xs">{r.note || "—"}</td>
+                  <td className="px-2 py-2 text-slate-500 text-xs">{r.note || "—"}</td>
                   <td className={classNames("px-2 py-2 text-right font-medium whitespace-nowrap",
                     Number(r.amount) < 0 ? "text-rose-600" : "text-slate-700")}>
                     {Number(r.amount) < 0 ? "" : "+"}{fmtVND(r.amount)}
@@ -4156,7 +4156,7 @@ function IncomeStatementCard({ employee, fromDate, toDate, storeName }) {
       bold && "border-t border-slate-200 mt-1 pt-2")}>
       <span className={classNames("text-slate-500", bold && "font-medium text-slate-700")}>
         {label}
-        {hint && <span className="text-[11px] text-slate-400 ml-1">{hint}</span>}
+        {hint && <span className="text-[11px] text-slate-500 ml-1">{hint}</span>}
       </span>
       <span className={classNames("whitespace-nowrap",
         bold ? "font-semibold" : "",
@@ -4169,7 +4169,7 @@ function IncomeStatementCard({ employee, fromDate, toDate, storeName }) {
   return (
     <Card className="p-4 sm:p-5 mb-4">
       <p className="text-sm font-medium text-slate-700 mb-1">Kết quả kinh doanh — {storeName}</p>
-      <p className="text-[11px] text-slate-400 mb-3">
+      <p className="text-[11px] text-slate-500 mb-3">
         {fmtDate(fromDate)} đến {fmtDate(toDate)} · {d.order_count} đơn bán
       </p>
 
@@ -4239,11 +4239,11 @@ function IncomeStatementCard({ employee, fromDate, toDate, storeName }) {
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div className="bg-slate-50 rounded-xl p-3">
-          <p className="text-xs text-slate-400 mb-1">Vốn góp lũy kế</p>
+          <p className="text-xs text-slate-500 mb-1">Vốn góp lũy kế</p>
           <p className="font-semibold text-slate-800">{fmtVND(d.capital_total)}</p>
         </div>
         <div className="bg-slate-50 rounded-xl p-3">
-          <p className="text-xs text-slate-400 mb-1">Giá trị tồn kho</p>
+          <p className="text-xs text-slate-500 mb-1">Giá trị tồn kho</p>
           <p className="font-semibold text-slate-800">{fmtVND(d.inventory_value)}</p>
         </div>
       </div>
@@ -4325,13 +4325,13 @@ function CommissionSection({ employee, fromDate, toDate }) {
           <FileSpreadsheet size={13} /> Xuất Excel
         </button>
       </div>
-      <p className="text-[11px] text-slate-400 mb-3">
+      <p className="text-[11px] text-slate-500 mb-3">
         Chỉ tính đơn bán khách lẻ. Không tính đơn đã hủy, khách trả máy, bán sỉ cho nhà cung cấp, và xuất bán nội bộ.
       </p>
 
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-slate-50 rounded-xl p-3">
-          <p className="text-xs text-slate-400 mb-1">Máy tính hoa hồng</p>
+          <p className="text-xs text-slate-500 mb-1">Máy tính hoa hồng</p>
           <p className="text-lg font-semibold text-slate-800">{totalDevices}</p>
         </div>
         <div className="bg-emerald-50 rounded-xl p-3">
@@ -4345,7 +4345,7 @@ function CommissionSection({ employee, fromDate, toDate }) {
           </div>
         ) : (
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-xs text-slate-400 mb-1">Đơn bị loại</p>
+            <p className="text-xs text-slate-500 mb-1">Đơn bị loại</p>
             <p className="text-lg font-semibold text-slate-600">{excluded.length}</p>
           </div>
         )}
@@ -4354,11 +4354,11 @@ function CommissionSection({ employee, fromDate, toDate }) {
       {loading ? (
         <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-300" /></div>
       ) : summary.length === 0 ? (
-        <p className="text-xs text-slate-400 py-6 text-center">Không có đơn bán nào trong khoảng ngày đã chọn.</p>
+        <p className="text-xs text-slate-500 py-6 text-center">Không có đơn bán nào trong khoảng ngày đã chọn.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+            <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
               <th className="px-2 py-2">Nhân viên</th>
               <th className="px-2 py-2 text-right">Số máy</th>
               <th className="px-2 py-2 text-right">Doanh thu</th>
@@ -4394,7 +4394,7 @@ function CommissionSection({ employee, fromDate, toDate }) {
                       <tr>
                         <td colSpan={canSeeMargin ? 7 : 5} className="bg-slate-50/70 px-3 py-3">
                           {mine.length === 0 ? (
-                            <p className="text-xs text-slate-400 text-center py-2">Không có đơn nào.</p>
+                            <p className="text-xs text-slate-500 text-center py-2">Không có đơn nào.</p>
                           ) : (
                             <table className="w-full text-xs">
                               <thead><tr className="text-left text-slate-400 border-b border-slate-200">
@@ -4409,7 +4409,7 @@ function CommissionSection({ employee, fromDate, toDate }) {
                                 {mine.map((x) => (
                                   <tr key={x.order_id} className={classNames("border-b border-slate-100 last:border-0",
                                     !x.counts_for_commission && "opacity-60")}>
-                                    <td className="py-1.5 text-slate-500 whitespace-nowrap">{fmtDate(x.sale_date)}</td>
+                                    <td className="py-1.5 text-slate-600 whitespace-nowrap">{fmtDate(x.sale_date)}</td>
                                     <td className="py-1.5 text-slate-400">{x.order_code}</td>
                                     <td className="py-1.5 text-slate-600">
                                       {[x.model, x.storage, x.color].filter(Boolean).join(" ")}
@@ -4418,7 +4418,7 @@ function CommissionSection({ employee, fromDate, toDate }) {
                                         <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-rose-50 text-rose-600">{x.excluded_reason}</span>
                                       )}
                                     </td>
-                                    <td className="py-1.5 text-slate-500">{x.customer_name || "—"}</td>
+                                    <td className="py-1.5 text-slate-600">{x.customer_name || "—"}</td>
                                     <td className="py-1.5 text-right text-slate-700 whitespace-nowrap">{fmtVND(x.total_amount)}</td>
                                     {canSeeMargin && <td className="py-1.5 text-right text-brand-700 whitespace-nowrap">{fmtVND(x.gross_margin)}</td>}
                                   </tr>
@@ -4556,7 +4556,7 @@ function ReportsModule({ employee }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Báo cáo</h2>
-          <p className="text-xs text-slate-400">Doanh thu, lợi nhuận và hiệu suất bán hàng</p>
+          <p className="text-xs text-slate-500">Doanh thu, lợi nhuận và hiệu suất bán hàng</p>
         </div>
         <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
           <Filter size={14} className="text-slate-400" />
@@ -4581,9 +4581,9 @@ function ReportsModule({ employee }) {
           <Card className="p-4 sm:p-5 mb-4">
             <div className="flex items-baseline justify-between mb-1">
               <p className="text-sm font-medium text-slate-700">Dòng tiền theo hình thức</p>
-              <p className="text-xs text-slate-400">phiếu thu phát sinh trong kỳ</p>
+              <p className="text-xs text-slate-500">phiếu thu phát sinh trong kỳ</p>
             </div>
-            <p className="text-[11px] text-slate-400 mb-3">
+            <p className="text-[11px] text-slate-500 mb-3">
               Gồm cả tiền thu nợ của đơn kỳ trước, nên có thể lệch với Doanh thu ở trên.
             </p>
 
@@ -4632,9 +4632,9 @@ function ReportsModule({ employee }) {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <p className="text-xs font-medium text-slate-500 mb-2">Chuyển khoản theo tài khoản</p>
+                <p className="text-xs font-medium text-slate-600 mb-2">Chuyển khoản theo tài khoản</p>
                 {bankRows.length === 0 ? (
-                  <p className="text-xs text-slate-400">Không có giao dịch chuyển khoản.</p>
+                  <p className="text-xs text-slate-500">Không có giao dịch chuyển khoản.</p>
                 ) : (
                   <div className="space-y-1.5">
                     {bankRows.map(([name, amt]) => (
@@ -4647,9 +4647,9 @@ function ReportsModule({ employee }) {
                 )}
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500 mb-2">Trả góp theo đơn vị</p>
+                <p className="text-xs font-medium text-slate-600 mb-2">Trả góp theo đơn vị</p>
                 {providerRows.length === 0 ? (
-                  <p className="text-xs text-slate-400">Không có giao dịch trả góp.</p>
+                  <p className="text-xs text-slate-500">Không có giao dịch trả góp.</p>
                 ) : (
                   <div className="space-y-1.5">
                     {providerRows.map(([name, amt]) => (
@@ -4674,7 +4674,7 @@ function ReportsModule({ employee }) {
           <Card className="p-4 sm:p-5 mb-4">
             <p className="text-sm font-medium text-slate-700 mb-3">Doanh thu theo ngày</p>
             {chartData.length === 0 ? (
-              <p className="text-xs text-slate-400 py-6 text-center">Không có dữ liệu trong khoảng ngày đã chọn.</p>
+              <p className="text-xs text-slate-500 py-6 text-center">Không có dữ liệu trong khoảng ngày đã chọn.</p>
             ) : (
               <div style={{ width: "100%", height: 240 }}>
                 <ResponsiveContainer>
@@ -4693,11 +4693,11 @@ function ReportsModule({ employee }) {
           <div className="grid sm:grid-cols-2 gap-4">
             <Card className="p-4 sm:p-5">
               <p className="text-sm font-medium text-slate-700 mb-3">Top nhân viên theo doanh số</p>
-              {topEmployees.length === 0 ? <p className="text-xs text-slate-400">Chưa có dữ liệu.</p> : (
+              {topEmployees.length === 0 ? <p className="text-xs text-slate-500">Chưa có dữ liệu.</p> : (
                 <ul className="space-y-2">
                   {topEmployees.map(([name, v], i) => (
                     <li key={name} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-600">{i + 1}. {name} <span className="text-slate-400 text-xs">({v.count} đơn)</span></span>
+                      <span className="text-slate-600">{i + 1}. {name} <span className="text-slate-500 text-xs">({v.count} đơn)</span></span>
                       <span className="font-medium text-slate-700">{fmtVND(v.revenue)}</span>
                     </li>
                   ))}
@@ -4706,7 +4706,7 @@ function ReportsModule({ employee }) {
             </Card>
             <Card className="p-4 sm:p-5">
               <p className="text-sm font-medium text-slate-700 mb-3">Model bán chạy</p>
-              {topModels.length === 0 ? <p className="text-xs text-slate-400">Chưa có dữ liệu.</p> : (
+              {topModels.length === 0 ? <p className="text-xs text-slate-500">Chưa có dữ liệu.</p> : (
                 <ul className="space-y-2">
                   {topModels.map(([name, count], i) => (
                     <li key={name} className="flex items-center justify-between text-sm">
@@ -4785,7 +4785,7 @@ function EmployeesModule({ employee }) {
             <TextField label="Họ tên" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} />
             <TextField label="Tên đăng nhập (số điện thoại)" type="text" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="0914657111" />
             <label className="block">
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Vai trò</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Vai trò</span>
               <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="nhan_vien">Nhân viên</option>
                 <option value="quan_ly">Quản lý cửa hàng</option>
@@ -4797,7 +4797,7 @@ function EmployeesModule({ employee }) {
               <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
                 {saving && <Loader2 size={14} className="animate-spin" />} Thêm
               </button>
-              <p className="text-xs text-slate-400 self-center">
+              <p className="text-xs text-slate-500 self-center">
                 Nhân viên sẽ vào màn đăng nhập, chọn "Tạo tài khoản lần đầu" và đăng ký đúng tên đăng nhập này để tự kích hoạt.
               </p>
             </div>
@@ -4810,7 +4810,7 @@ function EmployeesModule({ employee }) {
           <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
         ) : (
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+            <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
               <th className="px-3 py-2">Họ tên</th>
               <th className="px-3 py-2">Tên đăng nhập</th>
               <th className="px-3 py-2">Vai trò</th>
@@ -4821,8 +4821,8 @@ function EmployeesModule({ employee }) {
               {employees.map((e) => (
                 <tr key={e.id} className="border-b border-slate-50 last:border-0">
                   <td className="px-3 py-2.5 font-medium text-slate-700">{e.full_name}</td>
-                  <td className="px-3 py-2.5 text-slate-500">{fromLoginEmail(e.email)}</td>
-                  <td className="px-3 py-2.5 text-slate-500">{ROLE_LABELS[e.role] || e.role}</td>
+                  <td className="px-3 py-2.5 text-slate-600">{fromLoginEmail(e.email)}</td>
+                  <td className="px-3 py-2.5 text-slate-600">{ROLE_LABELS[e.role] || e.role}</td>
                   <td className="px-3 py-2.5">
                     <span className={classNames("text-xs px-2 py-0.5 rounded-full", e.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400")}>
                       {e.is_active ? "Đang hoạt động" : "Đã khóa"}
@@ -4871,7 +4871,7 @@ function PartnerLedgerPanel({ partner }) {
   }, [partner.partner_id]);
 
   if (loading) return <div className="flex justify-center py-6"><Loader2 className="animate-spin text-slate-300" size={18} /></div>;
-  if (!entries || entries.length === 0) return <p className="text-xs text-slate-400 py-4 text-center">Chưa có bút toán nào.</p>;
+  if (!entries || entries.length === 0) return <p className="text-xs text-slate-500 py-4 text-center">Chưa có bút toán nào.</p>;
 
   let runR = 0, runP = 0;
   const rows = entries.map((e) => {
@@ -4896,13 +4896,13 @@ function PartnerLedgerPanel({ partner }) {
             const amt = Number(e.amount);
             return (
               <tr key={e.id} className="border-b border-slate-100 last:border-0">
-                <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{e.entry_code}</td>
-                <td className="px-2 py-1.5 text-slate-500 whitespace-nowrap">{fmtDate(e.entry_date)}</td>
+                <td className="px-2 py-1.5 text-slate-500 whitespace-nowrap">{e.entry_code}</td>
+                <td className="px-2 py-1.5 text-slate-600 whitespace-nowrap">{fmtDate(e.entry_date)}</td>
                 <td className="px-2 py-1.5 text-slate-600 whitespace-nowrap">
                   {LEDGER_TYPE_LABELS[e.entry_type] || e.entry_type}
                   {e.entry_type === "offset" && <span className="ml-1 text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">BT</span>}
                 </td>
-                <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{doc}</td>
+                <td className="px-2 py-1.5 text-slate-500 whitespace-nowrap">{doc}</td>
                 <td className="px-2 py-1.5 text-right whitespace-nowrap">
                   {e.account === "receivable" ? (
                     <span className={amt > 0 ? "text-slate-700" : "text-emerald-600"}>
@@ -4922,7 +4922,7 @@ function PartnerLedgerPanel({ partner }) {
           })}
         </tbody>
       </table>
-      <p className="text-[11px] text-slate-400 mt-2">
+      <p className="text-[11px] text-slate-500 mt-2">
         Cột nhạt bên phải mỗi số là số dư lũy kế. Sổ cái bất biến — mọi sai sót được sửa bằng bút toán điều chỉnh, không xóa dòng cũ.
       </p>
     </div>
@@ -4984,7 +4984,7 @@ function SettleInstallmentModal({ row, employee, onClose, onDone }) {
             <TextField label="Phí giữ lại (đ)" type="number" value={fee} onChange={(e) => setFee(e.target.value)} />
           </div>
           <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản nhận tiền</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản nhận tiền</span>
             <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
           </div>
           <div className={classNames(
@@ -5072,7 +5072,7 @@ function InstallmentTracking({ employee }) {
             >
               <p className="text-xs text-slate-500 mb-1">{name}</p>
               <p className="text-base font-semibold text-slate-800">{fmtVND(v.amount)}</p>
-              <p className="text-[11px] text-slate-400">{v.count} hồ sơ</p>
+              <p className="text-[11px] text-slate-500">{v.count} hồ sơ</p>
             </button>
           ))}
         </div>
@@ -5108,7 +5108,7 @@ function InstallmentTracking({ employee }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Ngày bán</th>
                 <th className="px-3 py-2">Đơn / Khách</th>
                 <th className="px-3 py-2">Đơn vị</th>
@@ -5120,13 +5120,13 @@ function InstallmentTracking({ employee }) {
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r.payment_id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.order_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.order_date)}</td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium text-slate-700">{r.order_code}</p>
-                      <p className="text-xs text-slate-400">{r.customer_name}{r.customer_phone ? ` · ${r.customer_phone}` : ""}</p>
+                      <p className="text-xs text-slate-500">{r.customer_name}{r.customer_phone ? ` · ${r.customer_phone}` : ""}</p>
                     </td>
                     <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{r.installment_provider || "—"}</td>
-                    <td className="px-3 py-2.5 text-slate-400 text-xs">{r.installment_contract_code || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-500 text-xs">{r.installment_contract_code || "—"}</td>
                     <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       {r.settlement_status === "settled" ? (
@@ -5222,7 +5222,7 @@ function SettleAdvanceModal({ row, employee, onClose, onDone }) {
           </div>
           <TextField label="Ngày nộp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức nộp</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Hình thức nộp</span>
             <select value={method} onChange={(e) => setMethod(e.target.value)}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="bank_transfer">Chuyển khoản</option>
@@ -5231,7 +5231,7 @@ function SettleAdvanceModal({ row, employee, onClose, onDone }) {
           </div>
           {method === "bank_transfer" && (
             <div>
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản nhận *</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản nhận *</span>
               <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
             </div>
           )}
@@ -5330,14 +5330,14 @@ function CashAdvanceTab({ employee }) {
       {canManage && (
         <Card className="p-4">
           <p className="text-sm font-medium text-slate-700 mb-1">Lập phiếu tạm ứng cuối ngày</p>
-          <p className="text-xs text-slate-400 mb-3">
+          <p className="text-xs text-slate-500 mb-3">
             Chọn ngày và nhân sự giữ tiền. Số tiền tự điền theo tồn quỹ tiền mặt, sửa được nếu kiểm đếm thực tế lệch.
           </p>
 
           <div className="grid sm:grid-cols-3 gap-3">
             <TextField label="Ngày" type="date" value={date} onChange={(e) => { setDate(e.target.value); setOkCode(null); }} />
             <label className="block">
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Nhân sự tạm ứng *</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Nhân sự tạm ứng *</span>
               <select value={holderId} onChange={(e) => setHolderId(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                 <option value="">— Chọn nhân sự —</option>
@@ -5361,7 +5361,7 @@ function CashAdvanceTab({ employee }) {
                   <p className="text-[11px] text-rose-500">Có khoản chi bằng tiền mặt — theo quy định mọi khoản chi phải qua chuyển khoản, kiểm tra lại.</p>
                 </>
               ) : (
-                <p className="text-[11px] text-slate-400">Mọi khoản chi ra đều qua chuyển khoản, nên tồn quỹ đúng bằng tiền mặt thu được.</p>
+                <p className="text-[11px] text-slate-500">Mọi khoản chi ra đều qua chuyển khoản, nên tồn quỹ đúng bằng tiền mặt thu được.</p>
               )}
               <div className="flex justify-between border-t border-slate-200 pt-1 mt-1"><span className="text-slate-500">Tồn quỹ</span><span className="font-semibold text-slate-800">{fmtVND(summary.net_cash)}</span></div>
               {Number(summary.already_advanced) > 0 && (
@@ -5386,7 +5386,7 @@ function CashAdvanceTab({ employee }) {
       )}
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-xs text-slate-400">{open.length} phiếu chưa nộp đủ</p>
+        <p className="text-xs text-slate-500">{open.length} phiếu chưa nộp đủ</p>
         <button onClick={() => setShowSettled((s) => !s)}
           className="text-xs text-brand-600 hover:underline">
           {showSettled ? "Chỉ xem phiếu chưa nộp" : "Xem cả phiếu đã nộp đủ"}
@@ -5401,7 +5401,7 @@ function CashAdvanceTab({ employee }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã</th>
                 <th className="px-3 py-2">Ngày</th>
                 <th className="px-3 py-2">Người giữ</th>
@@ -5412,11 +5412,11 @@ function CashAdvanceTab({ employee }) {
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.advance_code}</td>
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.advance_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.advance_code}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.advance_date)}</td>
                     <td className="px-3 py-2.5">
                       <p className="text-slate-700">{r.holder_name}</p>
-                      {r.note && <p className="text-xs text-slate-400">{r.note}</p>}
+                      {r.note && <p className="text-xs text-slate-500">{r.note}</p>}
                     </td>
                     <td className="px-3 py-2.5 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.amount)}</td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
@@ -5496,7 +5496,7 @@ function ManualOffsetModal({ partner, onClose, onDone }) {
             </div>
             <TextField label="Số tiền bù trừ (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
             <TextField label="Nội dung / ghi chú" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Hai bên thống nhất bù trừ công nợ..." />
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-500">
               Hệ thống phân bổ vào các chứng từ cũ nhất trước ở cả hai bên và sinh biên bản có mã BT để tra cứu.
             </p>
             {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
@@ -5550,7 +5550,7 @@ function DebtModule({ employee }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Công nợ</h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {tab === "partners" ? `${active.length} đối tác đang có số dư`
               : tab === "installment" ? "Đối soát tiền về từ đơn vị trả góp"
               : "Tiền mặt cuối ngày giao cho nhân sự giữ"}
@@ -5578,11 +5578,11 @@ function DebtModule({ employee }) {
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <Card className="p-4">
-          <p className="text-xs text-slate-400 mb-1">Phải thu — khách nợ cửa hàng</p>
+          <p className="text-xs text-slate-500 mb-1">Phải thu — khách nợ cửa hàng</p>
           <p className="text-xl font-semibold text-amber-600">{fmtVND(totalR)}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-xs text-slate-400 mb-1">Phải trả — cửa hàng nợ đối tác</p>
+          <p className="text-xs text-slate-500 mb-1">Phải trả — cửa hàng nợ đối tác</p>
           <p className="text-xl font-semibold text-indigo-600">{fmtVND(totalP)}</p>
         </Card>
       </div>
@@ -5615,7 +5615,7 @@ function DebtModule({ employee }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Đối tác</th>
                 <th className="px-3 py-2">Vai trò</th>
                 <th className="px-3 py-2 text-right">Phải thu</th>
@@ -5634,7 +5634,7 @@ function DebtModule({ employee }) {
                       >
                         <td className="px-3 py-2.5">
                           <p className="font-medium text-slate-700">{r.name}</p>
-                          <p className="text-xs text-slate-400">{r.partner_code} {r.phone ? `· ${r.phone}` : ""}</p>
+                          <p className="text-xs text-slate-500">{r.partner_code} {r.phone ? `· ${r.phone}` : ""}</p>
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex gap-1 flex-wrap">
@@ -5788,11 +5788,11 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
           </div>
           <div className="grid sm:grid-cols-2 gap-3 mt-3">
             <div>
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chi *</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chi *</span>
               <BankSelect banks={banks} value={form.bank_account_id}
                 onChange={(v) => setForm((f) => ({ ...f, bank_account_id: v }))}
                 className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
-              <p className="text-[11px] text-slate-400 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
+              <p className="text-[11px] text-slate-500 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
             </div>
           </div>
           <div className="mt-3">
@@ -5819,7 +5819,7 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã</th>
                 <th className="px-3 py-2">Ngày</th>
                 <th className="px-3 py-2">Diễn giải</th>
@@ -5830,8 +5830,8 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
               <tbody>
                 {list.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.expense_code}</td>
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
                     <td className="px-3 py-2.5 text-slate-700">{r.description}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <span className={classNames("text-xs px-2 py-0.5 rounded-full",
@@ -5898,7 +5898,7 @@ function MarketingTab({ employee, rows, onChanged }) {
       {canManage && (
         <Card className="p-4">
           <p className="text-sm font-medium text-slate-700 mb-1">Nhập chi phí quảng cáo toàn hệ thống</p>
-          <p className="text-xs text-slate-400 mb-3">
+          <p className="text-xs text-slate-500 mb-3">
             Số tổng sẽ tự chia cho các cửa hàng theo tỷ lệ lãi gộp (doanh thu trừ giá vốn) của tháng đã chọn.
           </p>
           <div className="grid sm:grid-cols-3 gap-3">
@@ -5918,7 +5918,7 @@ function MarketingTab({ employee, rows, onChanged }) {
             <div className="mt-3 bg-slate-50 rounded-xl p-3">
               <p className="text-xs font-medium text-slate-600 mb-2">Xem trước phân bổ</p>
               <table className="w-full text-sm">
-                <thead><tr className="text-left text-xs text-slate-400">
+                <thead><tr className="text-left text-xs text-slate-500">
                   <th className="py-1">Cửa hàng</th>
                   <th className="py-1 text-right">Lãi gộp</th>
                   <th className="py-1 text-right">Tỷ lệ</th>
@@ -5969,7 +5969,7 @@ function MarketingTab({ employee, rows, onChanged }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã</th>
                 <th className="px-3 py-2">Kỳ</th>
                 <th className="px-3 py-2">Diễn giải</th>
@@ -5978,8 +5978,8 @@ function MarketingTab({ employee, rows, onChanged }) {
               <tbody>
                 {list.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.expense_code}</td>
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
                     <td className="px-3 py-2.5 text-slate-600 text-xs">{r.description}</td>
                     <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
                   </tr>
@@ -6019,7 +6019,7 @@ function ReturnTab({ employee, rows, onChanged }) {
     <div className="space-y-3">
       <Card className="p-4">
         <p className="text-sm font-medium text-slate-700 mb-1">Nhận máy khách trả</p>
-        <p className="text-xs text-slate-400 mb-3">
+        <p className="text-xs text-slate-500 mb-3">
           Tra theo số IMEI, số CCCD, họ tên khách hoặc mã đơn. Máy sẽ nhập lại kho theo đúng giá vốn cũ,
           phần chênh so với giá bán ghi thành chi phí giảm trừ doanh thu.
         </p>
@@ -6043,7 +6043,7 @@ function ReturnTab({ employee, rows, onChanged }) {
         {results !== null && (
           <div className="mt-3">
             {results.length === 0 ? (
-              <p className="text-xs text-slate-400 py-3 text-center">
+              <p className="text-xs text-slate-500 py-3 text-center">
                 Không tìm thấy đơn nào khớp. Kiểm tra lại IMEI hoặc thông tin khách.
               </p>
             ) : (
@@ -6054,10 +6054,10 @@ function ReturnTab({ employee, rows, onChanged }) {
                       <p className="text-sm font-medium text-slate-700">
                         {[r.model, r.storage, r.color].filter(Boolean).join(" ")}
                       </p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-500">
                         IMEI {r.imei || "—"} · {r.order_code} · bán {fmtDate(r.sold_at)}
                       </p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-500">
                         {r.customer_name}{r.customer_phone ? ` · ${r.customer_phone}` : ""}
                         {r.customer_cccd ? ` · CCCD ${r.customer_cccd}` : ""}
                       </p>
@@ -6089,7 +6089,7 @@ function ReturnTab({ employee, rows, onChanged }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã</th>
                 <th className="px-3 py-2">Ngày</th>
                 <th className="px-3 py-2">Diễn giải</th>
@@ -6098,8 +6098,8 @@ function ReturnTab({ employee, rows, onChanged }) {
               <tbody>
                 {list.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.expense_code}</td>
-                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.expense_code}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
                     <td className="px-3 py-2.5 text-slate-600 text-xs">{r.description}</td>
                     <td className="px-3 py-2.5 text-right font-medium text-rose-600 whitespace-nowrap">{fmtVND(r.amount)}</td>
                   </tr>
@@ -6192,13 +6192,13 @@ function ConfirmReturnModal({ sale, employee, onClose, onDone }) {
             <TextField label="Ngày nhận máy" type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
 
             <div>
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển hoàn *</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chuyển hoàn *</span>
               <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
-              <p className="text-[11px] text-slate-400 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
+              <p className="text-[11px] text-slate-500 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
             </div>
             <TextField label="Lý do trả máy" value={reason} placeholder="Máy lỗi, khách đổi ý..." onChange={(e) => setReason(e.target.value)} />
 
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-500">
               Đơn gốc được giữ nguyên để tra cứu, hệ thống sinh chứng từ trả hàng riêng đối ứng lại.
             </p>
 
@@ -6319,7 +6319,7 @@ function BonusTab({ employee, rows, loading, onChanged, fromDate, toDate }) {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           {staffRows.map(([id, amt]) => (
             <Card key={id} className="p-3">
-              <p className="text-xs text-slate-400 mb-1 truncate">{id === "none" ? "Không rõ" : nameOf(id)}</p>
+              <p className="text-xs text-slate-500 mb-1 truncate">{id === "none" ? "Không rõ" : nameOf(id)}</p>
               <p className="text-base font-semibold text-slate-800">{fmtVND(amt)}</p>
             </Card>
           ))}
@@ -6335,7 +6335,7 @@ function BonusTab({ employee, rows, loading, onChanged, fromDate, toDate }) {
             <TextField label="Ngày chi thưởng *" type="date" value={form.expense_date}
               onChange={(e) => setForm((f) => ({ ...f, expense_date: e.target.value }))} />
             <label className="block">
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Nhân viên *</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Nhân viên *</span>
               <select value={form.employee_id}
                 onChange={(e) => setForm((f) => ({ ...f, employee_id: e.target.value }))}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
@@ -6348,7 +6348,7 @@ function BonusTab({ employee, rows, loading, onChanged, fromDate, toDate }) {
             <TextField label="Số tiền thưởng (đ) *" type="number" value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
             <div>
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chi *</span>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chi *</span>
               <BankSelect banks={banks} value={form.bank_account_id}
                 onChange={(v) => setForm((f) => ({ ...f, bank_account_id: v }))}
                 className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
@@ -6359,7 +6359,7 @@ function BonusTab({ employee, rows, loading, onChanged, fromDate, toDate }) {
               placeholder="Thưởng doanh số ngày, thưởng chăm chỉ..."
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
           </div>
-          <p className="text-[11px] text-slate-400 mt-2">
+          <p className="text-[11px] text-slate-500 mt-2">
             Khoản thưởng tính là chi phí của đúng ngày chọn ở trên, vào ngay báo cáo kết quả kinh doanh của ngày đó.
           </p>
           {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
@@ -6393,9 +6393,9 @@ function BonusTab({ employee, rows, loading, onChanged, fromDate, toDate }) {
                     <tbody>
                       {items.map((r) => (
                         <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                          <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap w-24">{r.expense_code}</td>
+                          <td className="px-3 py-2.5 text-slate-600 text-xs whitespace-nowrap w-24">{r.expense_code}</td>
                           <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{nameOf(r.employee_id)}</td>
-                          <td className="px-3 py-2.5 text-slate-500 text-xs">{r.description}</td>
+                          <td className="px-3 py-2.5 text-slate-600 text-xs">{r.description}</td>
                           <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
                           <td className="px-3 py-2.5 text-right whitespace-nowrap w-20">
                             {canManage && (<>
@@ -6450,7 +6450,7 @@ function ExpensesModule({ employee }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Chi phí</h2>
-          <p className="text-xs text-slate-400">Tổng chi phí trong kỳ: {fmtVND(grand)}</p>
+          <p className="text-xs text-slate-500">Tổng chi phí trong kỳ: {fmtVND(grand)}</p>
         </div>
         <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
           <Filter size={14} className="text-slate-400" />
@@ -6550,12 +6550,12 @@ function SendServiceForm({ employee, onCancel, onSaved }) {
       <p className="text-sm font-medium text-slate-700 mb-3">Gửi máy đi Spa / Sửa chữa</p>
       <div className="space-y-3">
         <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Chọn máy trong kho *</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Chọn máy trong kho *</span>
           {picked ? (
             <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
               <div>
                 <p className="text-sm font-medium text-slate-700">{[picked.model, picked.storage, picked.color].filter(Boolean).join(" ")}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500">
                   IMEI {picked.imei || "—"}{canSeeCost && <> · giá vốn hiện tại {fmtVND(picked.cost_price)}</>}
                 </p>
               </div>
@@ -6571,11 +6571,11 @@ function SendServiceForm({ employee, onCancel, onSaved }) {
               </div>
               <div className="mt-2 max-h-48 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
                 {filtered.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-4 text-center">Không có máy Còn hàng nào khớp.</p>
+                  <p className="text-xs text-slate-500 py-4 text-center">Không có máy Còn hàng nào khớp.</p>
                 ) : filtered.map((d) => (
                   <button key={d.id} onClick={() => setPicked(d)} className="w-full text-left px-3 py-2 hover:bg-slate-50">
                     <p className="text-sm text-slate-700">{[d.model, d.storage, d.color].filter(Boolean).join(" ")}</p>
-                    <p className="text-xs text-slate-400">IMEI {d.imei || "—"}{canSeeCost && <> · {fmtVND(d.cost_price)}</>}</p>
+                    <p className="text-xs text-slate-500">IMEI {d.imei || "—"}{canSeeCost && <> · {fmtVND(d.cost_price)}</>}</p>
                   </button>
                 ))}
               </div>
@@ -6585,7 +6585,7 @@ function SendServiceForm({ employee, onCancel, onSaved }) {
 
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Loại dịch vụ *</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Loại dịch vụ *</span>
             <select value={type} onChange={(e) => setType(e.target.value)}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="spa">Spa — làm đẹp máy (giá vốn tăng)</option>
@@ -6596,11 +6596,11 @@ function SendServiceForm({ employee, onCancel, onSaved }) {
         </div>
 
         <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">
+          <span className="text-xs font-medium text-slate-600 mb-1 block">
             Đơn vị {type === "spa" ? "Spa" : "cung cấp màn"}
           </span>
           <SupplierPicker value={vendor} onSelect={setVendor} employee={employee} />
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-[11px] text-slate-500 mt-1">
             Chi phí sẽ treo thành công nợ phải trả đơn vị này. Để trống nếu tự làm, không phát sinh công nợ.
           </p>
         </div>
@@ -6727,7 +6727,7 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
                 <div className="grid sm:grid-cols-2 gap-3">
                   <TextField label="Đơn giá màn cũ tháo ra (đ) *" type="number" value={oldValue} onChange={(e) => setOldValue(e.target.value)} />
                   <label className="block">
-                    <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng màn cũ</span>
+                    <span className="text-xs font-medium text-slate-600 mb-1 block">Chất lượng màn cũ</span>
                     <select value={oldGrade} onChange={(e) => setOldGrade(e.target.value)}
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                       <option value="">— Chọn —</option>
@@ -6756,7 +6756,7 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
                     <div className="grid sm:grid-cols-2 gap-3">
                       <TextField label="Đơn giá màn mới (đ) *" type="number" value={newCost} onChange={(e) => setNewCost(e.target.value)} />
                       <label className="block">
-                        <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng màn mới</span>
+                        <span className="text-xs font-medium text-slate-600 mb-1 block">Chất lượng màn mới</span>
                         <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)}
                           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                           <option value="">— Chọn —</option>
@@ -6833,19 +6833,19 @@ function ScreenStockTab({ employee }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="p-3">
-          <p className="text-xs text-slate-400 mb-1">Màn còn trong kho</p>
+          <p className="text-xs text-slate-500 mb-1">Màn còn trong kho</p>
           <p className="text-lg font-semibold text-slate-800">{inStock.length}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-xs text-slate-400 mb-1">Giá trị tồn</p>
+          <p className="text-xs text-slate-500 mb-1">Giá trị tồn</p>
           <p className="text-lg font-semibold text-emerald-700">{fmtVND(stockValue)}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-xs text-slate-400 mb-1">Đã lắp máy</p>
+          <p className="text-xs text-slate-500 mb-1">Đã lắp máy</p>
           <p className="text-lg font-semibold text-sky-700">{rows.filter((r) => r.status === "installed").length}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-xs text-slate-400 mb-1">Tháo ra từ máy</p>
+          <p className="text-xs text-slate-500 mb-1">Tháo ra từ máy</p>
           <p className="text-lg font-semibold text-slate-600">{rows.filter((r) => r.origin === "removed").length}</p>
         </Card>
       </div>
@@ -6875,7 +6875,7 @@ function ScreenStockTab({ employee }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã</th>
                 <th className="px-3 py-2">Loại màn</th>
                 <th className="px-3 py-2">Chất lượng</th>
@@ -6887,7 +6887,7 @@ function ScreenStockTab({ employee }) {
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.screen_code}</td>
+                    <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.screen_code}</td>
                     <td className="px-3 py-2.5 text-slate-700">{r.model || "—"}</td>
                     <td className="px-3 py-2.5 text-slate-600 text-xs">{r.grade || "chưa đánh giá"}</td>
                     <td className="px-3 py-2.5 text-xs">
@@ -6981,7 +6981,7 @@ function ScreenPurchaseForm({ employee, onCancel, onSaved }) {
           <TextField label="Loại màn *" value={model} onChange={(e) => setModel(e.target.value)}
             placeholder="iPhone 13 Pro" list="dl-models-screen" />
           <label className="block">
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Chất lượng</span>
             <select value={grade} onChange={(e) => setGrade(e.target.value)}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
               <option value="">— Chọn —</option>
@@ -6996,15 +6996,15 @@ function ScreenPurchaseForm({ employee, onCancel, onSaved }) {
           {mode === "batch" ? (
             <TextField label="Số lượng *" type="number" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="10" />
           ) : (
-            <div className="flex items-end pb-2 text-xs text-slate-400">Số lượng: 1 tấm</div>
+            <div className="flex items-end pb-2 text-xs text-slate-500">Số lượng: 1 tấm</div>
           )}
           <TextField label="Ngày nhập" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
 
         <div>
-          <span className="text-xs font-medium text-slate-500 mb-1 block">Nhà cung cấp</span>
+          <span className="text-xs font-medium text-slate-600 mb-1 block">Nhà cung cấp</span>
           <SupplierPicker value={vendor} onSelect={setVendor} employee={employee} />
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-[11px] text-slate-500 mt-1">
             Tiền hàng treo thành công nợ phải trả đơn vị này. Để trống nếu không theo dõi công nợ.
           </p>
         </div>
@@ -7019,7 +7019,7 @@ function ScreenPurchaseForm({ employee, onCancel, onSaved }) {
               <span className="text-slate-500">Tổng tiền</span>
               <span className="font-semibold text-slate-800">{fmtVND(total)}</span>
             </div>
-            {n > 1 && <p className="text-[11px] text-slate-400 pt-1">Hệ thống tạo {n} bản ghi màn riêng, mỗi tấm một mã MH để theo dõi lắp vào máy nào.</p>}
+            {n > 1 && <p className="text-[11px] text-slate-500 pt-1">Hệ thống tạo {n} bản ghi màn riêng, mỗi tấm một mã MH để theo dõi lắp vào máy nào.</p>}
           </div>
         )}
 
@@ -7076,7 +7076,7 @@ function PayScreenPurchaseModal({ row, employee, onClose, onDone }) {
           </div>
           <TextField label="Số tiền thanh toán (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển tiền *</span>
+            <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chuyển tiền *</span>
             <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
           </div>
           {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
@@ -7122,7 +7122,7 @@ function ScreenPurchaseTab({ employee }) {
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800">
             Còn nợ nhà cung cấp màn: <span className="font-medium">{fmtVND(totalDebt)}</span>
           </div>
-        ) : <span className="text-xs text-slate-400">{rows.length} phiếu nhập màn</span>}
+        ) : <span className="text-xs text-slate-500">{rows.length} phiếu nhập màn</span>}
         {canCreate && (
           <button onClick={() => { setShowForm((s) => !s); setOkMsg(null); }}
             className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
@@ -7151,7 +7151,7 @@ function ScreenPurchaseTab({ employee }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Mã</th>
                 <th className="px-3 py-2">Ngày</th>
                 <th className="px-3 py-2">Loại màn</th>
@@ -7166,13 +7166,13 @@ function ScreenPurchaseTab({ employee }) {
                   const rem = Math.max(0, Number(r.remaining || 0));
                   return (
                     <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                      <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.purchase_code}</td>
-                      <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.purchase_date)}</td>
+                      <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.purchase_code}</td>
+                      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.purchase_date)}</td>
                       <td className="px-3 py-2.5">
                         <p className="text-slate-700">{r.model}</p>
-                        <p className="text-xs text-slate-400">{r.grade || "chưa đánh giá"}</p>
+                        <p className="text-xs text-slate-500">{r.grade || "chưa đánh giá"}</p>
                       </td>
-                      <td className="px-3 py-2.5 text-slate-500 text-xs">{r.vendor_name || "—"}</td>
+                      <td className="px-3 py-2.5 text-slate-600 text-xs">{r.vendor_name || "—"}</td>
                       <td className="px-3 py-2.5 text-right text-slate-600 whitespace-nowrap">
                         {r.quantity} / <span className="text-emerald-600">{r.still_in_stock}</span>
                       </td>
@@ -7242,7 +7242,7 @@ function ServiceModule({ employee }) {
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Spa / Sửa chữa</h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {tab === "tickets"
               ? `${open.length} máy đang xử lý · giá vốn ${fmtVND(openValue)}`
               : tab === "screens" ? "Màn tháo ra và màn đã mua, theo dõi chất lượng"
@@ -7282,7 +7282,7 @@ function ServiceModule({ employee }) {
           )}
 
           <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-            <p className="text-xs text-slate-400">{open.length} phiếu đang xử lý</p>
+            <p className="text-xs text-slate-500">{open.length} phiếu đang xử lý</p>
             <button onClick={() => setShowDone((s) => !s)} className="text-xs text-brand-600 hover:underline">
               {showDone ? "Chỉ xem đang xử lý" : "Xem cả phiếu đã hoàn tất"}
             </button>
@@ -7296,7 +7296,7 @@ function ServiceModule({ employee }) {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                  <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                     <th className="px-3 py-2">Mã</th>
                     <th className="px-3 py-2">Máy</th>
                     <th className="px-3 py-2">Loại</th>
@@ -7310,13 +7310,13 @@ function ServiceModule({ employee }) {
                       const change = Number(r.cost_after || 0) - Number(r.cost_before || 0);
                       return (
                         <tr key={r.id} className="border-b border-slate-50 last:border-0">
-                          <td className="px-3 py-2.5 text-slate-400 doc-code whitespace-nowrap">{r.ticket_code}</td>
+                          <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.ticket_code}</td>
                           <td className="px-3 py-2.5">
                             <p className="text-slate-700">{[r.model, r.storage, r.color].filter(Boolean).join(" ")}</p>
-                            <p className="text-xs text-slate-400">IMEI {r.imei || "—"} · gửi {fmtDate(r.sent_at)}</p>
+                            <p className="text-xs text-slate-500">IMEI {r.imei || "—"} · gửi {fmtDate(r.sent_at)}</p>
                           </td>
                           <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{SERVICE_TYPE_LABELS[r.service_type]}</td>
-                          <td className="px-3 py-2.5 text-slate-500 text-xs">{r.vendor_name || "Tự làm"}</td>
+                          <td className="px-3 py-2.5 text-slate-600 text-xs">{r.vendor_name || "Tự làm"}</td>
                           <td className="px-3 py-2.5 text-right whitespace-nowrap">
                             <p className="text-slate-600">{fmtVND(r.cost_before)}</p>
                             {r.status === "done" && (
@@ -7423,7 +7423,7 @@ function AppShell({ employee, onSignOut }) {
           <p className="text-[15px] font-semibold text-brand-800 leading-snug">
             {employee.stores?.name || "Cửa hàng"}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-[11px] text-slate-500 mt-0.5">
             {employee.full_name} · {ROLE_LABELS[employee.role] || employee.role}
           </p>
         </div>
@@ -7435,7 +7435,7 @@ function AppShell({ employee, onSignOut }) {
             return (
               <div key={item.key}>
                 {newGroup && (
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-300 px-3 pt-4 pb-1.5">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400 px-3 pt-4 pb-1.5">
                     {item.group}
                   </p>
                 )}
@@ -7446,7 +7446,7 @@ function AppShell({ employee, onSignOut }) {
                     "w-full flex items-center gap-3 pl-3 pr-2 py-2 rounded-lg text-[13.5px] transition-colors relative",
                     active
                       ? "bg-brand-50 text-brand-800 font-medium"
-                      : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                   )}
                 >
                   {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-brand-600" />}
@@ -7470,7 +7470,7 @@ function AppShell({ employee, onSignOut }) {
       <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200/80 sticky top-0 z-20 print:hidden">
         <div>
           <p className="text-sm font-semibold text-brand-800 leading-tight">{employee.stores?.name || "Cửa hàng"}</p>
-          <p className="text-[11px] text-slate-400">{ROLE_LABELS[employee.role] || employee.role}</p>
+          <p className="text-[11px] text-slate-500">{ROLE_LABELS[employee.role] || employee.role}</p>
         </div>
         <button onClick={() => setMobileMenuOpen((s) => !s)}
           aria-label="Mở menu" className="text-slate-400 hover:text-brand-700 p-1"><Menu size={20} /></button>
@@ -7480,7 +7480,7 @@ function AppShell({ employee, onSignOut }) {
           {visibleNav.map((item, i) => (
             <div key={item.key}>
               {item.group && item.group !== visibleNav[i - 1]?.group && (
-                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-300 px-3 pt-3 pb-1">{item.group}</p>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400 px-3 pt-3 pb-1">{item.group}</p>
               )}
               <button
                 onClick={() => { setTab(item.key); setMobileMenuOpen(false); }}
