@@ -759,7 +759,6 @@ function InventoryModule({ employee, onCountChange }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [duplicateImei, setDuplicateImei] = useState(null);
   const [historyImei, setHistoryImei] = useState(null);
 
   const canDelete = employee.role === "quan_ly";
@@ -790,14 +789,7 @@ function InventoryModule({ employee, onCountChange }) {
     );
   });
 
-  const checkImei = async (imei) => {
-    if (!imei.trim()) { setDuplicateImei(null); return; }
-    const { data } = await supabase.from("devices").select("*").eq("imei", imei.trim()).maybeSingle();
-    setDuplicateImei(data || null);
-  };
-
-  const openNew = () => { setEditing(null); setDuplicateImei(null); setShowForm(true); };
-  const openEdit = (d) => { setEditing(d); setDuplicateImei(null); setShowForm(true); };
+  const openEdit = (d) => { setEditing(d); setShowForm(true); };
 
   const remove = async (d) => {
     if (!confirm(`Xóa máy ${d.imei ? `IMEI "${d.imei}"` : `"${d.model}" (chưa có IMEI)`} khỏi kho?`)) return;
@@ -833,19 +825,16 @@ function InventoryModule({ employee, onCountChange }) {
             {devices.length} máy · {devices.filter((d) => d.status === "in_stock").length} còn hàng
           </p>
         </div>
-        {canManage && (
-          <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
-            <Plus size={15} /> Nhập máy
-          </button>
-        )}
       </div>
 
-      {!canManage && (
-        <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-slate-600 flex items-center gap-2">
-          <ShieldAlert size={15} className="shrink-0" />
-          Bạn chỉ có quyền xem Kho hàng — mọi thao tác nhập/sửa/xóa máy do Quản lý cửa hàng thực hiện.
-        </div>
-      )}
+      <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-slate-600 flex items-start gap-2">
+        <ArrowLeftRight size={15} className="shrink-0 mt-0.5" />
+        <span>
+          Máy chỉ vào kho qua <span className="font-medium">Nhập máy/Thu cũ</span> hoặc khi khách đổi máy trong đơn bán —
+          để mỗi chiếc luôn có phiếu nhập, biết mua của ai và ghi đúng công nợ.
+          {!canManage && " Bạn chỉ có quyền xem Kho hàng."}
+        </span>
+      </div>
 
       {canManage && devices.some((d) => !d.imei) && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-800 flex items-center gap-2">
@@ -854,13 +843,13 @@ function InventoryModule({ employee, onCountChange }) {
         </div>
       )}
 
-      {canManage && showForm && (
+      {canManage && showForm && editing && (
         <DeviceForm
           initial={editing}
           employee={employee}
-          duplicateImei={!editing ? duplicateImei : null}
-          onCancel={() => setShowForm(false)}
-          onSaved={() => { setShowForm(false); load(); }}
+          duplicateImei={null}
+          onCancel={() => { setShowForm(false); setEditing(null); }}
+          onSaved={() => { setShowForm(false); setEditing(null); load(); }}
         />
       )}
 
@@ -872,7 +861,7 @@ function InventoryModule({ employee, onCountChange }) {
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
             <input
               value={search}
-              onChange={(e) => { setSearch(e.target.value); if (!editing) checkImei(e.target.value); }}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm theo IMEI, model, màu..."
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
             />
