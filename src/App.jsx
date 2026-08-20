@@ -1282,7 +1282,6 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
   const addRow = () => setRows((rs) => [...rs, {
     method: "cash", amount: remaining > 0 ? remaining : "", bank_account_id: null,
     installment_provider: "", installment_contract_code: "", note: "",
-    trade_in_imei: "", trade_in_model: "", trade_in_storage: "", trade_in_color: "", trade_in_condition: "used",
   }]);
   const removeRow = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
@@ -1302,14 +1301,13 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
                 <option value="cash">Tiền mặt</option>
                 <option value="bank_transfer">Chuyển khoản</option>
                 <option value="installment">Trả góp</option>
-                <option value="trade_in">Đổi máy cũ</option>
                 {supplierDebt > 0 && <option value="debt_offset">Bù trừ công nợ</option>}
               </select>
               <input
                 type="number"
                 value={r.amount}
                 onChange={(e) => update(i, { amount: e.target.value })}
-                placeholder={r.method === "trade_in" ? "Giá thu mua" : r.method === "debt_offset" ? "Số tiền cấn trừ" : "Số tiền"}
+                placeholder={r.method === "debt_offset" ? "Số tiền bù trừ" : "Số tiền"}
                 className="w-32 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
               />
               {rows.length > 1 && (
@@ -1369,42 +1367,6 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
                 />
               </div>
             )}
-            {r.method === "trade_in" && (
-              <div className="pl-6 space-y-2">
-                <p className="text-[11px] text-slate-400">Máy khách đổi sẽ tự động nhập vào Kho hàng (Còn hàng) khi hoàn tất đơn.</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    value={r.trade_in_imei}
-                    onChange={(e) => update(i, { trade_in_imei: e.target.value })}
-                    placeholder="Số IMEI máy đổi *"
-                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                  />
-                  <input
-                    value={r.trade_in_model}
-                    onChange={(e) => update(i, { trade_in_model: e.target.value })}
-                    placeholder="Model máy đổi *"
-                    list={`dl-models-tradein-${i}`}
-                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                  />
-                  <input
-                    value={r.trade_in_storage}
-                    onChange={(e) => update(i, { trade_in_storage: e.target.value })}
-                    placeholder="Dung lượng"
-                    list="dl-storage"
-                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                  />
-                  <input
-                    value={r.trade_in_color}
-                    onChange={(e) => update(i, { trade_in_color: e.target.value })}
-                    placeholder="Màu sắc"
-                    list={`dl-colors-tradein-${i}`}
-                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                  />
-                  <datalist id={`dl-models-tradein-${i}`}>{IPHONE_MODEL_LIST.map((m) => <option key={m} value={m} />)}</datalist>
-                  <datalist id={`dl-colors-tradein-${i}`}>{coloroptionsForModel(r.trade_in_model).map((c) => <option key={c} value={c} />)}</datalist>
-                </div>
-              </div>
-            )}
           </div>
         );
       })}
@@ -1436,7 +1398,6 @@ function OrderForm({ onCancel, onSaved, employee }) {
   const [payments, setPayments] = useState([{
     method: "cash", amount: "", bank_account_id: null,
     installment_provider: "", installment_contract_code: "", note: "",
-    trade_in_imei: "", trade_in_model: "", trade_in_storage: "", trade_in_color: "", trade_in_condition: "used",
   }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1481,13 +1442,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
     // Dòng để trống = chưa thu -> bỏ qua, cho phép đơn nợ toàn bộ
     const activePayments = payments.filter((r) => String(r.amount).trim() !== "");
     const paidTotal = activePayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    const tradeInTotal = activePayments.filter((r) => r.method === "trade_in")
-      .reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    const nonTradeIn = paidTotal - tradeInTotal;
-    if (Math.round(nonTradeIn) > Math.round(total)) {
-      setError("Tiền mặt/chuyển khoản/trả góp đang vượt tổng tiền đơn hàng."); return;
-    }
-    if (Math.round(paidTotal) > Math.round(total) && tradeInTotal <= 0) {
+    if (Math.round(paidTotal) > Math.round(total)) {
       setError("Tổng các hình thức thanh toán đang lớn hơn tổng tiền đơn hàng."); return;
     }
     if (activePayments.some((r) => Number(r.amount) <= 0)) { setError("Số tiền thanh toán phải lớn hơn 0."); return; }
@@ -1511,23 +1466,6 @@ function OrderForm({ onCancel, onSaved, employee }) {
       setSupplierDebt(available);
       if (offsetTotal > available) {
         setError(`Cửa hàng chỉ đang nợ ${fmtVND(available)} — không cấn trừ được ${fmtVND(offsetTotal)}.`);
-        return;
-      }
-    }
-    const tradeInRows = activePayments.filter((r) => r.method === "trade_in");
-    for (const r of tradeInRows) {
-      if (!r.trade_in_imei?.trim() || !r.trade_in_model?.trim()) {
-        setError("Vui lòng nhập đủ IMEI và model cho máy khách đổi.");
-        return;
-      }
-    }
-    // Kiểm tra IMEI máy đổi không trùng với kho hiện có, không trùng nhau giữa các dòng
-    const imeis = tradeInRows.map((r) => r.trade_in_imei.trim());
-    if (new Set(imeis).size !== imeis.length) { setError("Các IMEI máy đổi bị trùng nhau."); return; }
-    if (tradeInRows.length > 0) {
-      const { data: dupCheck } = await supabase.from("devices").select("imei").in("imei", imeis);
-      if (dupCheck && dupCheck.length > 0) {
-        setError(`IMEI máy đổi "${dupCheck[0].imei}" đã tồn tại trong kho.`);
         return;
       }
     }
@@ -1574,35 +1512,6 @@ function OrderForm({ onCancel, onSaved, employee }) {
       const { data: order, error: orderErr } = await supabase.from("sales_orders").insert(orderPayload).select().maybeSingle();
       if (orderErr) throw orderErr;
 
-      // Với mỗi dòng "Đổi máy cũ": tạo máy mới vào Kho + phiếu thu mua liên kết đơn này
-      const tradeInDeviceIds = {};
-      for (const r of tradeInRows) {
-        const { data: newDevice, error: newDevErr } = await supabase.from("devices").insert({
-          imei: r.trade_in_imei.trim(), model: r.trade_in_model.trim(),
-          storage: r.trade_in_storage?.trim() || null, color: r.trade_in_color?.trim() || null,
-          condition: "used", status: "in_stock", cost_price: Number(r.amount),
-          supplier: `Thu đổi từ khách — đơn ${order.order_code}`, import_date: new Date().toISOString().slice(0, 10),
-          created_by: employee.id, updated_by: employee.id, store_id: employee.store_id,
-        }).select().maybeSingle();
-        if (newDevErr) throw newDevErr;
-        tradeInDeviceIds[r.trade_in_imei.trim()] = newDevice.id;
-
-        const { data: purchase, error: poErr } = await supabase.from("purchase_orders").insert({
-          source_type: "customer",
-          customer_id: customer.id, device_id: newDevice.id, linked_sale_order_id: order.id,
-          purchase_price: Number(r.amount), payment_method: "trade_in", created_by: employee.id,
-          paid_amount: 0, store_id: employee.store_id,
-        }).select().maybeSingle();
-        if (poErr) throw poErr;
-
-        const { error: pcontractErr } = await supabase.from("contracts").insert({ purchase_order_id: purchase.id, created_by: employee.id, store_id: employee.store_id });
-        if (pcontractErr) throw pcontractErr;
-
-        await supabase.from("audit_logs").insert({
-          table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id, store_id: employee.store_id,
-        });
-      }
-
       const paymentRows = activePayments.map((r) => ({
         order_id: order.id,
         method: r.method,
@@ -1610,7 +1519,6 @@ function OrderForm({ onCancel, onSaved, employee }) {
         bank_account_id: r.method === "bank_transfer" ? (r.bank_account_id || null) : null,
         installment_provider: r.method === "installment" ? (r.installment_provider.trim() || null) : null,
         installment_contract_code: r.method === "installment" ? (r.installment_contract_code.trim() || null) : null,
-        trade_in_device_id: r.method === "trade_in" ? tradeInDeviceIds[r.trade_in_imei.trim()] : null,
         note: r.note?.trim() || null,
         created_by: employee.id,
         store_id: employee.store_id,
@@ -1735,16 +1643,6 @@ function OrderForm({ onCancel, onSaved, employee }) {
             supplierDebt={supplierDebt} supplierName={linkedSupplier?.name || ""}
           />
         </div>
-        {paidNow > total && (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2.5 text-xs text-indigo-800 flex items-start gap-2">
-            <Banknote size={15} className="shrink-0 mt-0.5" />
-            <span>
-              Máy khách đổi có giá trị cao hơn máy bán — cửa hàng sẽ nợ khách{" "}
-              <span className="font-medium">{fmtVND(paidNow - total)}</span>.
-              Khoản này hiện ở danh sách đơn hàng để trả lại hoặc trừ vào lần mua sau.
-            </span>
-          </div>
-        )}
         {paidNow < total && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
             <p className="text-xs text-amber-800">
