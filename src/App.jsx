@@ -3973,6 +3973,202 @@ function ReportKpiCard({ label, value, icon: Icon, sub }) {
   );
 }
 
+function CommissionSection({ employee, fromDate, toDate }) {
+  const [summary, setSummary] = useState([]);
+  const [detail, setDetail] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState(null);
+  const [showExcluded, setShowExcluded] = useState(false);
+
+  const canSeeMargin = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: s }, { data: d }] = await Promise.all([
+      supabase.rpc("commission_by_period", { p_from: fromDate, p_to: toDate }),
+      supabase.from("v_sales_commission").select("*")
+        .gte("sale_date", fromDate).lte("sale_date", toDate)
+        .order("sale_date", { ascending: false }).limit(3000),
+    ]);
+    setSummary(s || []);
+    setDetail(d || []);
+    setLoading(false);
+  }, [fromDate, toDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totalDevices = summary.reduce((a, r) => a + Number(r.device_count || 0), 0);
+  const totalRevenue = summary.reduce((a, r) => a + Number(r.revenue || 0), 0);
+  const totalMargin = summary.reduce((a, r) => a + Number(r.gross_margin || 0), 0);
+  const excluded = detail.filter((r) => !r.counts_for_commission);
+
+  const exportExcel = () => {
+    const rows = detail
+      .filter((r) => showExcluded || r.counts_for_commission)
+      .map((r) => ({
+        "Ngày bán": fmtDate(r.sale_date),
+        "Mã đơn": r.order_code,
+        "Nhân viên": r.employee_name || "",
+        "Khách hàng": r.customer_name || "",
+        "IMEI": r.imei || "",
+        "Máy": [r.model, r.storage, r.color].filter(Boolean).join(" "),
+        "Giá bán": Number(r.total_amount || 0),
+        ...(canSeeMargin ? {
+          "Giá vốn": Number(r.cost_price || 0),
+          "Lãi gộp": Number(r.gross_margin || 0),
+        } : {}),
+        "Tính hoa hồng": r.counts_for_commission ? "Có" : "Không",
+        "Lý do loại": r.excluded_reason || "",
+      }));
+
+    const sum = summary.map((r) => ({
+      "Nhân viên": r.employee_name,
+      "Số máy": Number(r.device_count || 0),
+      "Doanh thu": Number(r.revenue || 0),
+      ...(canSeeMargin ? {
+        "Lãi gộp": Number(r.gross_margin || 0),
+        "Lãi TB/máy": Number(r.avg_margin || 0),
+      } : {}),
+      "Đơn bị loại": Number(r.excluded_count || 0),
+    }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sum), "TongHop");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "ChiTiet");
+    XLSX.writeFile(wb, `Hoa-hong-${fromDate}_${toDate}.xlsx`);
+  };
+
+  return (
+    <Card className="p-4 sm:p-5 mb-4">
+      <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+        <p className="text-sm font-medium text-slate-700">Máy bán được theo nhân viên</p>
+        <button onClick={exportExcel} disabled={detail.length === 0}
+          className="text-xs border border-brand-300 text-brand-700 hover:bg-brand-50 disabled:opacity-50 rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+          <FileSpreadsheet size={13} /> Xuất Excel
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400 mb-3">
+        Chỉ tính đơn bán khách lẻ. Không tính đơn đã hủy, khách trả máy, bán sỉ cho nhà cung cấp, và xuất bán nội bộ.
+      </p>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="bg-slate-50 rounded-xl p-3">
+          <p className="text-xs text-slate-400 mb-1">Máy tính hoa hồng</p>
+          <p className="text-lg font-semibold text-slate-800">{totalDevices}</p>
+        </div>
+        <div className="bg-emerald-50 rounded-xl p-3">
+          <p className="text-xs text-emerald-600 mb-1">Doanh thu</p>
+          <p className="text-lg font-semibold text-emerald-700">{fmtVND(totalRevenue)}</p>
+        </div>
+        {canSeeMargin ? (
+          <div className="bg-brand-50 rounded-xl p-3">
+            <p className="text-xs text-brand-600 mb-1">Lãi gộp</p>
+            <p className="text-lg font-semibold text-brand-700">{fmtVND(totalMargin)}</p>
+          </div>
+        ) : (
+          <div className="bg-slate-50 rounded-xl p-3">
+            <p className="text-xs text-slate-400 mb-1">Đơn bị loại</p>
+            <p className="text-lg font-semibold text-slate-600">{excluded.length}</p>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-300" /></div>
+      ) : summary.length === 0 ? (
+        <p className="text-xs text-slate-400 py-6 text-center">Không có đơn bán nào trong khoảng ngày đã chọn.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <th className="px-2 py-2">Nhân viên</th>
+              <th className="px-2 py-2 text-right">Số máy</th>
+              <th className="px-2 py-2 text-right">Doanh thu</th>
+              {canSeeMargin && <th className="px-2 py-2 text-right">Lãi gộp</th>}
+              {canSeeMargin && <th className="px-2 py-2 text-right">Lãi TB/máy</th>}
+              <th className="px-2 py-2 text-right">Bị loại</th>
+              <th className="px-2 py-2"></th>
+            </tr></thead>
+            <tbody>
+              {summary.map((r) => {
+                const isOpen = openId === r.employee_id;
+                const mine = detail.filter((x) => x.employee_id === r.employee_id
+                  && (showExcluded || x.counts_for_commission));
+                return (
+                  <React.Fragment key={r.employee_id}>
+                    <tr className="border-b border-slate-50 hover:bg-slate-50/60 cursor-pointer"
+                      onClick={() => setOpenId(isOpen ? null : r.employee_id)}>
+                      <td className="px-2 py-2.5 font-medium text-slate-700">{r.employee_name}</td>
+                      <td className="px-2 py-2.5 text-right font-semibold text-slate-800">{r.device_count}</td>
+                      <td className="px-2 py-2.5 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.revenue)}</td>
+                      {canSeeMargin && <td className="px-2 py-2.5 text-right text-brand-700 whitespace-nowrap">{fmtVND(r.gross_margin)}</td>}
+                      {canSeeMargin && <td className="px-2 py-2.5 text-right text-slate-500 whitespace-nowrap">{fmtVND(r.avg_margin)}</td>}
+                      <td className="px-2 py-2.5 text-right">
+                        {Number(r.excluded_count) > 0
+                          ? <span className="text-xs px-2 py-0.5 rounded-full bg-rose-50 text-rose-600">{r.excluded_count}</span>
+                          : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-2 py-2.5 text-right">
+                        <ChevronDown size={15} className={classNames("inline text-slate-300 transition-transform", isOpen && "rotate-180")} />
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={canSeeMargin ? 7 : 5} className="bg-slate-50/70 px-3 py-3">
+                          {mine.length === 0 ? (
+                            <p className="text-xs text-slate-400 text-center py-2">Không có đơn nào.</p>
+                          ) : (
+                            <table className="w-full text-xs">
+                              <thead><tr className="text-left text-slate-400 border-b border-slate-200">
+                                <th className="py-1.5">Ngày</th>
+                                <th className="py-1.5">Đơn</th>
+                                <th className="py-1.5">Máy</th>
+                                <th className="py-1.5">Khách</th>
+                                <th className="py-1.5 text-right">Giá bán</th>
+                                {canSeeMargin && <th className="py-1.5 text-right">Lãi</th>}
+                              </tr></thead>
+                              <tbody>
+                                {mine.map((x) => (
+                                  <tr key={x.order_id} className={classNames("border-b border-slate-100 last:border-0",
+                                    !x.counts_for_commission && "opacity-60")}>
+                                    <td className="py-1.5 text-slate-500 whitespace-nowrap">{fmtDate(x.sale_date)}</td>
+                                    <td className="py-1.5 text-slate-400">{x.order_code}</td>
+                                    <td className="py-1.5 text-slate-600">
+                                      {[x.model, x.storage, x.color].filter(Boolean).join(" ")}
+                                      <span className="text-slate-400"> · {x.imei || "—"}</span>
+                                      {!x.counts_for_commission && (
+                                        <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-rose-50 text-rose-600">{x.excluded_reason}</span>
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 text-slate-500">{x.customer_name || "—"}</td>
+                                    <td className="py-1.5 text-right text-slate-700 whitespace-nowrap">{fmtVND(x.total_amount)}</td>
+                                    {canSeeMargin && <td className="py-1.5 text-right text-brand-700 whitespace-nowrap">{fmtVND(x.gross_margin)}</td>}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {excluded.length > 0 && (
+        <button onClick={() => setShowExcluded((s) => !s)}
+          className="mt-3 text-xs text-brand-600 hover:underline">
+          {showExcluded ? "Ẩn các đơn không tính hoa hồng" : `Hiện ${excluded.length} đơn không tính hoa hồng`}
+        </button>
+      )}
+    </Card>
+  );
+}
+
 function ReportsModule({ employee }) {
   const [fromDate, setFromDate] = useState(startOfMonth());
   const [toDate, setToDate] = useState(todayStr());
@@ -4189,6 +4385,8 @@ function ReportsModule({ employee }) {
               </div>
             </div>
           </Card>
+
+          <CommissionSection employee={employee} fromDate={fromDate} toDate={toDate} />
 
           <Card className="p-4 sm:p-5 mb-4">
             <p className="text-sm font-medium text-slate-700 mb-3">Doanh thu theo ngày</p>
