@@ -3362,6 +3362,240 @@ function ComingSoonModule({ title, icon: Icon, phase }) {
 /* Shell: sidebar + bottom nav + routing between modules                 */
 /* ---------------------------------------------------------------------- */
 
+
+/* -------------------------------------------------------------- */
+/* Công nợ đối tác — đọc trực tiếp từ sổ cái                       */
+/* -------------------------------------------------------------- */
+
+const LEDGER_TYPE_LABELS = {
+  sale: "Bán máy",
+  sale_receipt: "Thu tiền khách",
+  purchase: "Nhập máy",
+  purchase_payment: "Trả tiền NCC",
+  offset: "Bù trừ công nợ",
+  adjustment: "Điều chỉnh",
+};
+
+function PartnerLedgerPanel({ partner }) {
+  const [entries, setEntries] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from("partner_ledger")
+        .select("*, sales_orders(order_code), purchase_orders(purchase_code), debt_offsets:offset_id(offset_code)")
+        .eq("partner_id", partner.partner_id)
+        .order("entry_date", { ascending: true })
+        .order("created_at", { ascending: true })
+        .limit(500);
+      if (active) { setEntries(data || []); setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [partner.partner_id]);
+
+  if (loading) return <div className="flex justify-center py-6"><Loader2 className="animate-spin text-slate-300" size={18} /></div>;
+  if (!entries || entries.length === 0) return <p className="text-xs text-slate-400 py-4 text-center">Chưa có bút toán nào.</p>;
+
+  let runR = 0, runP = 0;
+  const rows = entries.map((e) => {
+    if (e.account === "receivable") runR += Number(e.amount); else runP += Number(e.amount);
+    return { ...e, runR, runP };
+  });
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead><tr className="text-left text-slate-400 border-b border-slate-200">
+          <th className="px-2 py-1.5">Mã</th>
+          <th className="px-2 py-1.5">Ngày</th>
+          <th className="px-2 py-1.5">Nội dung</th>
+          <th className="px-2 py-1.5">Chứng từ</th>
+          <th className="px-2 py-1.5 text-right">Phải thu</th>
+          <th className="px-2 py-1.5 text-right">Phải trả</th>
+        </tr></thead>
+        <tbody>
+          {rows.map((e) => {
+            const doc = e.sales_orders?.order_code || e.purchase_orders?.purchase_code || e.debt_offsets?.offset_code || "—";
+            const amt = Number(e.amount);
+            return (
+              <tr key={e.id} className="border-b border-slate-100 last:border-0">
+                <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{e.entry_code}</td>
+                <td className="px-2 py-1.5 text-slate-500 whitespace-nowrap">{fmtDate(e.entry_date)}</td>
+                <td className="px-2 py-1.5 text-slate-600 whitespace-nowrap">
+                  {LEDGER_TYPE_LABELS[e.entry_type] || e.entry_type}
+                  {e.entry_type === "offset" && <span className="ml-1 text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">BT</span>}
+                </td>
+                <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{doc}</td>
+                <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                  {e.account === "receivable" ? (
+                    <span className={amt > 0 ? "text-slate-700" : "text-emerald-600"}>
+                      {amt > 0 ? "+" : ""}{fmtVND(amt)} <span className="text-slate-300">| {fmtVND(e.runR)}</span>
+                    </span>
+                  ) : <span className="text-slate-200">—</span>}
+                </td>
+                <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                  {e.account === "payable" ? (
+                    <span className={amt > 0 ? "text-slate-700" : "text-emerald-600"}>
+                      {amt > 0 ? "+" : ""}{fmtVND(amt)} <span className="text-slate-300">| {fmtVND(e.runP)}</span>
+                    </span>
+                  ) : <span className="text-slate-200">—</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="text-[11px] text-slate-400 mt-2">
+        Cột nhạt bên phải mỗi số là số dư lũy kế. Sổ cái bất biến — mọi sai sót được sửa bằng bút toán điều chỉnh, không xóa dòng cũ.
+      </p>
+    </div>
+  );
+}
+
+function DebtModule({ employee }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all"); // all | receivable | payable
+  const [openId, setOpenId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("v_partner_balance").select("*").limit(2000);
+    if (!error) setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const active = rows.filter((r) => Number(r.receivable) !== 0 || Number(r.payable) !== 0);
+  const filtered = active.filter((r) => {
+    if (filter === "receivable" && Number(r.receivable) <= 0) return false;
+    if (filter === "payable" && Number(r.payable) <= 0) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return r.name?.toLowerCase().includes(q) || r.phone?.toLowerCase().includes(q) || r.partner_code?.toLowerCase().includes(q);
+  }).sort((a, b) => (Number(b.receivable) + Number(b.payable)) - (Number(a.receivable) + Number(a.payable)));
+
+  const totalR = active.reduce((s, r) => s + Math.max(0, Number(r.receivable)), 0);
+  const totalP = active.reduce((s, r) => s + Math.max(0, Number(r.payable)), 0);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Công nợ đối tác</h2>
+          <p className="text-xs text-slate-400">{active.length} đối tác đang có số dư</p>
+        </div>
+        <button onClick={load} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-3 py-2 text-sm flex items-center gap-1.5">
+          <Loader2 size={14} className={loading ? "animate-spin" : ""} /> Tải lại
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <Card className="p-4">
+          <p className="text-xs text-slate-400 mb-1">Phải thu — khách nợ cửa hàng</p>
+          <p className="text-xl font-semibold text-amber-600">{fmtVND(totalR)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-slate-400 mb-1">Phải trả — cửa hàng nợ đối tác</p>
+          <p className="text-xl font-semibold text-indigo-600">{fmtVND(totalP)}</p>
+        </Card>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <div className="p-3 border-b border-slate-100 flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm theo tên, SĐT, mã đối tác..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+          {[["all", "Tất cả"], ["receivable", "Phải thu"], ["payable", "Phải trả"]].map(([k, label]) => (
+            <button
+              key={k} onClick={() => setFilter(k)}
+              className={classNames(
+                "px-3 py-2 rounded-xl text-sm border",
+                filter === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200"
+              )}
+            >{label}</button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={Banknote} text="Không có đối tác nào đang có công nợ." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Đối tác</th>
+                <th className="px-3 py-2">Vai trò</th>
+                <th className="px-3 py-2 text-right">Phải thu</th>
+                <th className="px-3 py-2 text-right">Phải trả</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {filtered.map((r) => {
+                  const rec = Number(r.receivable), pay = Number(r.payable);
+                  const isOpen = openId === r.partner_id;
+                  return (
+                    <React.Fragment key={r.partner_id}>
+                      <tr
+                        className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 cursor-pointer"
+                        onClick={() => setOpenId(isOpen ? null : r.partner_id)}
+                      >
+                        <td className="px-3 py-2.5">
+                          <p className="font-medium text-slate-700">{r.name}</p>
+                          <p className="text-xs text-slate-400">{r.partner_code} {r.phone ? `· ${r.phone}` : ""}</p>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex gap-1 flex-wrap">
+                            {r.customer_id && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Khách</span>}
+                            {r.supplier_id && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">NCC</span>}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {rec > 0 ? <span className="text-amber-600 font-medium">{fmtVND(rec)}</span> : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {pay > 0 ? <span className="text-indigo-600 font-medium">{fmtVND(pay)}</span> : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <ChevronDown size={15} className={classNames("inline text-slate-300 transition-transform", isOpen && "rotate-180")} />
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={5} className="bg-slate-50/70 px-4 py-4">
+                            {rec > 0 && pay > 0 && (
+                              <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 mb-3 text-xs text-indigo-800">
+                                Đối tác này vừa nợ cửa hàng {fmtVND(rec)} vừa được cửa hàng nợ {fmtVND(pay)} —
+                                có thể bù trừ tối đa {fmtVND(Math.min(rec, pay))} khi tạo đơn bán tiếp theo.
+                              </div>
+                            )}
+                            <PartnerLedgerPanel partner={r} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "customers", label: "Khách hàng", icon: Users },
@@ -3370,6 +3604,7 @@ const NAV_ITEMS = [
   { key: "purchases", label: "Nhập máy/Thu cũ", icon: ArrowLeftRight },
   { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 4" },
   { key: "receipts", label: "Phiếu thu/chi", icon: Receipt },
+  { key: "debts", label: "Công nợ đối tác", icon: Banknote },
   { key: "reports", label: "Báo cáo", icon: BarChart3, allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "employees", label: "Nhân viên", icon: UserCog, managerOnly: true },
   { key: "audit", label: "Audit Log", icon: ScrollText, allowedRoles: ["quan_ly", "ke_toan"] },
@@ -3401,6 +3636,8 @@ function AppShell({ employee, onSignOut }) {
         return <PurchaseModule employee={employee} />;
       case "receipts":
         return <ReceiptsModule employee={employee} />;
+      case "debts":
+        return <DebtModule employee={employee} />;
       case "reports":
         return ["quan_ly", "ke_toan"].includes(employee.role) ? <ReportsModule employee={employee} /> : null;
       case "audit":
