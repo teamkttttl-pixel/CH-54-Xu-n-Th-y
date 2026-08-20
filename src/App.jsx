@@ -1516,9 +1516,11 @@ function OrderForm({ onCancel, onSaved, employee }) {
                   value={manualDevice.color}
                   onChange={(e) => setManualDevice((f) => ({ ...f, color: e.target.value }))}
                   placeholder="Màu sắc"
+                  list="dl-colors-manual-order"
                   className="rounded-lg border border-rose-200 px-2 py-1.5 text-xs bg-white"
                 />
                 <datalist id="dl-models-manual-order">{IPHONE_MODEL_LIST.map((m) => <option key={m} value={m} />)}</datalist>
+                <datalist id="dl-colors-manual-order">{coloroptionsForModel(manualDevice.model).map((c) => <option key={c} value={c} />)}</datalist>
               </div>
             </div>
           )}
@@ -1553,6 +1555,7 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
     imei: device?.imei || "", model: device?.model || "", storage: device?.storage || "", color: device?.color || "",
     condition: device?.condition || "used", condition_percent: device?.condition_percent ?? "",
     cost_price: device?.cost_price ?? "",
+    supplier: (device?.supplier === "Bán tạm — chờ Quản lý đối soát kho" ? "" : device?.supplier) || "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1570,7 +1573,7 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
         storage: form.storage.trim() || null, color: form.color.trim() || null,
         condition: form.condition, condition_percent: form.condition_percent === "" ? null : Number(form.condition_percent),
         cost_price: Number(form.cost_price), status: "sold",
-        supplier: device?.supplier?.replace("Bán tạm — chờ Quản lý đối soát kho", "Đã đối soát bởi Quản lý") || device?.supplier,
+        supplier: form.supplier.trim() || null,
         updated_by: employee.id,
       };
       const { data: updatedDevice, error: devErr } = await supabase.from("devices").update(payload).eq("id", device.id).select().maybeSingle();
@@ -1625,6 +1628,7 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
             </select>
           </label>
           <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} />
+          <TextField label="Nhà cung cấp / nguồn nhập" value={form.supplier} onChange={set("supplier")} placeholder="Ví dụ: khách lẻ, tên NCC..." className="col-span-2" />
           <TextField label="Giá vốn (đ) *" type="number" value={form.cost_price} onChange={set("cost_price")} className="col-span-2" />
           {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 col-span-2">{error}</p>}
           <div className="col-span-2 flex gap-2 mt-1">
