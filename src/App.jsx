@@ -1943,7 +1943,7 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
 function PayCustomerDiffModal({ order, employee, onClose, onDone }) {
   const debt = Math.max(0, Number(order.shop_debt || 0));
   const [amount, setAmount] = useState(String(debt));
-  const [method, setMethod] = useState("cash");
+  const [method] = useState("bank_transfer");
   const [bankId, setBankId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1983,21 +1983,10 @@ function PayCustomerDiffModal({ order, employee, onClose, onDone }) {
             <span className="font-medium">{fmtVND(debt)}</span>.
           </div>
           <div>
-            <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi</span>
-            <select
-              value={method} onChange={(e) => setMethod(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            >
-              <option value="cash">Tiền mặt</option>
-              <option value="bank_transfer">Chuyển khoản</option>
-            </select>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển tiền *</span>
+            <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+            <p className="text-[11px] text-slate-400 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
           </div>
-          {method === "bank_transfer" && (
-            <div>
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển tiền *</span>
-              <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
-            </div>
-          )}
           <TextField label="Số tiền trả (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
           {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
           <div className="flex gap-2">
@@ -2522,7 +2511,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
   const [supplier, setSupplier] = useState(null);
   const [form, setForm] = useState({
     imei: "", model: "", storage: "", color: "", condition: "used", condition_percent: "",
-    purchase_price: "", payment_method: "cash", bank_account_id: null, notes: "",
+    purchase_price: "", payment_method: "bank_transfer", bank_account_id: null, notes: "",
     paid_amount: "", due_date: "",
   });
   const [duplicateImei, setDuplicateImei] = useState(null);
@@ -2696,7 +2685,6 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức chi trả</span>
           <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
-            <option value="cash">Tiền mặt</option>
             <option value="bank_transfer">Chuyển khoản</option>
             <option value="debt_offset">Bù trừ công nợ (không chi tiền)</option>
           </select>
@@ -3098,6 +3086,8 @@ function PurchaseModule({ employee }) {
   const canImport = true;   // cả 3 vai đều nhập hàng loạt được, quyền do RPC kiểm tra
   const [payingDebt, setPayingDebt] = useState(null);
   const [payAmount, setPayAmount] = useState("");
+  const [payBankId, setPayBankId] = useState(null);
+  const { banks } = usePaymentOptions();
 
   const canCreate = employee.role !== "ke_toan";
   const canDelete = employee.role === "quan_ly";
@@ -3142,16 +3132,18 @@ function PurchaseModule({ employee }) {
     const p = payingDebt;
     const addAmount = Number(payAmount) || 0;
     if (addAmount <= 0) return;
+    if (!payBankId) { alert("Vui lòng chọn tài khoản chuyển tiền."); return; }
     // Ghi vào SỔ CÁI qua RPC — cột paid_amount do trigger tự tính lại
     const { data: remain, error } = await supabase.rpc("pay_supplier_debt", {
       p_purchase_order_id: p.id, p_amount: addAmount, p_note: "Trả tiền nhà cung cấp",
+      p_bank_account_id: payBankId,
     });
     if (error) { alert(error.message); return; }
     await supabase.from("audit_logs").insert({
       table_name: "purchase_orders", record_id: p.id, action: "update",
       old_data: p, new_data: { ...p, con_no: remain }, performed_by: employee.id, store_id: employee.store_id,
     });
-    setPayingDebt(null);
+    setPayingDebt(null); setPayBankId(null);
     load();
   };
 
@@ -3276,6 +3268,11 @@ function PurchaseModule({ employee }) {
               NCC: {payingDebt.suppliers?.name} · Còn nợ: {fmtVND(Math.max(0, Number(payingDebt.purchase_price) - Number(payingDebt.paid_amount ?? 0)))}
             </p>
             <TextField label="Số tiền thanh toán thêm (đ)" type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+            <div className="mt-3">
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển tiền *</span>
+              <BankSelect banks={banks} value={payBankId} onChange={setPayBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+              <p className="text-[11px] text-slate-400 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
+            </div>
             <div className="flex gap-2 mt-4">
               <button onClick={submitPayDebt} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium">Xác nhận thanh toán</button>
               <button onClick={() => setPayingDebt(null)} className="text-slate-500 text-sm px-4 py-2">Hủy</button>
@@ -4204,6 +4201,290 @@ function InstallmentTracking({ employee }) {
   );
 }
 
+function SettleAdvanceModal({ row, employee, onClose, onDone }) {
+  const remaining = Number(row.remaining || 0);
+  const [amount, setAmount] = useState(String(remaining));
+  const [method, setMethod] = useState("bank_transfer");
+  const [bankId, setBankId] = useState(null);
+  const [date, setDate] = useState(todayStr());
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { banks } = usePaymentOptions();
+
+  const submit = async () => {
+    const n = Number(amount) || 0;
+    if (n <= 0) { setError("Số tiền nộp phải lớn hơn 0."); return; }
+    if (n > remaining) { setError(`Phiếu này chỉ còn ${fmtVND(remaining)}.`); return; }
+    if (method === "bank_transfer" && !bankId) { setError("Vui lòng chọn tài khoản nhận."); return; }
+    setSaving(true); setError("");
+    const { error: err } = await supabase.rpc("settle_cash_advance", {
+      p_advance_id: row.id, p_amount: n, p_method: method,
+      p_bank_account_id: method === "bank_transfer" ? bankId : null,
+      p_settled_date: date, p_note: note.trim() || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "cash_advances", record_id: row.id, action: "update",
+      new_data: { nop: n, hinh_thuc: method, ngay: date },
+      performed_by: employee.id, store_id: employee.store_id,
+    });
+    onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Hoàn ứng — {row.advance_code}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-xs space-y-0.5">
+            <p className="font-medium text-slate-700">{row.holder_name}</p>
+            <p className="text-slate-400">Tạm ứng ngày {fmtDate(row.advance_date)}</p>
+            <div className="flex justify-between pt-1 mt-1 border-t border-slate-200">
+              <span className="text-slate-400">Đã ứng</span>
+              <span className="font-medium text-slate-700">{fmtVND(row.amount)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Đã nộp lại</span>
+              <span className="text-slate-600">{fmtVND(row.settled_amount)}</span>
+            </div>
+            <div className="flex justify-between text-amber-700">
+              <span>Còn phải nộp</span>
+              <span className="font-medium">{fmtVND(remaining)}</span>
+            </div>
+          </div>
+          <TextField label="Ngày nộp" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <div>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức nộp</span>
+            <select value={method} onChange={(e) => setMethod(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <option value="bank_transfer">Chuyển khoản</option>
+              <option value="cash">Nộp tiền mặt</option>
+            </select>
+          </div>
+          {method === "bank_transfer" && (
+            <div>
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản nhận *</span>
+              <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+            </div>
+          )}
+          <TextField label="Số tiền nộp (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={submit} disabled={saving}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận đã nộp
+            </button>
+            <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function CashAdvanceTab({ employee }) {
+  const [date, setDate] = useState(todayStr());
+  const [summary, setSummary] = useState(null);
+  const [staff, setStaff] = useState([]);
+  const [holderId, setHolderId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [okCode, setOkCode] = useState(null);
+  const [settling, setSettling] = useState(null);
+  const [showSettled, setShowSettled] = useState(false);
+
+  const canManage = employee.role !== "nhan_vien";
+
+  const loadSummary = useCallback(async () => {
+    const { data } = await supabase.rpc("daily_cash_summary", { p_date: date });
+    const s = Array.isArray(data) ? data[0] : data;
+    setSummary(s || null);
+    setAmount(s ? String(Math.max(0, Number(s.suggested) || 0)) : "");
+  }, [date]);
+
+  const loadRows = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from("v_cash_advances").select("*")
+      .order("advance_date", { ascending: false }).limit(500);
+    setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadSummary(); }, [loadSummary]);
+  useEffect(() => { loadRows(); }, [loadRows]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("employees")
+        .select("id, full_name, role").eq("is_active", true).order("full_name");
+      setStaff(data || []);
+    })();
+  }, []);
+
+  const submit = async () => {
+    if (!holderId) { setError("Vui lòng chọn nhân sự giữ tiền."); return; }
+    const n = Number(amount) || 0;
+    if (n <= 0) { setError("Số tiền tạm ứng phải lớn hơn 0."); return; }
+    setSaving(true); setError(""); setOkCode(null);
+    const { data, error: err } = await supabase.rpc("create_cash_advance", {
+      p_date: date, p_employee_id: holderId, p_amount: n, p_note: note.trim() || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setOkCode(data); setNote("");
+    loadSummary(); loadRows();
+  };
+
+  const open = rows.filter((r) => r.status !== "settled");
+  const shown = showSettled ? rows : open;
+  const totalOpen = open.reduce((s, r) => s + Number(r.remaining || 0), 0);
+
+  const byHolder = {};
+  for (const r of open) {
+    byHolder[r.holder_name] = (byHolder[r.holder_name] || 0) + Number(r.remaining || 0);
+  }
+  const holderRows = Object.entries(byHolder).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="space-y-3">
+      {totalOpen > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-xs text-amber-800 flex items-center gap-2 flex-wrap">
+          <Wallet size={15} className="shrink-0" />
+          Đang tạm ứng <span className="font-medium">{fmtVND(totalOpen)}</span> ·
+          {holderRows.map(([n, v]) => <span key={n}>{n}: <span className="font-medium">{fmtVND(v)}</span></span>)}
+        </div>
+      )}
+
+      {canManage && (
+        <Card className="p-4">
+          <p className="text-sm font-medium text-slate-700 mb-1">Lập phiếu tạm ứng cuối ngày</p>
+          <p className="text-xs text-slate-400 mb-3">
+            Chọn ngày và nhân sự giữ tiền. Số tiền tự điền theo tồn quỹ tiền mặt, sửa được nếu kiểm đếm thực tế lệch.
+          </p>
+
+          <div className="grid sm:grid-cols-3 gap-3">
+            <TextField label="Ngày" type="date" value={date} onChange={(e) => { setDate(e.target.value); setOkCode(null); }} />
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Nhân sự tạm ứng *</span>
+              <select value={holderId} onChange={(e) => setHolderId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="">— Chọn nhân sự —</option>
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>{s.full_name} ({ROLE_LABELS[s.role] || s.role})</option>
+                ))}
+              </select>
+            </label>
+            <TextField label="Số tiền tạm ứng (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </div>
+
+          {summary && (
+            <div className="mt-3 bg-slate-50 rounded-xl p-3 text-xs space-y-1">
+              <p className="font-medium text-slate-600 mb-1">Tiền mặt ngày {fmtDate(date)}</p>
+              <div className="flex justify-between"><span className="text-slate-400">Thu tiền mặt</span><span className="text-emerald-700 font-medium">+{fmtVND(summary.cash_in)}</span></div>
+              {Number(summary.cash_out) > 0 ? (
+                <>
+                  {Number(summary.out_purchase) > 0 && <div className="flex justify-between"><span className="text-rose-500">Chi mua máy bằng tiền mặt</span><span className="text-rose-600">−{fmtVND(summary.out_purchase)}</span></div>}
+                  {Number(summary.out_refund) > 0 && <div className="flex justify-between"><span className="text-rose-500">Hoàn khách bằng tiền mặt</span><span className="text-rose-600">−{fmtVND(summary.out_refund)}</span></div>}
+                  {Number(summary.out_expense) > 0 && <div className="flex justify-between"><span className="text-rose-500">Chi phí bằng tiền mặt</span><span className="text-rose-600">−{fmtVND(summary.out_expense)}</span></div>}
+                  <p className="text-[11px] text-rose-500">Có khoản chi bằng tiền mặt — theo quy định mọi khoản chi phải qua chuyển khoản, kiểm tra lại.</p>
+                </>
+              ) : (
+                <p className="text-[11px] text-slate-400">Mọi khoản chi ra đều qua chuyển khoản, nên tồn quỹ đúng bằng tiền mặt thu được.</p>
+              )}
+              <div className="flex justify-between border-t border-slate-200 pt-1 mt-1"><span className="text-slate-500">Tồn quỹ</span><span className="font-semibold text-slate-800">{fmtVND(summary.net_cash)}</span></div>
+              {Number(summary.already_advanced) > 0 && (
+                <div className="flex justify-between text-amber-700"><span>Đã tạm ứng cho ngày này</span><span className="font-medium">−{fmtVND(summary.already_advanced)}</span></div>
+              )}
+              <div className="flex justify-between"><span className="text-slate-500">Còn lại để ứng</span><span className="font-semibold text-brand-700">{fmtVND(summary.suggested)}</span></div>
+            </div>
+          )}
+
+          <div className="mt-3">
+            <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Giao ca tối, nộp ngân hàng sáng mai..." />
+          </div>
+
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mt-3">{error}</p>}
+          {okCode && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 mt-3">Đã lập phiếu <span className="font-semibold">{okCode}</span>.</p>}
+
+          <button onClick={submit} disabled={saving}
+            className="mt-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+            {saving && <Loader2 size={15} className="animate-spin" />} Lưu phiếu tạm ứng
+          </button>
+        </Card>
+      )}
+
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs text-slate-400">{open.length} phiếu chưa nộp đủ</p>
+        <button onClick={() => setShowSettled((s) => !s)}
+          className="text-xs text-brand-600 hover:underline">
+          {showSettled ? "Chỉ xem phiếu chưa nộp" : "Xem cả phiếu đã nộp đủ"}
+        </button>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : shown.length === 0 ? (
+          <EmptyState icon={Wallet} text="Chưa có phiếu tạm ứng nào." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã</th>
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2">Người giữ</th>
+                <th className="px-3 py-2 text-right">Đã ứng</th>
+                <th className="px-3 py-2 text-right">Còn nộp</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.advance_code}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.advance_date)}</td>
+                    <td className="px-3 py-2.5">
+                      <p className="text-slate-700">{r.holder_name}</p>
+                      {r.note && <p className="text-xs text-slate-400">{r.note}</p>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {r.status === "settled"
+                        ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Đã nộp đủ</span>
+                        : <span className="font-medium text-amber-600">{fmtVND(r.remaining)}</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {canManage && r.status !== "settled" && (
+                        <button onClick={() => setSettling(r)} className="text-xs text-brand-600 hover:underline">Hoàn ứng</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {settling && (
+        <SettleAdvanceModal
+          row={settling} employee={employee}
+          onClose={() => setSettling(null)}
+          onDone={() => { setSettling(null); loadRows(); }}
+        />
+      )}
+    </div>
+  );
+}
+
 function ManualOffsetModal({ partner, onClose, onDone }) {
   const rec = Number(partner.receivable), pay = Number(partner.payable);
   const maxOffset = Math.min(rec, pay);
@@ -4307,7 +4588,9 @@ function DebtModule({ employee }) {
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Công nợ</h2>
           <p className="text-xs text-slate-400">
-            {tab === "partners" ? `${active.length} đối tác đang có số dư` : "Đối soát tiền về từ đơn vị trả góp"}
+            {tab === "partners" ? `${active.length} đối tác đang có số dư`
+              : tab === "installment" ? "Đối soát tiền về từ đơn vị trả góp"
+              : "Tiền mặt cuối ngày giao cho nhân sự giữ"}
           </p>
         </div>
         {tab === "partners" && (
@@ -4318,7 +4601,7 @@ function DebtModule({ employee }) {
       </div>
 
       <div className="flex gap-2 mb-4">
-        {[["partners", "Đối tác"], ["installment", "Trả góp"]].map(([k, label]) => (
+        {[["partners", "Đối tác"], ["installment", "Trả góp"], ["advance", "Tạm ứng"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={classNames("px-4 py-2 rounded-xl text-sm border font-medium",
               tab === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50")}
@@ -4327,6 +4610,7 @@ function DebtModule({ employee }) {
       </div>
 
       {tab === "installment" && <InstallmentTracking employee={employee} />}
+      {tab === "advance" && <CashAdvanceTab employee={employee} />}
       {tab === "partners" && (<>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
@@ -4463,9 +4747,10 @@ const EXPENSE_CATEGORY_LABELS = {
 function OtherExpenseTab({ employee, rows, loading, onChanged }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ expense_date: todayStr(), amount: "", description: "" });
+  const [form, setForm] = useState({ expense_date: todayStr(), amount: "", description: "", payment_method: "bank_transfer", bank_account_id: null });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { banks } = usePaymentOptions();
 
   const canManage = employee.role !== "nhan_vien";
   const list = rows.filter((r) => r.category === "other");
@@ -4473,12 +4758,13 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ expense_date: todayStr(), amount: "", description: "" });
+    setForm({ expense_date: todayStr(), amount: "", description: "", payment_method: "bank_transfer", bank_account_id: null });
     setError(""); setShowForm(true);
   };
   const openEdit = (r) => {
     setEditing(r);
-    setForm({ expense_date: r.expense_date, amount: String(r.amount), description: r.description || "" });
+    setForm({ expense_date: r.expense_date, amount: String(r.amount), description: r.description || "",
+      payment_method: r.payment_method || "bank_transfer", bank_account_id: r.bank_account_id || null });
     setError(""); setShowForm(true);
   };
 
@@ -4487,9 +4773,14 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
     if (amt <= 0) { setError("Số tiền phải lớn hơn 0."); return; }
     if (!form.description.trim()) { setError("Vui lòng nhập diễn giải."); return; }
     setSaving(true); setError("");
+    if (form.payment_method === "bank_transfer" && !form.bank_account_id) {
+      setSaving(false); setError("Vui lòng chọn tài khoản chi tiền."); return;
+    }
     const payload = {
       expense_date: form.expense_date, amount: amt,
       description: form.description.trim(), category: "other",
+      payment_method: form.payment_method,
+      bank_account_id: form.payment_method === "bank_transfer" ? form.bank_account_id : null,
       store_id: employee.store_id, created_by: employee.id,
     };
     const { error: err } = editing
@@ -4531,6 +4822,15 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
             <TextField label="Số tiền (đ) *" type="number" value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
           </div>
+          <div className="grid sm:grid-cols-2 gap-3 mt-3">
+            <div>
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chi *</span>
+              <BankSelect banks={banks} value={form.bank_account_id}
+                onChange={(v) => setForm((f) => ({ ...f, bank_account_id: v }))}
+                className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+              <p className="text-[11px] text-slate-400 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
+            </div>
+          </div>
           <div className="mt-3">
             <TextField label="Diễn giải *" value={form.description}
               placeholder="Tiền điện, tiền nước, sửa chữa, phí ship..."
@@ -4559,6 +4859,7 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
                 <th className="px-3 py-2">Mã</th>
                 <th className="px-3 py-2">Ngày</th>
                 <th className="px-3 py-2">Diễn giải</th>
+                <th className="px-3 py-2">Hình thức</th>
                 <th className="px-3 py-2 text-right">Số tiền</th>
                 <th className="px-3 py-2"></th>
               </tr></thead>
@@ -4568,6 +4869,12 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
                     <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.expense_code}</td>
                     <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.expense_date)}</td>
                     <td className="px-3 py-2.5 text-slate-700">{r.description}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={classNames("text-xs px-2 py-0.5 rounded-full",
+                        r.payment_method === "cash" ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700")}>
+                        {r.payment_method === "cash" ? "Tiền mặt" : "Chuyển khoản"}
+                      </span>
+                    </td>
                     <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       {canManage && (<>
@@ -4851,7 +5158,7 @@ function ReturnTab({ employee, rows, onChanged }) {
 }
 
 function ConfirmReturnModal({ sale, employee, onClose, onDone }) {
-  const [method, setMethod] = useState("cash");
+  const [method] = useState("bank_transfer");
   const [bankId, setBankId] = useState(null);
   const [reason, setReason] = useState("");
   const [returnDate, setReturnDate] = useState(todayStr());
@@ -4921,19 +5228,10 @@ function ConfirmReturnModal({ sale, employee, onClose, onDone }) {
             <TextField label="Ngày nhận máy" type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} />
 
             <div>
-              <span className="text-xs font-medium text-slate-500 mb-1 block">Hình thức hoàn tiền</span>
-              <select value={method} onChange={(e) => setMethod(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                <option value="cash">Tiền mặt</option>
-                <option value="bank_transfer">Chuyển khoản</option>
-              </select>
+              <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển hoàn *</span>
+              <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+              <p className="text-[11px] text-slate-400 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
             </div>
-            {method === "bank_transfer" && (
-              <div>
-                <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển hoàn *</span>
-                <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
-              </div>
-            )}
             <TextField label="Lý do trả máy" value={reason} placeholder="Máy lỗi, khách đổi ý..." onChange={(e) => setReason(e.target.value)} />
 
             <p className="text-[11px] text-slate-400">
