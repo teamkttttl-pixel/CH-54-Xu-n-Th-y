@@ -2790,43 +2790,25 @@ function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
-  const downloadTemplate = () => {
-    const wb = XLSX.utils.book_new();
-
-    const sample = [IMPORT_TEMPLATE_COLS, [
-      "356789012345678", IPHONE_MODEL_LIST[0] || "iPhone 13", "128GB",
-      (coloroptionsForModel(IPHONE_MODEL_LIST[0] || "") || [])[0] || "Đen",
-      "Máy cũ", 98, 10000000, "Máy đẹp, pin 90%",
-    ]];
-    const ws = XLSX.utils.aoa_to_sheet(sample);
-    ws["!cols"] = [{ wch: 18 }, { wch: 22 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 14 }, { wch: 28 }];
-    XLSX.utils.book_append_sheet(wb, ws, "NhapMay");
-
-    // Sheet danh mục giá trị hợp lệ
-    const maxLen = Math.max(IPHONE_MODEL_LIST.length, IMPORT_STORAGES.length, 2);
-    const cat = [["Model hợp lệ", "Dung lượng hợp lệ", "Tình trạng hợp lệ"]];
-    for (let i = 0; i < maxLen; i++) {
-      cat.push([
-        IPHONE_MODEL_LIST[i] || "",
-        IMPORT_STORAGES[i] || "",
-        Object.keys(IMPORT_CONDITIONS)[i] || "",
-      ]);
-    }
-    const wsCat = XLSX.utils.aoa_to_sheet(cat);
-    wsCat["!cols"] = [{ wch: 24 }, { wch: 20 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(wb, wsCat, "DanhMuc");
-
-    XLSX.writeFile(wb, "Mau-nhap-may.xlsx");
-  };
-
   const readFile = async (file) => {
     setError(""); setResult(null); setFileName(file.name);
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets["NhapMay"] || wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json(ws, { defval: "" });
-      if (raw.length === 0) { setError("File không có dòng dữ liệu nào."); return; }
+      // Biểu mẫu có dòng hướng dẫn ở đầu, tiêu đề nằm ở dòng 3
+      let raw = XLSX.utils.sheet_to_json(ws, { range: 2, defval: "" });
+      // Bỏ tiêu đề có dấu * và khoảng trắng thừa
+      raw = raw.map((row) => {
+        const o = {};
+        for (const k of Object.keys(row)) o[k.replace(/\s*\*\s*$/, "").trim()] = row[k];
+        return o;
+      });
+      // Bỏ dòng ví dụ mẫu nếu người dùng quên xóa
+      raw = raw.filter((row) => String(row["IMEI"] ?? "").trim() !== "356789012345678");
+      // Bỏ dòng trống hoàn toàn
+      raw = raw.filter((row) => Object.values(row).some((v) => String(v ?? "").trim() !== ""));
+      if (raw.length === 0) { setError("File không có dòng dữ liệu nào. Hãy điền từ dòng 4 trở xuống."); return; }
 
       const parsed = raw.map((r, idx) => {
         const model = String(r["Model"] ?? "").trim();
@@ -2850,7 +2832,7 @@ function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
         if (pct !== "" && (Number(pct) < 0 || Number(pct) > 100)) errs.push("Độ mới phải từ 0 đến 100");
 
         return {
-          line: idx + 2, imei, model, storage, color,
+          line: idx + 4, imei, model, storage, color,
           condition: IMPORT_CONDITIONS[condText] || "used",
           condition_percent: pct === "" ? null : Number(pct),
           price, notes: String(r["Ghi chú"] ?? "").trim(),
@@ -2887,39 +2869,26 @@ function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
   const doImport = async () => {
     if (okRows.length === 0) return;
     setSaving(true); setError(""); setProgress(0);
-    const done = []; const failed = [];
 
-    for (let i = 0; i < okRows.length; i++) {
-      const r = okRows[i];
-      try {
-        const { data: dev, error: devErr } = await supabase.from("devices").insert({
-          imei: r.imei || null, model: r.model, storage: r.storage || null, color: r.color || null,
-          condition: r.condition, condition_percent: r.condition_percent,
-          status: "in_stock", cost_price: r.price, notes: r.notes || null,
-          supplier: supplier?.name || null,
-          import_date: todayStr(), created_by: employee.id, updated_by: employee.id,
-          store_id: employee.store_id,
-        }).select().maybeSingle();
-        if (devErr) throw devErr;
+    const payload = okRows.map((r) => ({
+      line: r.line, imei: r.imei || null, model: r.model,
+      storage: r.storage || null, color: r.color || null,
+      condition: r.condition,
+      condition_percent: r.condition_percent === null ? "" : String(r.condition_percent),
+      price: r.price, notes: r.notes || null,
+    }));
 
-        const { error: poErr } = await supabase.from("purchase_orders").insert({
-          source_type: "supplier", supplier_id: supplier.id, customer_id: null,
-          device_id: dev.id, purchase_price: r.price, payment_method: "cash",
-          paid_amount: 0, notes: r.notes || "Nhập từ file Excel",
-          created_by: employee.id, store_id: employee.store_id,
-        });
-        if (poErr) throw poErr;
-
-        done.push(r.line);
-      } catch (e) {
-        failed.push({ line: r.line, msg: e.message });
-      }
-      setProgress(Math.round(((i + 1) / okRows.length) * 100));
-    }
-
+    // Gọi 1 lần, database xử lý từng dòng độc lập — dòng lỗi không chặn dòng khác
+    const { data, error: err } = await supabase.rpc("import_purchase_batch", {
+      p_supplier_id: supplier.id, p_rows: payload,
+    });
+    setProgress(100);
     setSaving(false);
-    setResult({ done: done.length, failed });
-    if (done.length > 0) onDone();
+
+    if (err) { setError(err.message); return; }
+    const failed = (data?.errors || []).map((e) => ({ line: e.line, msg: e.message }));
+    setResult({ done: data?.inserted || 0, failed });
+    if ((data?.inserted || 0) > 0) onDone();
   };
 
   return (
@@ -2941,10 +2910,10 @@ function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
         </div>
 
         <div className="flex gap-2 flex-wrap mb-3">
-          <button onClick={downloadTemplate}
+          <a href="/Mau-nhap-may.xlsx" download
             className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
-            <FileSpreadsheet size={15} /> Tải file mẫu
-          </button>
+            <FileSpreadsheet size={15} /> Tải biểu mẫu
+          </a>
           <label className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 cursor-pointer">
             <Plus size={15} /> Chọn file Excel
             <input type="file" accept=".xlsx,.xls" className="hidden"
@@ -2959,8 +2928,9 @@ function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800 mb-3">
             <p>Đã nhập thành công <span className="font-semibold">{result.done}</span> máy.</p>
             {result.failed.length > 0 && (
-              <div className="mt-1 text-rose-600 text-xs">
-                {result.failed.length} dòng lỗi: {result.failed.map((f) => `dòng ${f.line}`).join(", ")}
+              <div className="mt-2 text-rose-600 text-xs space-y-0.5">
+                <p className="font-medium">{result.failed.length} dòng không nhập được:</p>
+                {result.failed.map((f, k) => <p key={k}>Dòng {f.line}: {f.msg}</p>)}
               </div>
             )}
           </div>
@@ -3125,6 +3095,7 @@ function PurchaseModule({ employee }) {
   const [runImport, setRunImport] = useState(false);
   const [importSupplier, setImportSupplier] = useState(null);
   const canEdit = employee.role !== "ke_toan";
+  const canImport = true;   // cả 3 vai đều nhập hàng loạt được, quyền do RPC kiểm tra
   const [payingDebt, setPayingDebt] = useState(null);
   const [payAmount, setPayAmount] = useState("");
 
@@ -3194,16 +3165,18 @@ function PurchaseModule({ employee }) {
             {totalDebt > 0 && <span className="text-amber-600 font-medium"> · Tổng công nợ NCC: {fmtVND(totalDebt)}</span>}
           </p>
         </div>
-        {canCreate && (
-          <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
+          {canImport && (
             <button onClick={() => setShowImport(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
               <FileSpreadsheet size={15} /> Nhập từ Excel
             </button>
+          )}
+          {canCreate && (
             <button onClick={() => setShowForm((s) => !s)} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
               <Banknote size={15} /> Nhập máy mới
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {showForm && (
