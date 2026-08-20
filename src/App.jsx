@@ -353,7 +353,11 @@ function DashboardModule({ employee, customerCount, inStockCount }) {
 /* ---------------------------------------------------------------------- */
 
 function CustomerForm({ initial, onCancel, onSaved, employee, existingMatch, onUseExisting }) {
-  const [form, setForm] = useState(initial || {
+  const [form, setForm] = useState(() => initial ? {
+    full_name: initial.full_name || "", cccd: initial.cccd || "", cccd_issue_date: initial.cccd_issue_date || "",
+    cccd_issue_place: initial.cccd_issue_place || "", date_of_birth: initial.date_of_birth || "",
+    address: initial.address || "", phone: initial.phone || "", email: initial.email || "",
+  } : {
     full_name: "", cccd: "", cccd_issue_date: "", cccd_issue_place: "", date_of_birth: "", address: "", phone: "", email: "",
   });
   const [saving, setSaving] = useState(false);
@@ -560,7 +564,12 @@ function CustomersModule({ employee, onCountChange }) {
 /* ---------------------------------------------------------------------- */
 
 function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
-  const [form, setForm] = useState(initial || {
+  const [form, setForm] = useState(() => initial ? {
+    imei: initial.imei || "", model: initial.model || "", storage: initial.storage || "", color: initial.color || "",
+    condition: initial.condition || "used", condition_percent: initial.condition_percent ?? "",
+    cost_price: initial.cost_price ?? "", sale_price: initial.sale_price ?? "",
+    supplier: initial.supplier || "", import_date: initial.import_date || "", notes: initial.notes || "",
+  } : {
     imei: "", model: "", storage: "", color: "", condition: "used", condition_percent: "",
     cost_price: "", sale_price: "", supplier: "", import_date: "", notes: "",
   });
