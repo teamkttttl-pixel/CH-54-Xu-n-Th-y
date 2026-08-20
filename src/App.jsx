@@ -56,6 +56,26 @@ function fmtVND(n) {
   return num.toLocaleString("vi-VN") + "đ";
 }
 
+const DEVICE_ORIGIN_LABELS = {
+  supplier: "Nhập NCC",
+  customer: "Thu khách lẻ",
+  returned: "Khách trả lại",
+  unknown: "Không rõ nguồn",
+};
+const DEVICE_ORIGIN_STYLES = {
+  supplier: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
+  customer: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  returned: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  unknown: "bg-slate-100 text-slate-400 ring-1 ring-slate-200",
+};
+// Vạch màu bên trái mỗi dòng trong Kho hàng
+const DEVICE_ORIGIN_ROW = {
+  supplier: "",
+  customer: "shadow-[inset_3px_0_0_0_#f59e0b]",
+  returned: "shadow-[inset_3px_0_0_0_#e11d48] bg-rose-50/30",
+  unknown: "shadow-[inset_3px_0_0_0_#cbd5e1]",
+};
+
 const DEVICE_STATUS_LABELS = {
   in_stock: "Còn hàng",
   reserved: "Đang giữ chỗ",
@@ -759,6 +779,7 @@ function InventoryModule({ employee, onCountChange }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [originFilter, setOriginFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [historyImei, setHistoryImei] = useState(null);
@@ -769,7 +790,7 @@ function InventoryModule({ employee, onCountChange }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("devices").select("*").order("created_at", { ascending: false }).limit(2000);
+    const { data, error } = await supabase.from("v_devices_origin").select("*").order("created_at", { ascending: false }).limit(2000);
     if (!error) {
       setDevices(data || []);
       onCountChange?.((data || []).filter((d) => d.status === "in_stock").length);
@@ -780,6 +801,7 @@ function InventoryModule({ employee, onCountChange }) {
   useEffect(() => { load(); }, [load]);
 
   const filtered = devices.filter((d) => {
+    if (originFilter !== "all" && d.origin !== originFilter) return false;
     if (statusFilter === "missing_imei") return !d.imei;
     if (statusFilter !== "all" && d.status !== statusFilter) return false;
     if (!search.trim()) return true;
@@ -827,6 +849,26 @@ function InventoryModule({ employee, onCountChange }) {
             {devices.length} máy · {devices.filter((d) => d.status === "in_stock").length} còn hàng
           </p>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mb-3 text-xs">
+        <span className="text-slate-400">Nguồn gốc:</span>
+        {["supplier", "customer", "returned", "unknown"].map((k) => {
+          const n = devices.filter((d) => d.origin === k && d.status === "in_stock").length;
+          return (
+            <button
+              key={k}
+              onClick={() => setOriginFilter(originFilter === k ? "all" : k)}
+              className={classNames(
+                "px-2 py-1 rounded transition",
+                DEVICE_ORIGIN_STYLES[k],
+                originFilter === k ? "ring-2" : "opacity-90 hover:opacity-100"
+              )}
+            >
+              {DEVICE_ORIGIN_LABELS[k]} · {n}
+            </button>
+          );
+        })}
       </div>
 
       <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-slate-600 flex items-start gap-2">
@@ -879,6 +921,17 @@ function InventoryModule({ employee, onCountChange }) {
             <option value="sold">Đã bán</option>
             <option value="missing_imei">⚠ Thiếu IMEI</option>
           </select>
+          <select
+            value={originFilter}
+            onChange={(e) => setOriginFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          >
+            <option value="all">Mọi nguồn gốc</option>
+            <option value="supplier">Nhập NCC</option>
+            <option value="customer">Thu khách lẻ</option>
+            <option value="returned">Khách trả lại</option>
+            <option value="unknown">Không rõ nguồn</option>
+          </select>
         </div>
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
@@ -898,7 +951,10 @@ function InventoryModule({ employee, onCountChange }) {
               </tr></thead>
               <tbody>
                 {filtered.map((d) => (
-                  <tr key={d.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                  <tr key={d.id} className={classNames(
+                    "border-b border-slate-50 last:border-0 hover:bg-slate-50/60",
+                    DEVICE_ORIGIN_ROW[d.origin] || ""
+                  )}>
                     <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">
                       {d.imei || (
                         <span className="inline-flex items-center gap-1 text-xs font-normal px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
@@ -907,8 +963,21 @@ function InventoryModule({ employee, onCountChange }) {
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-slate-600">
-                      {d.model}
-                      <span className="text-slate-400"> {[d.storage, d.color].filter(Boolean).join(" · ")}</span>
+                      <div>
+                        {d.model}
+                        <span className="text-slate-400"> {[d.storage, d.color].filter(Boolean).join(" · ")}</span>
+                      </div>
+                      <span
+                        title={d.origin === "returned"
+                          ? `Khách trả lại — chứng từ ${d.return_code || ""} ngày ${d.return_date ? fmtDate(d.return_date) : ""}`
+                          : d.purchase_code ? `Phiếu nhập ${d.purchase_code}` : "Không có phiếu nhập"}
+                        className={classNames(
+                          "inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded",
+                          DEVICE_ORIGIN_STYLES[d.origin] || DEVICE_ORIGIN_STYLES.unknown
+                        )}
+                      >
+                        {DEVICE_ORIGIN_LABELS[d.origin] || "Không rõ nguồn"}
+                      </span>
                     </td>
                     <td className="px-3 py-2.5 text-slate-500">
                       {DEVICE_CONDITION_LABELS[d.condition] || "—"}
