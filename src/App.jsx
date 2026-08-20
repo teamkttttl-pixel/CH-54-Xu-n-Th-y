@@ -569,12 +569,15 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!form.imei.trim()) { setError("Vui lòng nhập IMEI."); return; }
     if (!form.model.trim()) { setError("Vui lòng nhập tên model máy."); return; }
+    if (form.imei.trim() && duplicateImei) {
+      setError(`IMEI ${duplicateImei.imei} đã tồn tại trong kho — không được nhập trùng.`);
+      return;
+    }
     setError(""); setSaving(true);
     try {
       const payload = {
-        imei: form.imei.trim(),
+        imei: form.imei.trim() || null,
         model: form.model.trim(),
         storage: form.storage.trim() || null,
         color: form.color.trim() || null,
@@ -625,13 +628,14 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
       </div>
 
       {duplicateImei && (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-rose-700">
-          IMEI <span className="font-medium">{duplicateImei.imei}</span> đã có trong kho ({DEVICE_STATUS_LABELS[duplicateImei.status]}) — kiểm tra lại trước khi lưu.
+        <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-rose-700 flex items-center gap-2">
+          <ShieldAlert size={15} className="shrink-0" />
+          IMEI <span className="font-medium">{duplicateImei.imei}</span> đã tồn tại trong kho ({DEVICE_STATUS_LABELS[duplicateImei.status]}) — không thể lưu trùng, vui lòng kiểm tra lại.
         </div>
       )}
 
       <form onSubmit={submit} className="grid sm:grid-cols-2 gap-3">
-        <TextField label="Số IMEI *" value={form.imei} onChange={set("imei")} disabled={!!initial?.id} />
+        <TextField label="Số IMEI (để trống nếu chưa có)" value={form.imei} onChange={set("imei")} disabled={!!initial?.id} />
         <label className="block">
           <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
           <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 14 Pro Max" />
@@ -736,6 +740,7 @@ function InventoryModule({ employee, onCountChange }) {
   useEffect(() => { load(); }, [load]);
 
   const filtered = devices.filter((d) => {
+    if (statusFilter === "missing_imei") return !d.imei;
     if (statusFilter !== "all" && d.status !== statusFilter) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
@@ -756,7 +761,7 @@ function InventoryModule({ employee, onCountChange }) {
   const openEdit = (d) => { setEditing(d); setDuplicateImei(null); setShowForm(true); };
 
   const remove = async (d) => {
-    if (!confirm(`Xóa máy IMEI "${d.imei}" khỏi kho?`)) return;
+    if (!confirm(`Xóa máy ${d.imei ? `IMEI "${d.imei}"` : `"${d.model}" (chưa có IMEI)`} khỏi kho?`)) return;
     const { error } = await supabase.from("devices").delete().eq("id", d.id);
     if (error) { alert(error.message); return; }
     await supabase.from("audit_logs").insert({
@@ -792,6 +797,13 @@ function InventoryModule({ employee, onCountChange }) {
         </button>
       </div>
 
+      {devices.some((d) => !d.imei) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-800 flex items-center gap-2">
+          <ShieldAlert size={15} className="shrink-0" />
+          Có <span className="font-medium">{devices.filter((d) => !d.imei).length} máy</span> chưa có số IMEI — vui lòng cập nhật khi có đủ thông tin (lọc theo "Thiếu IMEI" bên dưới).
+        </div>
+      )}
+
       {showForm && (
         <DeviceForm
           initial={editing}
@@ -824,6 +836,7 @@ function InventoryModule({ employee, onCountChange }) {
             <option value="in_stock">Còn hàng</option>
             <option value="reserved">Đang giữ chỗ</option>
             <option value="sold">Đã bán</option>
+            <option value="missing_imei">⚠ Thiếu IMEI</option>
           </select>
         </div>
         {loading ? (
@@ -845,7 +858,13 @@ function InventoryModule({ employee, onCountChange }) {
               <tbody>
                 {filtered.map((d) => (
                   <tr key={d.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                    <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">{d.imei}</td>
+                    <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">
+                      {d.imei || (
+                        <span className="inline-flex items-center gap-1 text-xs font-normal px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                          <ShieldAlert size={11} /> Thiếu IMEI
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-slate-600">
                       {d.model}
                       <span className="text-slate-400"> {[d.storage, d.color].filter(Boolean).join(" · ")}</span>
@@ -866,9 +885,11 @@ function InventoryModule({ employee, onCountChange }) {
                       </button>
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      <button onClick={() => setHistoryImei(d.imei)} className="text-slate-400 hover:text-brand-600 mr-3" title="Lịch sử IMEI">
-                        <History size={14} className="inline" />
-                      </button>
+                      {d.imei && (
+                        <button onClick={() => setHistoryImei(d.imei)} className="text-slate-400 hover:text-brand-600 mr-3" title="Lịch sử IMEI">
+                          <History size={14} className="inline" />
+                        </button>
+                      )}
                       <button onClick={() => openEdit(d)} className="text-brand-600 hover:underline text-xs mr-3">
                         <Pencil size={12} className="inline mr-0.5" />Sửa
                       </button>
@@ -927,7 +948,7 @@ function PrintDocModal({ type, order, customer, device, payments, contract, stor
         <div className="text-sm text-slate-700 space-y-1 mb-4 border-t border-dashed border-slate-200 pt-4">
           <p className="font-medium text-slate-800">Thông tin máy</p>
           <p>{device?.model} {[device?.storage, device?.color].filter(Boolean).join(" · ")} — {DEVICE_CONDITION_LABELS[device?.condition]}</p>
-          <p><span className="text-slate-400">IMEI:</span> {device?.imei}</p>
+          <p><span className="text-slate-400">IMEI:</span> {device?.imei || "Chưa có IMEI"}</p>
         </div>
 
         <div className="text-sm text-slate-700 space-y-1 mb-4 border-t border-dashed border-slate-200 pt-4">
@@ -1067,7 +1088,7 @@ function DevicePicker({ value, onSelect }) {
       <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
         <div>
           <p className="text-sm font-medium text-slate-700">{value.model} {[value.storage, value.color].filter(Boolean).join(" · ")}</p>
-          <p className="text-xs text-slate-400">IMEI {value.imei}</p>
+          <p className="text-xs text-slate-400">{value.imei ? `IMEI ${value.imei}` : "⚠ Chưa có IMEI"}</p>
         </div>
         <button type="button" onClick={() => onSelect(null)} className="text-xs text-brand-600 hover:underline">Đổi</button>
       </div>
@@ -1101,7 +1122,7 @@ function DevicePicker({ value, onSelect }) {
                 className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
               >
                 <p className="font-medium text-slate-700">{d.model} {[d.storage, d.color].filter(Boolean).join(" · ")}</p>
-                <p className="text-xs text-slate-400">IMEI {d.imei} · Giá đề xuất {fmtVND(d.sale_price)}</p>
+                <p className="text-xs text-slate-400">{d.imei ? `IMEI ${d.imei}` : "⚠ Chưa có IMEI"} · Giá đề xuất {fmtVND(d.sale_price)}</p>
               </button>
             ))
           )}
@@ -1765,7 +1786,7 @@ function PrintPurchaseModal({ type, purchase, customer, device, contract, storeN
         <div className="text-sm text-slate-700 space-y-1 mb-4 border-t border-dashed border-slate-200 pt-4">
           <p className="font-medium text-slate-800">{isContract ? "Điều 1. Đối tượng hợp đồng" : "Thông tin máy thu mua"}</p>
           <p className={isContract ? "pl-3" : ""}>Điện thoại {device?.model} {[device?.storage, device?.color].filter(Boolean).join(" · ")} — {DEVICE_CONDITION_LABELS[device?.condition]}</p>
-          <p className={isContract ? "pl-3" : ""}><span className="text-slate-400">Số IMEI:</span> {device?.imei}</p>
+          <p className={isContract ? "pl-3" : ""}><span className="text-slate-400">Số IMEI:</span> {device?.imei || "Chưa có IMEI"}</p>
         </div>
         <div className="text-sm text-slate-700 space-y-1 mb-6 border-t border-dashed border-slate-200 pt-4">
           {isContract && <p className="font-medium text-slate-800">Điều 2. Giá cả và phương thức thanh toán</p>}
@@ -1996,9 +2017,9 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
     setError("");
     if (sourceType === "customer" && !customer) { setError("Vui lòng chọn khách hàng bán máy."); return; }
     if (sourceType === "supplier" && !supplier) { setError("Vui lòng chọn nhà cung cấp."); return; }
-    if (!form.imei.trim() || !form.model.trim()) { setError("Vui lòng nhập đủ IMEI và model máy."); return; }
+    if (!form.model.trim()) { setError("Vui lòng nhập tên model máy."); return; }
     if (!form.purchase_price || Number(form.purchase_price) <= 0) { setError("Vui lòng nhập giá thu mua hợp lệ."); return; }
-    if (duplicateImei) { setError("IMEI này đã có trong kho, không thể thu mua trùng."); return; }
+    if (form.imei.trim() && duplicateImei) { setError(`IMEI ${duplicateImei.imei} đã có trong kho, không thể thu mua trùng.`); return; }
     if (sourceType === "customer") {
       if (!customer.cccd) { setError("Khách hàng chưa có số CCCD — vào mục Khách hàng bổ sung CCCD trước khi lập hồ sơ thu mua (bắt buộc để hồ sơ hợp lệ)."); return; }
       if (!cccdFrontFile || !cccdBackFile) { setError("Vui lòng chụp/tải đủ ảnh CCCD mặt trước và mặt sau để có bộ hồ sơ hợp lệ."); return; }
@@ -2008,7 +2029,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
     setSaving(true);
     try {
       const { data: newDevice, error: devErr } = await supabase.from("devices").insert({
-        imei: form.imei.trim(), model: form.model.trim(),
+        imei: form.imei.trim() || null, model: form.model.trim(),
         storage: form.storage.trim() || null, color: form.color.trim() || null,
         condition: form.condition, condition_percent: form.condition_percent === "" ? null : Number(form.condition_percent),
         status: "in_stock", cost_price: Number(form.purchase_price),
@@ -2107,13 +2128,14 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         )}
 
         {duplicateImei && (
-          <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 text-xs text-rose-700">
-            IMEI <span className="font-medium">{duplicateImei.imei}</span> đã có trong kho ({DEVICE_STATUS_LABELS[duplicateImei.status]}).
+          <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 text-xs text-rose-700 flex items-center gap-2">
+            <ShieldAlert size={15} className="shrink-0" />
+            IMEI <span className="font-medium">{duplicateImei.imei}</span> đã tồn tại trong kho ({DEVICE_STATUS_LABELS[duplicateImei.status]}) — không thể lưu trùng.
           </div>
         )}
 
         <div className="grid sm:grid-cols-2 gap-3">
-          <TextField label="Số IMEI *" value={form.imei} onChange={(e) => { set("imei")(e); checkImei(e.target.value); }} />
+          <TextField label="Số IMEI (để trống nếu chưa có)" value={form.imei} onChange={(e) => { set("imei")(e); checkImei(e.target.value); }} />
           <label className="block">
             <span className="text-xs font-medium text-slate-500 mb-1 block">Model máy *</span>
             <ModelPicker value={form.model} onSelect={(v) => setForm((f) => ({ ...f, model: v }))} placeholder="iPhone 13 128GB" />
@@ -2303,7 +2325,7 @@ function PurchaseModule({ employee }) {
                     <td className="px-3 py-2.5 text-slate-500">{fmtDate(p.created_at)}</td>
                     <td className="px-3 py-2.5 text-slate-600">{p.customers?.full_name || p.suppliers?.name}</td>
                     <td className="px-3 py-2.5 text-slate-500">
-                      {p.devices?.model} <span className="text-slate-400">· IMEI {p.devices?.imei}</span>
+                      {p.devices?.model} <span className="text-slate-400">· {p.devices?.imei ? `IMEI ${p.devices.imei}` : "Chưa có IMEI"}</span>
                     </td>
                     <td className="px-3 py-2.5 text-slate-600">{fmtVND(p.purchase_price)}</td>
                     <td className="px-3 py-2.5">
