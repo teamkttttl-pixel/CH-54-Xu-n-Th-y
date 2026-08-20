@@ -6179,6 +6179,287 @@ function ScreenStockTab({ employee }) {
   );
 }
 
+function ScreenPurchaseForm({ employee, onCancel, onSaved }) {
+  const [mode, setMode] = useState("single");   // single | batch
+  const [vendor, setVendor] = useState(null);
+  const [model, setModel] = useState("");
+  const [grade, setGrade] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
+  const [qty, setQty] = useState("1");
+  const [date, setDate] = useState(todayStr());
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const n = mode === "single" ? 1 : (Number(qty) || 0);
+  const total = (Number(unitPrice) || 0) * n;
+
+  const submit = async () => {
+    if (!model.trim()) { setError("Vui lòng nhập loại màn."); return; }
+    if ((Number(unitPrice) || 0) < 0) { setError("Đơn giá không hợp lệ."); return; }
+    if (n < 1) { setError("Số lượng phải từ 1 trở lên."); return; }
+    setSaving(true); setError("");
+    const { data, error: err } = await supabase.rpc("create_screen_purchase", {
+      p_vendor_id: vendor?.id || null,
+      p_model: model.trim(),
+      p_unit_price: Number(unitPrice) || 0,
+      p_quantity: n,
+      p_grade: grade || null,
+      p_note: note.trim() || null,
+      p_purchase_date: date,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "screen_purchases", record_id: null, action: "create",
+      new_data: { ma: data, model: model.trim(), sl: n, tong: total },
+      performed_by: employee.id, store_id: employee.store_id,
+    });
+    onSaved(data, n);
+  };
+
+  return (
+    <Card className="p-4 mb-3">
+      <p className="text-sm font-medium text-slate-700 mb-3">Nhập kho màn hình</p>
+
+      <div className="flex gap-2 mb-3">
+        {[["single", "Màn rời"], ["batch", "Nhập theo lô"]].map(([k, label]) => (
+          <button key={k} onClick={() => { setMode(k); setQty(k === "single" ? "1" : ""); }}
+            className={classNames("px-3 py-1.5 rounded-lg text-xs border font-medium",
+              mode === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200")}
+          >{label}</button>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <TextField label="Loại màn *" value={model} onChange={(e) => setModel(e.target.value)}
+            placeholder="iPhone 13 Pro" list="dl-models-screen" />
+          <label className="block">
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng</span>
+            <select value={grade} onChange={(e) => setGrade(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <option value="">— Chọn —</option>
+              {SCREEN_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </label>
+        </div>
+        <datalist id="dl-models-screen">{IPHONE_MODEL_LIST.map((m) => <option key={m} value={m} />)}</datalist>
+
+        <div className="grid sm:grid-cols-3 gap-3">
+          <TextField label="Đơn giá 1 tấm (đ) *" type="number" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+          {mode === "batch" ? (
+            <TextField label="Số lượng *" type="number" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="10" />
+          ) : (
+            <div className="flex items-end pb-2 text-xs text-slate-400">Số lượng: 1 tấm</div>
+          )}
+          <TextField label="Ngày nhập" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Nhà cung cấp</span>
+          <SupplierPicker value={vendor} onSelect={setVendor} employee={employee} />
+          <p className="text-[11px] text-slate-400 mt-1">
+            Tiền hàng treo thành công nợ phải trả đơn vị này. Để trống nếu không theo dõi công nợ.
+          </p>
+        </div>
+
+        <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
+
+        {n > 0 && (Number(unitPrice) || 0) > 0 && (
+          <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-xs space-y-0.5">
+            <div className="flex justify-between"><span className="text-slate-400">Số tấm</span><span className="text-slate-700">{n}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Đơn giá</span><span className="text-slate-700">{fmtVND(Number(unitPrice))}</span></div>
+            <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
+              <span className="text-slate-500">Tổng tiền</span>
+              <span className="font-semibold text-slate-800">{fmtVND(total)}</span>
+            </div>
+            {n > 1 && <p className="text-[11px] text-slate-400 pt-1">Hệ thống tạo {n} bản ghi màn riêng, mỗi tấm một mã MH để theo dõi lắp vào máy nào.</p>}
+          </div>
+        )}
+
+        {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={submit} disabled={saving}
+            className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+            {saving && <Loader2 size={15} className="animate-spin" />} Nhập kho
+          </button>
+          <button onClick={onCancel} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function PayScreenPurchaseModal({ row, employee, onClose, onDone }) {
+  const remaining = Number(row.remaining || 0);
+  const [amount, setAmount] = useState(String(remaining));
+  const [bankId, setBankId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { banks } = usePaymentOptions();
+
+  const submit = async () => {
+    const v = Number(amount) || 0;
+    if (v <= 0) { setError("Số tiền phải lớn hơn 0."); return; }
+    if (v > remaining) { setError(`Phiếu này chỉ còn nợ ${fmtVND(remaining)}.`); return; }
+    if (!bankId) { setError("Vui lòng chọn tài khoản chuyển tiền."); return; }
+    setSaving(true); setError("");
+    const { error: err } = await supabase.rpc("pay_screen_purchase", {
+      p_purchase_id: row.id, p_amount: v, p_bank_account_id: bankId, p_note: null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Thanh toán — {row.purchase_code}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-xs space-y-0.5">
+            <p className="font-medium text-slate-700">{row.model} · {row.quantity} tấm</p>
+            <p className="text-slate-400">{row.vendor_name || "Không có NCC"}</p>
+            <div className="flex justify-between pt-1 mt-1 border-t border-slate-200">
+              <span className="text-slate-400">Còn nợ</span>
+              <span className="font-medium text-amber-700">{fmtVND(remaining)}</span>
+            </div>
+          </div>
+          <TextField label="Số tiền thanh toán (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <div>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản chuyển tiền *</span>
+            <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+          </div>
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={submit} disabled={saving}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận
+            </button>
+            <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ScreenPurchaseTab({ employee }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [okMsg, setOkMsg] = useState(null);
+  const [paying, setPaying] = useState(null);
+
+  const canCreate = true;   // cả 3 vai đều nhập kho màn được, quyền do RPC kiểm tra
+  const canPay = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from("v_screen_purchases").select("*")
+      .order("created_at", { ascending: false }).limit(500);
+    setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totalDebt = rows.reduce((s, r) => s + Math.max(0, Number(r.remaining || 0)), 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {totalDebt > 0 ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800">
+            Còn nợ nhà cung cấp màn: <span className="font-medium">{fmtVND(totalDebt)}</span>
+          </div>
+        ) : <span className="text-xs text-slate-400">{rows.length} phiếu nhập màn</span>}
+        {canCreate && (
+          <button onClick={() => { setShowForm((s) => !s); setOkMsg(null); }}
+            className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Plus size={15} /> Nhập màn
+          </button>
+        )}
+      </div>
+
+      {okMsg && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{okMsg}</p>}
+
+      {showForm && (
+        <ScreenPurchaseForm employee={employee}
+          onCancel={() => setShowForm(false)}
+          onSaved={(code, n) => {
+            setShowForm(false);
+            setOkMsg(`Đã nhập kho ${n} tấm màn theo phiếu ${code}.`);
+            load();
+          }} />
+      )}
+
+      <Card className="p-0 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : rows.length === 0 ? (
+          <EmptyState icon={Smartphone} text="Chưa có phiếu nhập màn nào." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã</th>
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2">Loại màn</th>
+                <th className="px-3 py-2">NCC</th>
+                <th className="px-3 py-2 text-right">SL / Tồn</th>
+                <th className="px-3 py-2 text-right">Tổng tiền</th>
+                <th className="px-3 py-2 text-right">Còn nợ</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {rows.map((r) => {
+                  const rem = Math.max(0, Number(r.remaining || 0));
+                  return (
+                    <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.purchase_code}</td>
+                      <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.purchase_date)}</td>
+                      <td className="px-3 py-2.5">
+                        <p className="text-slate-700">{r.model}</p>
+                        <p className="text-xs text-slate-400">{r.grade || "chưa đánh giá"}</p>
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-500 text-xs">{r.vendor_name || "—"}</td>
+                      <td className="px-3 py-2.5 text-right text-slate-600 whitespace-nowrap">
+                        {r.quantity} / <span className="text-emerald-600">{r.still_in_stock}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-slate-700 whitespace-nowrap">{fmtVND(r.total_amount)}</td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        {rem > 0
+                          ? <span className="font-medium text-amber-600">{fmtVND(rem)}</span>
+                          : <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Đã trả đủ</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        {canPay && rem > 0 && (
+                          <button onClick={() => setPaying(r)} className="text-xs text-brand-600 hover:underline">Thanh toán</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {paying && (
+        <PayScreenPurchaseModal row={paying} employee={employee}
+          onClose={() => setPaying(null)}
+          onDone={() => { setPaying(null); load(); }} />
+      )}
+    </div>
+  );
+}
+
 function ServiceModule({ employee }) {
   const [tab, setTab] = useState("tickets");
   const [rows, setRows] = useState([]);
@@ -6219,7 +6500,8 @@ function ServiceModule({ employee }) {
           <p className="text-xs text-slate-400">
             {tab === "tickets"
               ? `${open.length} máy đang xử lý · giá vốn ${fmtVND(openValue)}`
-              : "Màn tháo ra và màn đã mua, theo dõi chất lượng"}
+              : tab === "screens" ? "Màn tháo ra và màn đã mua, theo dõi chất lượng"
+              : "Nhập kho màn rời hoặc theo lô, treo công nợ nhà cung cấp"}
           </p>
         </div>
         {tab === "tickets" && canManage && (
@@ -6231,7 +6513,7 @@ function ServiceModule({ employee }) {
       </div>
 
       <div className="flex gap-2 mb-4">
-        {[["tickets", "Phiếu dịch vụ"], ["screens", "Kho màn hình"]].map(([k, label]) => (
+        {[["tickets", "Phiếu dịch vụ"], ["screens", "Kho màn hình"], ["purchases", "Nhập màn"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={classNames("px-4 py-2 rounded-xl text-sm border font-medium",
               tab === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50")}
@@ -6239,7 +6521,8 @@ function ServiceModule({ employee }) {
         ))}
       </div>
 
-      {tab === "screens" ? <ScreenStockTab employee={employee} /> : (
+      {tab === "purchases" ? <ScreenPurchaseTab employee={employee} />
+       : tab === "screens" ? <ScreenStockTab employee={employee} /> : (
         <>
           {okCode && (
             <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 mb-3">
