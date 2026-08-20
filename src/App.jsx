@@ -3773,6 +3773,241 @@ function PartnerLedgerPanel({ partner }) {
   );
 }
 
+
+function SettleInstallmentModal({ row, employee, onClose, onDone }) {
+  const [received, setReceived] = useState(String(row.amount));
+  const [fee, setFee] = useState("0");
+  const [bankId, setBankId] = useState(null);
+  const [settledAt, setSettledAt] = useState(todayStr());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { banks } = usePaymentOptions();
+
+  const recv = Number(received) || 0;
+  const f = Number(fee) || 0;
+  const diff = Number(row.amount) - recv - f;
+
+  const submit = async () => {
+    if (recv <= 0) { setError("Số tiền nhận phải lớn hơn 0."); return; }
+    if (Math.round(diff) !== 0) {
+      setError(`Tiền nhận cộng phí phải bằng ${fmtVND(row.amount)} — đang lệch ${fmtVND(diff)}.`);
+      return;
+    }
+    setSaving(true); setError("");
+    const { error: err } = await supabase.rpc("settle_installment", {
+      p_payment_id: row.payment_id, p_received: recv,
+      p_bank_account_id: bankId, p_fee: f, p_settled_at: settledAt,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "order_payments", record_id: row.payment_id, action: "update",
+      new_data: { da_nhan: recv, phi: f, ngay: settledAt },
+      performed_by: employee.id, store_id: employee.store_id,
+    });
+    onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Xác nhận nhận tiền trả góp</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="bg-violet-50 rounded-xl px-3 py-2.5 text-xs text-violet-800 space-y-0.5">
+            <p className="font-medium">{row.installment_provider} · {fmtVND(row.amount)}</p>
+            <p>Đơn {row.order_code} · {row.customer_name}</p>
+            {row.installment_contract_code && <p>Mã hồ sơ: {row.installment_contract_code}</p>}
+            <p className="text-violet-500">Bán ngày {fmtDate(row.order_date)}</p>
+          </div>
+          <TextField label="Ngày nhận theo sao kê" type="date" value={settledAt} onChange={(e) => setSettledAt(e.target.value)} />
+          <div className="grid grid-cols-2 gap-2">
+            <TextField label="Số thực nhận (đ)" type="number" value={received} onChange={(e) => setReceived(e.target.value)} />
+            <TextField label="Phí giữ lại (đ)" type="number" value={fee} onChange={(e) => setFee(e.target.value)} />
+          </div>
+          <div>
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Tài khoản nhận tiền</span>
+            <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+          </div>
+          <div className={classNames(
+            "text-xs px-3 py-2 rounded-lg",
+            Math.round(diff) === 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600"
+          )}>
+            {Math.round(diff) === 0
+              ? `Khớp: ${fmtVND(recv)} + phí ${fmtVND(f)} = ${fmtVND(row.amount)}`
+              : `Lệch ${fmtVND(diff)} — kiểm tra lại số nhận hoặc phí.`}
+          </div>
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={submit} disabled={saving}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận đã nhận
+            </button>
+            <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function InstallmentTracking({ employee }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("pending");
+  const [provider, setProvider] = useState("all");
+  const [search, setSearch] = useState("");
+  const [settling, setSettling] = useState(null);
+
+  const canSettle = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("v_installment_tracking").select("*")
+      .order("created_at", { ascending: false }).limit(2000);
+    setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const providers = [...new Set(rows.map((r) => r.installment_provider).filter(Boolean))].sort();
+
+  const filtered = rows.filter((r) => {
+    if (status !== "all" && r.settlement_status !== status) return false;
+    if (provider !== "all" && r.installment_provider !== provider) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return [r.order_code, r.customer_name, r.customer_phone, r.installment_contract_code, r.imei]
+      .some((v) => v?.toLowerCase().includes(q));
+  });
+
+  const pending = rows.filter((r) => r.settlement_status === "pending");
+  const pendingByProvider = {};
+  for (const r of pending) {
+    const k = r.installment_provider || "Chưa ghi đơn vị";
+    if (!pendingByProvider[k]) pendingByProvider[k] = { count: 0, amount: 0 };
+    pendingByProvider[k].count += 1;
+    pendingByProvider[k].amount += Number(r.amount || 0);
+  }
+  const pendingRows = Object.entries(pendingByProvider).sort((a, b) => b[1].amount - a[1].amount);
+  const totalPending = pending.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  return (
+    <div>
+      <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-violet-800 flex items-center gap-2">
+        <CalendarClock size={15} className="shrink-0" />
+        Đang chờ giải ngân <span className="font-medium">{fmtVND(totalPending)}</span> trên {pending.length} hồ sơ
+        <span className="text-violet-400">· đối chiếu với sao kê cuối ngày</span>
+      </div>
+
+      {pendingRows.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          {pendingRows.map(([name, v]) => (
+            <button
+              key={name} onClick={() => { setProvider(name); setStatus("pending"); }}
+              className={classNames(
+                "text-left rounded-xl p-3 border transition",
+                provider === name ? "bg-violet-100 border-violet-300" : "bg-white border-slate-200 hover:border-violet-200"
+              )}
+            >
+              <p className="text-xs text-slate-500 mb-1">{name}</p>
+              <p className="text-base font-semibold text-slate-800">{fmtVND(v.amount)}</p>
+              <p className="text-[11px] text-slate-400">{v.count} hồ sơ</p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <Card className="p-0 overflow-hidden">
+        <div className="p-3 border-b border-slate-100 flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm mã đơn, khách, mã hồ sơ, IMEI..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400"
+            />
+          </div>
+          <select value={provider} onChange={(e) => setProvider(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            <option value="all">Tất cả đơn vị</option>
+            {providers.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          {[["pending", "Chờ nhận"], ["settled", "Đã nhận"], ["all", "Tất cả"]].map(([k, label]) => (
+            <button key={k} onClick={() => setStatus(k)}
+              className={classNames("px-3 py-2 rounded-xl text-sm border",
+                status === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200")}
+            >{label}</button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={CalendarClock} text="Không có hồ sơ trả góp nào khớp bộ lọc." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Ngày bán</th>
+                <th className="px-3 py-2">Đơn / Khách</th>
+                <th className="px-3 py-2">Đơn vị</th>
+                <th className="px-3 py-2">Mã hồ sơ</th>
+                <th className="px-3 py-2 text-right">Số tiền</th>
+                <th className="px-3 py-2">Trạng thái</th>
+                <th className="px-3 py-2"></th>
+              </tr></thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.payment_id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{fmtDate(r.order_date)}</td>
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium text-slate-700">{r.order_code}</p>
+                      <p className="text-xs text-slate-400">{r.customer_name}{r.customer_phone ? ` · ${r.customer_phone}` : ""}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{r.installment_provider || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-400 text-xs">{r.installment_contract_code || "—"}</td>
+                    <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {r.settlement_status === "settled" ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                          Đã nhận {r.settled_at ? fmtDate(r.settled_at) : ""}
+                          {Number(r.settlement_fee) > 0 && ` · phí ${fmtVND(r.settlement_fee)}`}
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">Chờ giải ngân</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {canSettle && r.settlement_status === "pending" && (
+                        <button onClick={() => setSettling(r)} className="text-xs text-brand-600 hover:underline">
+                          Đã nhận tiền
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {settling && (
+        <SettleInstallmentModal
+          row={settling} employee={employee}
+          onClose={() => setSettling(null)}
+          onDone={() => { setSettling(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
 function ManualOffsetModal({ partner, onClose, onDone }) {
   const rec = Number(partner.receivable), pay = Number(partner.payable);
   const maxOffset = Math.min(rec, pay);
@@ -3840,6 +4075,7 @@ function ManualOffsetModal({ partner, onClose, onDone }) {
 }
 
 function DebtModule({ employee }) {
+  const [tab, setTab] = useState("partners");   // partners | installment
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -3873,13 +4109,29 @@ function DebtModule({ employee }) {
     <div>
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Công nợ đối tác</h2>
-          <p className="text-xs text-slate-400">{active.length} đối tác đang có số dư</p>
+          <h2 className="text-lg font-semibold text-slate-800">Công nợ</h2>
+          <p className="text-xs text-slate-400">
+            {tab === "partners" ? `${active.length} đối tác đang có số dư` : "Đối soát tiền về từ đơn vị trả góp"}
+          </p>
         </div>
-        <button onClick={load} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-3 py-2 text-sm flex items-center gap-1.5">
-          <Loader2 size={14} className={loading ? "animate-spin" : ""} /> Tải lại
-        </button>
+        {tab === "partners" && (
+          <button onClick={load} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-3 py-2 text-sm flex items-center gap-1.5">
+            <Loader2 size={14} className={loading ? "animate-spin" : ""} /> Tải lại
+          </button>
+        )}
       </div>
+
+      <div className="flex gap-2 mb-4">
+        {[["partners", "Đối tác"], ["installment", "Trả góp"]].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={classNames("px-4 py-2 rounded-xl text-sm border font-medium",
+              tab === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50")}
+          >{label}</button>
+        ))}
+      </div>
+
+      {tab === "installment" && <InstallmentTracking employee={employee} />}
+      {tab === "partners" && (<>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         <Card className="p-4">
@@ -3988,6 +4240,7 @@ function DebtModule({ employee }) {
           </div>
         )}
       </Card>
+      </>)}
 
       {offsetting && (
         <ManualOffsetModal
@@ -4008,7 +4261,7 @@ const NAV_ITEMS = [
   { key: "purchases", label: "Nhập máy/Thu cũ", icon: ArrowLeftRight },
   { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 4" },
   { key: "receipts", label: "Phiếu thu/chi", icon: Receipt },
-  { key: "debts", label: "Công nợ đối tác", icon: Banknote },
+  { key: "debts", label: "Công nợ", icon: Banknote },
   { key: "reports", label: "Báo cáo", icon: BarChart3, allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "employees", label: "Nhân viên", icon: UserCog, managerOnly: true },
   { key: "audit", label: "Audit Log", icon: ScrollText, allowedRoles: ["quan_ly", "ke_toan"] },
