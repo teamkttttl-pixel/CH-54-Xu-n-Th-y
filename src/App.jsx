@@ -5745,12 +5745,598 @@ function ExpensesModule({ employee }) {
   );
 }
 
+/* -------------------------------------------------------------- */
+/* Spa / Sửa chữa — thay đổi giá vốn máy + kho màn hình            */
+/* -------------------------------------------------------------- */
+
+const SERVICE_TYPE_LABELS = { spa: "Spa", screen_replace: "Thay màn" };
+const SERVICE_STATUS_LABELS = { in_progress: "Đang xử lý", done: "Hoàn tất", cancelled: "Đã hủy" };
+const SERVICE_STATUS_STYLES = {
+  in_progress: "bg-amber-50 text-amber-700",
+  done: "bg-emerald-50 text-emerald-700",
+  cancelled: "bg-slate-100 text-slate-400",
+};
+const SCREEN_STATUS_LABELS = {
+  in_stock: "Còn trong kho", installed: "Đã lắp máy", sold: "Đã bán", scrapped: "Đã loại",
+};
+const SCREEN_STATUS_STYLES = {
+  in_stock: "bg-emerald-50 text-emerald-700",
+  installed: "bg-sky-50 text-sky-700",
+  sold: "bg-slate-100 text-slate-500",
+  scrapped: "bg-rose-50 text-rose-600",
+};
+const SCREEN_GRADES = ["Zin bóc máy", "Zin ép kính", "Lô loại 1", "Lô loại 2", "Không rõ"];
+
+function SendServiceForm({ employee, onCancel, onSaved }) {
+  const [devices, setDevices] = useState([]);
+  const [search, setSearch] = useState("");
+  const [picked, setPicked] = useState(null);
+  const [type, setType] = useState("spa");
+  const [vendor, setVendor] = useState(null);
+  const [sentAt, setSentAt] = useState(todayStr());
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const canSeeCost = employee.role !== "nhan_vien";
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("devices")
+        .select("id, imei, model, storage, color, cost_price")
+        .eq("status", "in_stock").order("created_at", { ascending: false }).limit(1000);
+      setDevices(data || []);
+    })();
+  }, []);
+
+  const filtered = !search.trim() ? devices.slice(0, 25) : devices.filter((d) => {
+    const q = search.trim().toLowerCase();
+    return [d.imei, d.model, d.color, d.storage].some((v) => v?.toLowerCase().includes(q));
+  }).slice(0, 25);
+
+  const submit = async () => {
+    if (!picked) { setError("Vui lòng chọn máy."); return; }
+    setSaving(true); setError("");
+    const { data, error: err } = await supabase.rpc("create_service_ticket", {
+      p_device_id: picked.id, p_service_type: type,
+      p_vendor_id: vendor?.id || null, p_note: note.trim() || null, p_sent_at: sentAt,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    await supabase.from("audit_logs").insert({
+      table_name: "service_tickets", record_id: picked.id, action: "create",
+      new_data: { ma: data, loai: type, imei: picked.imei },
+      performed_by: employee.id, store_id: employee.store_id,
+    });
+    onSaved(data);
+  };
+
+  return (
+    <Card className="p-4 mb-3">
+      <p className="text-sm font-medium text-slate-700 mb-3">Gửi máy đi Spa / Sửa chữa</p>
+      <div className="space-y-3">
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">Chọn máy trong kho *</span>
+          {picked ? (
+            <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+              <div>
+                <p className="text-sm font-medium text-slate-700">{[picked.model, picked.storage, picked.color].filter(Boolean).join(" ")}</p>
+                <p className="text-xs text-slate-400">
+                  IMEI {picked.imei || "—"}{canSeeCost && <> · giá vốn hiện tại {fmtVND(picked.cost_price)}</>}
+                </p>
+              </div>
+              <button onClick={() => setPicked(null)} className="text-xs text-brand-600 hover:underline">Đổi</button>
+            </div>
+          ) : (
+            <>
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Tìm IMEI, model, màu..."
+                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
+              </div>
+              <div className="mt-2 max-h-48 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+                {filtered.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-4 text-center">Không có máy Còn hàng nào khớp.</p>
+                ) : filtered.map((d) => (
+                  <button key={d.id} onClick={() => setPicked(d)} className="w-full text-left px-3 py-2 hover:bg-slate-50">
+                    <p className="text-sm text-slate-700">{[d.model, d.storage, d.color].filter(Boolean).join(" ")}</p>
+                    <p className="text-xs text-slate-400">IMEI {d.imei || "—"}{canSeeCost && <> · {fmtVND(d.cost_price)}</>}</p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-xs font-medium text-slate-500 mb-1 block">Loại dịch vụ *</span>
+            <select value={type} onChange={(e) => setType(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <option value="spa">Spa — làm đẹp máy (giá vốn tăng)</option>
+              <option value="screen_replace">Thay màn (giá vốn tăng hoặc giảm)</option>
+            </select>
+          </label>
+          <TextField label="Ngày gửi" type="date" value={sentAt} onChange={(e) => setSentAt(e.target.value)} />
+        </div>
+
+        <div>
+          <span className="text-xs font-medium text-slate-500 mb-1 block">
+            Đơn vị {type === "spa" ? "Spa" : "cung cấp màn"}
+          </span>
+          <SupplierPicker value={vendor} onSelect={setVendor} employee={employee} />
+          <p className="text-[11px] text-slate-400 mt-1">
+            Chi phí sẽ treo thành công nợ phải trả đơn vị này. Để trống nếu tự làm, không phát sinh công nợ.
+          </p>
+        </div>
+
+        <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)}
+          placeholder="Ép kính, thay vỏ, đánh bóng..." />
+
+        {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={submit} disabled={saving}
+            className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+            {saving && <Loader2 size={15} className="animate-spin" />} Gửi máy đi
+          </button>
+          <button onClick={onCancel} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
+  const isSpa = ticket.service_type === "spa";
+  const [spaCost, setSpaCost] = useState("");
+  const [oldValue, setOldValue] = useState("");
+  const [newCost, setNewCost] = useState("");
+  const [useStock, setUseStock] = useState(false);
+  const [stockScreens, setStockScreens] = useState([]);
+  const [stockId, setStockId] = useState("");
+  const [oldGrade, setOldGrade] = useState("");
+  const [newGrade, setNewGrade] = useState("");
+  const [doneAt, setDoneAt] = useState(todayStr());
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [okCost, setOkCost] = useState(null);
+
+  useEffect(() => {
+    if (isSpa) return;
+    (async () => {
+      const { data } = await supabase.from("v_screens").select("*")
+        .eq("status", "in_stock").order("created_at", { ascending: false }).limit(200);
+      setStockScreens(data || []);
+    })();
+  }, [isSpa]);
+
+  const before = Number(ticket.cost_before || 0);
+  const chosen = stockScreens.find((s) => s.id === stockId);
+  const effNew = useStock ? Number(chosen?.unit_price || 0) : (Number(newCost) || 0);
+  const after = isSpa ? before + (Number(spaCost) || 0)
+                      : Math.max(0, before - (Number(oldValue) || 0) + effNew);
+
+  const submit = async () => {
+    setSaving(true); setError("");
+    let res;
+    if (isSpa) {
+      const c = Number(spaCost) || 0;
+      if (c < 0) { setSaving(false); setError("Chi phí spa không hợp lệ."); return; }
+      res = await supabase.rpc("complete_spa_ticket", {
+        p_ticket_id: ticket.id, p_spa_cost: c,
+        p_note: note.trim() || null, p_done_at: doneAt,
+      });
+    } else {
+      const ov = Number(oldValue) || 0;
+      if (String(oldValue).trim() === "") { setSaving(false); setError("Vui lòng nhập đơn giá màn cũ."); return; }
+      if (useStock && !stockId) { setSaving(false); setError("Vui lòng chọn màn trong kho."); return; }
+      if (!useStock && String(newCost).trim() === "") { setSaving(false); setError("Vui lòng nhập đơn giá màn mới."); return; }
+      res = await supabase.rpc("complete_screen_ticket", {
+        p_ticket_id: ticket.id,
+        p_old_screen_value: ov,
+        p_new_screen_cost: useStock ? null : (Number(newCost) || 0),
+        p_new_screen_id: useStock ? stockId : null,
+        p_old_screen_grade: oldGrade || null,
+        p_new_screen_grade: newGrade || null,
+        p_note: note.trim() || null, p_done_at: doneAt,
+      });
+    }
+    setSaving(false);
+    if (res.error) { setError(res.error.message); return; }
+    setOkCost(res.data);
+    await supabase.from("audit_logs").insert({
+      table_name: "service_tickets", record_id: ticket.id, action: "update",
+      new_data: { ma: ticket.ticket_code, gia_von_moi: res.data },
+      performed_by: employee.id, store_id: employee.store_id,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
+      <Card className="w-full max-w-lg p-5 my-8">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">
+            Hoàn tất {SERVICE_TYPE_LABELS[ticket.service_type]} — {ticket.ticket_code}
+          </p>
+          <button onClick={onClose} className="text-slate-400 hover:text-rose-600"><X size={16} /></button>
+        </div>
+
+        {okCost !== null ? (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800 space-y-1">
+              <p>Máy đã về kho ở trạng thái Còn hàng.</p>
+              <p>Giá vốn mới: <span className="font-semibold">{fmtVND(okCost)}</span></p>
+              {!isSpa && <p className="text-xs">Màn cũ đã được ghi vào Kho màn hình.</p>}
+            </div>
+            <button onClick={onDone} className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">Xong</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-xs space-y-0.5">
+              <p className="font-medium text-slate-700">{[ticket.model, ticket.storage, ticket.color].filter(Boolean).join(" ")}</p>
+              <p className="text-slate-400">IMEI {ticket.imei || "—"} · gửi ngày {fmtDate(ticket.sent_at)}</p>
+              {ticket.vendor_name && <p className="text-slate-400">Đơn vị: {ticket.vendor_name}</p>}
+              <div className="flex justify-between pt-1 mt-1 border-t border-slate-200">
+                <span className="text-slate-400">Giá vốn trước</span>
+                <span className="font-medium text-slate-700">{fmtVND(before)}</span>
+              </div>
+            </div>
+
+            <TextField label="Ngày hoàn tất" type="date" value={doneAt} onChange={(e) => setDoneAt(e.target.value)} />
+
+            {isSpa ? (
+              <TextField label="Chi phí spa (đ) *" type="number" value={spaCost} onChange={(e) => setSpaCost(e.target.value)} />
+            ) : (
+              <>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <TextField label="Đơn giá màn cũ tháo ra (đ) *" type="number" value={oldValue} onChange={(e) => setOldValue(e.target.value)} />
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng màn cũ</span>
+                    <select value={oldGrade} onChange={(e) => setOldGrade(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                      <option value="">— Chọn —</option>
+                      {SCREEN_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <label className="flex items-center gap-2 text-xs text-slate-600 mb-2">
+                    <input type="checkbox" checked={useStock} onChange={(e) => setUseStock(e.target.checked)} />
+                    Lắp lại một màn đang có trong Kho màn hình (không phát sinh công nợ)
+                  </label>
+
+                  {useStock ? (
+                    <select value={stockId} onChange={(e) => setStockId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                      <option value="">— Chọn màn trong kho —</option>
+                      {stockScreens.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.screen_code} · {s.model || "—"} · {s.grade || "chưa đánh giá"} · {fmtVND(s.unit_price)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <TextField label="Đơn giá màn mới (đ) *" type="number" value={newCost} onChange={(e) => setNewCost(e.target.value)} />
+                      <label className="block">
+                        <span className="text-xs font-medium text-slate-500 mb-1 block">Chất lượng màn mới</span>
+                        <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                          <option value="">— Chọn —</option>
+                          {SCREEN_GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            <div className={classNames("text-xs px-3 py-2.5 rounded-lg space-y-0.5",
+              after > before ? "bg-amber-50 text-amber-800" : after < before ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-600")}>
+              <div className="flex justify-between"><span>Giá vốn trước</span><span>{fmtVND(before)}</span></div>
+              {isSpa ? (
+                <div className="flex justify-between"><span>Chi phí spa</span><span>+{fmtVND(Number(spaCost) || 0)}</span></div>
+              ) : (
+                <>
+                  <div className="flex justify-between"><span>Trừ màn cũ</span><span>−{fmtVND(Number(oldValue) || 0)}</span></div>
+                  <div className="flex justify-between"><span>Cộng màn mới</span><span>+{fmtVND(effNew)}</span></div>
+                </>
+              )}
+              <div className="flex justify-between font-semibold border-t border-current/20 pt-1 mt-1">
+                <span>Giá vốn mới</span><span>{fmtVND(after)}</span>
+              </div>
+            </div>
+
+            <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
+            {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={submit} disabled={saving}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận hoàn tất
+              </button>
+              <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function ScreenStockTab({ employee }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("in_stock");
+  const [search, setSearch] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from("v_screens").select("*")
+      .order("created_at", { ascending: false }).limit(1000);
+    setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = rows.filter((r) => {
+    if (status !== "all" && r.status !== status) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return [r.screen_code, r.model, r.grade, r.source_imei, r.installed_imei]
+      .some((v) => v?.toLowerCase().includes(q));
+  });
+
+  const inStock = rows.filter((r) => r.status === "in_stock");
+  const stockValue = inStock.reduce((s, r) => s + Number(r.unit_price || 0), 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card className="p-3">
+          <p className="text-xs text-slate-400 mb-1">Màn còn trong kho</p>
+          <p className="text-lg font-semibold text-slate-800">{inStock.length}</p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-xs text-slate-400 mb-1">Giá trị tồn</p>
+          <p className="text-lg font-semibold text-emerald-700">{fmtVND(stockValue)}</p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-xs text-slate-400 mb-1">Đã lắp máy</p>
+          <p className="text-lg font-semibold text-sky-700">{rows.filter((r) => r.status === "installed").length}</p>
+        </Card>
+        <Card className="p-3">
+          <p className="text-xs text-slate-400 mb-1">Tháo ra từ máy</p>
+          <p className="text-lg font-semibold text-slate-600">{rows.filter((r) => r.origin === "removed").length}</p>
+        </Card>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <div className="p-3 border-b border-slate-100 flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm mã màn, loại, chất lượng, IMEI..."
+              className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
+          </div>
+          <select value={status} onChange={(e) => setStatus(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+            <option value="in_stock">Còn trong kho</option>
+            <option value="installed">Đã lắp máy</option>
+            <option value="sold">Đã bán</option>
+            <option value="scrapped">Đã loại</option>
+            <option value="all">Tất cả</option>
+          </select>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={Smartphone} text="Chưa có màn hình nào trong kho." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <th className="px-3 py-2">Mã</th>
+                <th className="px-3 py-2">Loại màn</th>
+                <th className="px-3 py-2">Chất lượng</th>
+                <th className="px-3 py-2">Nguồn</th>
+                <th className="px-3 py-2 text-right">Đơn giá</th>
+                <th className="px-3 py-2">Trạng thái</th>
+              </tr></thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                    <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.screen_code}</td>
+                    <td className="px-3 py-2.5 text-slate-700">{r.model || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-600 text-xs">{r.grade || "chưa đánh giá"}</td>
+                    <td className="px-3 py-2.5 text-xs">
+                      {r.origin === "removed" ? (
+                        <span className="text-slate-500">Tháo từ {r.source_imei || "máy cũ"}</span>
+                      ) : (
+                        <span className="text-slate-500">Mua{r.vendor_name ? ` — ${r.vendor_name}` : ""}</span>
+                      )}
+                      {r.installed_imei && <p className="text-sky-600">Đang lắp ở {r.installed_imei}</p>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-slate-700 whitespace-nowrap">{fmtVND(r.unit_price)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={classNames("text-xs px-2 py-0.5 rounded-full", SCREEN_STATUS_STYLES[r.status])}>
+                        {SCREEN_STATUS_LABELS[r.status] || r.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function ServiceModule({ employee }) {
+  const [tab, setTab] = useState("tickets");
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [completing, setCompleting] = useState(null);
+  const [okCode, setOkCode] = useState(null);
+  const [showDone, setShowDone] = useState(false);
+
+  const canManage = employee.role !== "ke_toan";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from("v_service_tickets").select("*")
+      .order("created_at", { ascending: false }).limit(500);
+    setRows(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const open = rows.filter((r) => r.status === "in_progress");
+  const shown = showDone ? rows : open;
+  const openValue = open.reduce((s, r) => s + Number(r.cost_before || 0), 0);
+
+  const cancel = async (r) => {
+    if (!confirm(`Hủy phiếu ${r.ticket_code}? Máy sẽ quay lại kho ở trạng thái Còn hàng.`)) return;
+    const { error } = await supabase.rpc("cancel_service_ticket", { p_ticket_id: r.id });
+    if (error) { alert(error.message); return; }
+    load();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Spa / Sửa chữa</h2>
+          <p className="text-xs text-slate-400">
+            {tab === "tickets"
+              ? `${open.length} máy đang xử lý · giá vốn ${fmtVND(openValue)}`
+              : "Màn tháo ra và màn đã mua, theo dõi chất lượng"}
+          </p>
+        </div>
+        {tab === "tickets" && canManage && (
+          <button onClick={() => { setShowForm((s) => !s); setOkCode(null); }}
+            className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Plus size={15} /> Gửi máy đi
+          </button>
+        )}
+      </div>
+
+      <div className="flex gap-2 mb-4">
+        {[["tickets", "Phiếu dịch vụ"], ["screens", "Kho màn hình"]].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={classNames("px-4 py-2 rounded-xl text-sm border font-medium",
+              tab === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50")}
+          >{label}</button>
+        ))}
+      </div>
+
+      {tab === "screens" ? <ScreenStockTab employee={employee} /> : (
+        <>
+          {okCode && (
+            <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 mb-3">
+              Đã lập phiếu <span className="font-semibold">{okCode}</span>. Máy chuyển sang trạng thái Đang spa/sửa, không bán được cho tới khi hoàn tất.
+            </p>
+          )}
+
+          {showForm && (
+            <SendServiceForm employee={employee}
+              onCancel={() => setShowForm(false)}
+              onSaved={(code) => { setShowForm(false); setOkCode(code); load(); }} />
+          )}
+
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+            <p className="text-xs text-slate-400">{open.length} phiếu đang xử lý</p>
+            <button onClick={() => setShowDone((s) => !s)} className="text-xs text-brand-600 hover:underline">
+              {showDone ? "Chỉ xem đang xử lý" : "Xem cả phiếu đã hoàn tất"}
+            </button>
+          </div>
+
+          <Card className="p-0 overflow-hidden">
+            {loading ? (
+              <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+            ) : shown.length === 0 ? (
+              <EmptyState icon={Settings} text="Chưa có phiếu spa/sửa chữa nào." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                    <th className="px-3 py-2">Mã</th>
+                    <th className="px-3 py-2">Máy</th>
+                    <th className="px-3 py-2">Loại</th>
+                    <th className="px-3 py-2">Đơn vị</th>
+                    <th className="px-3 py-2 text-right">Giá vốn</th>
+                    <th className="px-3 py-2">Trạng thái</th>
+                    <th className="px-3 py-2"></th>
+                  </tr></thead>
+                  <tbody>
+                    {shown.map((r) => {
+                      const change = Number(r.cost_after || 0) - Number(r.cost_before || 0);
+                      return (
+                        <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                          <td className="px-3 py-2.5 text-slate-400 text-xs whitespace-nowrap">{r.ticket_code}</td>
+                          <td className="px-3 py-2.5">
+                            <p className="text-slate-700">{[r.model, r.storage, r.color].filter(Boolean).join(" ")}</p>
+                            <p className="text-xs text-slate-400">IMEI {r.imei || "—"} · gửi {fmtDate(r.sent_at)}</p>
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{SERVICE_TYPE_LABELS[r.service_type]}</td>
+                          <td className="px-3 py-2.5 text-slate-500 text-xs">{r.vendor_name || "Tự làm"}</td>
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                            <p className="text-slate-600">{fmtVND(r.cost_before)}</p>
+                            {r.status === "done" && (
+                              <p className={classNames("text-xs", change > 0 ? "text-amber-600" : change < 0 ? "text-emerald-600" : "text-slate-400")}>
+                                → {fmtVND(r.cost_after)} ({change >= 0 ? "+" : ""}{fmtVND(change)})
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className={classNames("text-xs px-2 py-0.5 rounded-full", SERVICE_STATUS_STYLES[r.status])}>
+                              {SERVICE_STATUS_LABELS[r.status]}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                            {canManage && r.status === "in_progress" && (
+                              <>
+                                <button onClick={() => setCompleting(r)} className="text-xs text-brand-600 hover:underline mr-3">Hoàn tất</button>
+                                <button onClick={() => cancel(r)} className="text-xs text-rose-500 hover:underline">Hủy</button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {completing && (
+        <CompleteServiceModal ticket={completing} employee={employee}
+          onClose={() => setCompleting(null)}
+          onDone={() => { setCompleting(null); load(); }} />
+      )}
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "customers", label: "Khách hàng", icon: Users },
   { key: "inventory", label: "Kho hàng", icon: Smartphone },
   { key: "orders", label: "Đơn hàng bán", icon: ShoppingCart },
   { key: "purchases", label: "Nhập máy/Thu cũ", icon: ArrowLeftRight },
+  { key: "service", label: "Spa / Sửa chữa", icon: Settings },
   { key: "invoices", label: "Hóa đơn", icon: FileText, phase: "Phase 4" },
   { key: "expenses", label: "Chi phí", icon: Receipt },
   { key: "debts", label: "Công nợ", icon: Banknote },
@@ -5783,6 +6369,8 @@ function AppShell({ employee, onSignOut }) {
         return <OrdersModule employee={employee} />;
       case "purchases":
         return <PurchaseModule employee={employee} />;
+      case "service":
+        return <ServiceModule employee={employee} />;
       case "expenses":
         return <ExpensesModule employee={employee} />;
       case "debts":
