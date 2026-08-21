@@ -1487,13 +1487,15 @@ function usePaymentOptions() {
   return { banks, providers };
 }
 
-function BankSelect({ banks, value, onChange, className = "" }) {
+function BankSelect({ banks, value, onChange, className = "", incoming = false }) {
   return (
     <select
       value={value || ""} onChange={(e) => onChange(e.target.value || null)}
-      className={classNames("rounded-lg border border-slate-200 px-2 py-1.5 text-xs", className)}
+      className={classNames("rounded-lg border border-slate-300 px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition", className)}
     >
-      <option value="">— Chọn tài khoản nhận tiền —</option>
+      <option value="">
+        {incoming ? "— Chưa rõ, đối soát sau —" : "— Chọn tài khoản —"}
+      </option>
       {banks.map((b) => (
         <option key={b.id} value={b.id}>{(b.short_label || b.bank_name) + (b.account_number ? ` · ${b.account_number}` : "")}</option>
       ))}
@@ -1569,7 +1571,7 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
             )}
             {r.method === "bank_transfer" && (
               <div className="pl-6">
-                <BankSelect
+                <BankSelect incoming
                   banks={banks}
                   value={r.bank_account_id}
                   onChange={(v) => update(i, { bank_account_id: v })}
@@ -1716,10 +1718,8 @@ function OrderForm({ onCancel, onSaved, employee }) {
     }
     if (activePayments.some((r) => Number(r.amount) <= 0)) { setError("Số tiền thanh toán phải lớn hơn 0."); return; }
 
-    if (activePayments.some((r) => r.method === "bank_transfer" && !r.bank_account_id)) {
-      setError("Vui lòng chọn tài khoản ngân hàng nhận tiền cho dòng chuyển khoản.");
-      return;
-    }
+    // Chuyển khoản: KHÔNG bắt chọn tài khoản. Lúc bán không ai biết khách
+    // chuyển vào tài khoản nào — đối soát sau theo sao kê ở tab Đối soát NH.
     if (activePayments.some((r) => r.method === "installment" && !r.installment_provider?.trim())) {
       setError("Vui lòng chọn đơn vị hỗ trợ trả góp.");
       return;
@@ -2033,7 +2033,7 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
     const n = Number(amount) || 0;
     if (n <= 0) { setError("Vui lòng nhập số tiền thu hợp lệ."); return; }
     if (n > debt) { setError(`Khách chỉ còn nợ ${fmtVND(debt)}.`); return; }
-    if (method === "bank_transfer" && !bankId) { setError("Vui lòng chọn tài khoản nhận tiền."); return; }
+    // Tiền vào: không bắt chọn tài khoản, đối soát sau ở tab Đối soát NH
     setSaving(true); setError("");
     const { data: pay, error: err } = await supabase.from("order_payments").insert({
       order_id: order.id, method, amount: n,
@@ -2072,7 +2072,7 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
         {method === "bank_transfer" && (
           <div>
             <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản nhận tiền *</span>
-            <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+            <BankSelect incoming banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
           </div>
         )}
         <MoneyField label="Số tiền thu (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -5791,7 +5791,7 @@ function SettleAdvanceModal({ row, employee, onClose, onDone }) {
     const n = Number(amount) || 0;
     if (n <= 0) { setError("Số tiền nộp phải lớn hơn 0."); return; }
     if (n > remaining) { setError(`Phiếu này chỉ còn ${fmtVND(remaining)}.`); return; }
-    if (method === "bank_transfer" && !bankId) { setError("Vui lòng chọn tài khoản nhận."); return; }
+    // Tiền vào: không bắt chọn tài khoản, đối soát sau ở tab Đối soát NH
     setSaving(true); setError("");
     const { error: err } = await supabase.rpc("settle_cash_advance", {
       p_advance_id: row.id, p_amount: n, p_method: method,
@@ -5839,7 +5839,7 @@ function SettleAdvanceModal({ row, employee, onClose, onDone }) {
           {method === "bank_transfer" && (
             <div>
               <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản nhận *</span>
-              <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+              <BankSelect incoming banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
             </div>
           )}
           <MoneyField label="Số tiền nộp (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -6529,6 +6529,201 @@ function InternalDebtTab({ employee }) {
   );
 }
 
+function BankReconcileTab({ employee }) {
+  const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [fromDate, setFromDate] = useState(startOfMonth());
+  const [toDate, setToDate] = useState(todayStr());
+  const [view, setView] = useState("pending");   // pending | done
+  const [picked, setPicked] = useState({});
+  const [targetBank, setTargetBank] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const { banks } = usePaymentOptions();
+
+  const canManage = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: r }, { data: s }] = await Promise.all([
+      supabase.from("v_bank_reconcile").select("*")
+        .gte("pay_date", fromDate).lte("pay_date", toDate)
+        .order("pay_date", { ascending: false }).limit(2000),
+      supabase.rpc("bank_reconcile_summary", { p_from: fromDate, p_to: toDate }),
+    ]);
+    setRows(r || []);
+    setSummary(s || []);
+    setPicked({});
+    setLoading(false);
+  }, [fromDate, toDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const n = (v) => Number(v || 0);
+  const pending = rows.filter((r) => !r.is_assigned);
+  const done = rows.filter((r) => r.is_assigned);
+  const shown = view === "pending" ? pending : done;
+
+  const pickedIds = Object.keys(picked).filter((k) => picked[k]);
+  const pickedTotal = pending.filter((r) => picked[r.id]).reduce((s, r) => s + n(r.amount), 0);
+
+  const toggleAll = () => {
+    if (pickedIds.length === shown.length) setPicked({});
+    else setPicked(Object.fromEntries(shown.map((r) => [r.id, true])));
+  };
+
+  const assign = async (clear = false) => {
+    if (pickedIds.length === 0) return;
+    if (!clear && !targetBank) { setMsg("Chọn tài khoản trước đã."); return; }
+    setSaving(true); setMsg("");
+    const { data, error } = await supabase.rpc("assign_payment_bank", {
+      p_payment_ids: pickedIds,
+      p_bank_account_id: clear ? null : targetBank,
+    });
+    setSaving(false);
+    if (error) { setMsg(error.message); return; }
+    setMsg(clear ? `Đã bỏ gán ${data} khoản.` : `Đã gán ${data} khoản vào tài khoản đã chọn.`);
+    setTargetBank("");
+    load();
+  };
+
+  const pendingTotal = pending.reduce((s, r) => s + n(r.amount), 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex gap-2">
+          {[["pending", `Chờ đối soát (${pending.length})`], ["done", `Đã gán (${done.length})`]].map(([k, label]) => (
+            <button key={k} onClick={() => { setView(k); setPicked({}); }}
+              className={classNames("px-3 py-1.5 rounded-lg text-xs border font-medium",
+                view === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-600 border-slate-200")}
+            >{label}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-xl px-3 py-1.5">
+          <Filter size={14} className="text-slate-500" />
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="text-sm outline-none" />
+          <span className="text-slate-400">—</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="text-sm outline-none" />
+        </div>
+      </div>
+
+      {pending.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-xs text-amber-800">
+          <Landmark size={15} className="inline mr-1.5" />
+          Còn <span className="font-semibold">{pending.length}</span> khoản chuyển khoản chưa rõ vào tài khoản nào,
+          tổng <span className="font-semibold">{fmtVND(pendingTotal)}</span>. Mở sao kê ngân hàng ra đối chiếu rồi gán.
+        </div>
+      )}
+
+      {summary.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {summary.map((s, i) => (
+            <Card key={i} className={classNames("p-3", !s.is_assigned && "border-amber-200 bg-amber-50/50")}>
+              <p className={classNames("text-xs mb-1 truncate", s.is_assigned ? "text-slate-500" : "text-amber-700")}>
+                {s.bank_label}
+              </p>
+              <p className={classNames("text-base font-semibold", s.is_assigned ? "text-slate-800" : "text-amber-800")}>
+                {fmtVND(s.total_amount)}
+              </p>
+              <p className="text-[11px] text-slate-500">{s.payment_count} khoản</p>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {canManage && view === "pending" && pickedIds.length > 0 && (
+        <Card className="p-3 border-brand-200 bg-brand-50/60">
+          <p className="text-xs text-slate-700 mb-2">
+            Đã chọn <span className="font-semibold">{pickedIds.length}</span> khoản ·{" "}
+            <span className="font-semibold">{fmtVND(pickedTotal)}</span>
+          </p>
+          <div className="flex gap-2 flex-wrap items-center">
+            <select value={targetBank} onChange={(e) => setTargetBank(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40">
+              <option value="">— Gán vào tài khoản —</option>
+              {banks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {(b.short_label || b.bank_name) + (b.account_number ? ` · ${b.account_number}` : "")}
+                </option>
+              ))}
+            </select>
+            <button onClick={() => assign(false)} disabled={saving || !targetBank}
+              className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} Gán tài khoản
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {canManage && view === "done" && pickedIds.length > 0 && (
+        <Card className="p-3">
+          <button onClick={() => assign(true)} disabled={saving}
+            className="text-xs text-rose-600 hover:underline">
+            Bỏ gán {pickedIds.length} khoản đã chọn (gán nhầm thì đưa về trạng thái chờ)
+          </button>
+        </Card>
+      )}
+
+      {msg && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{msg}</p>}
+
+      <Card className="p-0 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : shown.length === 0 ? (
+          <EmptyState icon={Landmark}
+            text={view === "pending" ? "Không còn khoản nào chờ đối soát." : "Chưa có khoản nào được gán trong kỳ."} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+                {canManage && (
+                  <th className="px-3 py-2 w-8">
+                    <input type="checkbox" checked={pickedIds.length === shown.length && shown.length > 0}
+                      onChange={toggleAll} />
+                  </th>
+                )}
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2">Đơn</th>
+                <th className="px-3 py-2">Khách</th>
+                <th className="px-3 py-2">Máy</th>
+                <th className="px-3 py-2 text-right">Số tiền</th>
+                <th className="px-3 py-2">Tài khoản</th>
+              </tr></thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.id} className={classNames("border-b border-slate-50 last:border-0",
+                    picked[r.id] && "bg-brand-50/50")}>
+                    {canManage && (
+                      <td className="px-3 py-2.5">
+                        <input type="checkbox" checked={!!picked[r.id]}
+                          onChange={(e) => setPicked((p) => ({ ...p, [r.id]: e.target.checked }))} />
+                      </td>
+                    )}
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.pay_date)}</td>
+                    <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.order_code || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-700">{r.customer_name || "—"}</td>
+                    <td className="px-3 py-2.5 text-slate-500 text-xs">
+                      {r.model || "—"}{r.imei ? ` · ${r.imei}` : ""}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-medium text-slate-800 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {r.is_assigned
+                        ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{r.bank_label || r.bank_name}</span>
+                        : <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Chưa rõ</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function DebtModule({ employee }) {
   const [tab, setTab] = useState("partners");   // partners | installment
   const [rows, setRows] = useState([]);
@@ -6569,7 +6764,8 @@ function DebtModule({ employee }) {
             {tab === "partners" ? `${active.length} đối tác đang có số dư`
               : tab === "installment" ? "Đối soát tiền về từ đơn vị trả góp"
               : tab === "advance" ? "Tiền mặt cuối ngày giao cho nhân sự giữ"
-              : "Nợ tiền hàng và tiền vay giữa các cửa hàng, đã bù trừ"}
+              : tab === "internal" ? "Nợ tiền hàng và tiền vay giữa các cửa hàng, đã bù trừ"
+              : "Gán khoản chuyển khoản khách trả vào đúng tài khoản ngân hàng"}
           </p>
         </div>
         {tab === "partners" && (
@@ -6580,7 +6776,7 @@ function DebtModule({ employee }) {
       </div>
 
       <div className="flex gap-2 mb-4">
-        {[["partners", "Đối tác"], ["installment", "Trả góp"], ["advance", "Tạm ứng"], ["internal", "Nội bộ"]].map(([k, label]) => (
+        {[["partners", "Đối tác"], ["installment", "Trả góp"], ["advance", "Tạm ứng"], ["internal", "Nội bộ"], ["bank", "Đối soát NH"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={classNames("px-4 py-2 rounded-xl text-sm border font-medium",
               tab === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50")}
@@ -6591,6 +6787,7 @@ function DebtModule({ employee }) {
       {tab === "installment" && <InstallmentTracking employee={employee} />}
       {tab === "advance" && <CashAdvanceTab employee={employee} />}
       {tab === "internal" && <InternalDebtTab employee={employee} />}
+      {tab === "bank" && <BankReconcileTab employee={employee} />}
       {tab === "partners" && (<>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
