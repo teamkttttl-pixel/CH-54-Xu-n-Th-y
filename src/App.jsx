@@ -639,20 +639,12 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
       if (initial?.id) {
         const { data: updated, error: err } = await supabase.from("devices").update(payload).eq("id", initial.id).select().maybeSingle();
         if (err) throw err;
-        await supabase.from("audit_logs").insert({
-          table_name: "devices", record_id: initial.id, action: "update",
-          old_data: initial, new_data: updated, performed_by: employee.id, store_id: employee.store_id,
-        });
       } else {
         payload.status = "in_stock";
         payload.created_by = employee.id;
         payload.store_id = employee.store_id;
         const { data: created, error: err } = await supabase.from("devices").insert(payload).select().maybeSingle();
         if (err) throw err;
-        await supabase.from("audit_logs").insert({
-          table_name: "devices", record_id: created?.id, action: "create",
-          new_data: created, performed_by: employee.id, store_id: employee.store_id,
-        });
       }
       onSaved();
     } catch (err) {
@@ -933,10 +925,6 @@ function InventoryModule({ employee, onCountChange }) {
     if (!confirm(`Xóa máy ${d.imei ? `IMEI "${d.imei}"` : `"${d.model}" (chưa có IMEI)`} khỏi kho?`)) return;
     const { error } = await supabase.from("devices").delete().eq("id", d.id);
     if (error) { alert(error.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "devices", record_id: d.id, action: "delete",
-      old_data: d, performed_by: employee.id, store_id: employee.store_id,
-    });
     load();
   };
 
@@ -1735,9 +1723,6 @@ function OrderForm({ onCancel, onSaved, employee }) {
         }).select().maybeSingle();
         if (mdErr) throw mdErr;
         saleDevice = newDevice;
-        await supabase.from("audit_logs").insert({
-          table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id, store_id: employee.store_id,
-        });
       }
 
       const orderPayload = {
@@ -1777,18 +1762,17 @@ function OrderForm({ onCancel, onSaved, employee }) {
       const { error: contractErr } = await supabase.from("contracts").insert({ order_id: order.id, created_by: employee.id, store_id: employee.store_id });
       if (contractErr) throw contractErr;
 
-      const auditRows = [
-        { table_name: "sales_orders", record_id: order.id, action: "create", new_data: order, performed_by: employee.id, store_id: employee.store_id },
-      ];
-
       if (!manualDeviceMode) {
+        // Khóa lại: chỉ đổi được khi máy vẫn đang Còn hàng, chặn hai người
+        // cùng bán một chiếc trên hai máy khác nhau
         const { data: soldDevice, error: devErr } = await supabase
-          .from("devices").update({ status: "sold", updated_by: employee.id }).eq("id", saleDevice.id).select().maybeSingle();
+          .from("devices").update({ status: "sold", updated_by: employee.id })
+          .eq("id", saleDevice.id).eq("status", "in_stock").select().maybeSingle();
         if (devErr) throw devErr;
-        auditRows.push({ table_name: "devices", record_id: saleDevice.id, action: "update", old_data: saleDevice, new_data: soldDevice, performed_by: employee.id, store_id: employee.store_id });
+        if (!soldDevice) {
+          throw new Error("Máy này vừa được bán hoặc chuyển trạng thái ở nơi khác. Vui lòng tải lại và chọn máy khác.");
+        }
       }
-
-      await supabase.from("audit_logs").insert(auditRows);
 
       onSaved();
     } catch (err) {
@@ -1941,10 +1925,6 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
         .update({ status: "completed", updated_by: employee.id }).eq("id", order.id).select().maybeSingle();
       if (orderErr) throw orderErr;
 
-      await supabase.from("audit_logs").insert([
-        { table_name: "devices", record_id: device.id, action: "update", old_data: device, new_data: updatedDevice, performed_by: employee.id, store_id: employee.store_id },
-        { table_name: "sales_orders", record_id: order.id, action: "update", old_data: order, new_data: updatedOrder, performed_by: employee.id, store_id: employee.store_id },
-      ]);
 
       onDone();
     } catch (err) {
@@ -2026,10 +2006,6 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
     }).select().maybeSingle();
     setSaving(false);
     if (err) { setError(err.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "order_payments", record_id: pay?.id, action: "create",
-      new_data: pay, performed_by: employee.id, store_id: employee.store_id,
-    });
     onDone();
   };
 
@@ -2103,10 +2079,6 @@ function PayCustomerDiffModal({ order, employee, onClose, onDone }) {
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "sales_orders", record_id: order.id, action: "update",
-      new_data: { tra_khach: n, hinh_thuc: label }, performed_by: employee.id, store_id: employee.store_id,
-    });
     onDone();
   };
 
@@ -2179,7 +2151,6 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
     if (!confirm(`Xóa đơn hàng "${order.order_code}"? Máy sẽ không tự động chuyển lại trạng thái Còn hàng.`)) return;
     const { error } = await supabase.from("sales_orders").delete().eq("id", order.id);
     if (error) { alert(error.message); return; }
-    await supabase.from("audit_logs").insert({ table_name: "sales_orders", record_id: order.id, action: "delete", old_data: order, performed_by: employee.id, store_id: employee.store_id });
     onDeleted();
   };
 
@@ -2471,11 +2442,6 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "internal_transfers", record_id: deviceId, action: "create",
-      new_data: { ma: data, den: toStore, gia: p },
-      performed_by: employee.id, store_id: employee.store_id,
-    });
     onSaved(data);
   };
 
@@ -2708,10 +2674,6 @@ function ReceiveTransferModal({ row, employee, onClose, onDone }) {
     setSaving(false);
     if (err) { setError(err.message); return; }
     setOkCode(data);
-    await supabase.from("audit_logs").insert({
-      table_name: "internal_transfers", record_id: row.id, action: "update",
-      new_data: { nhan: data }, performed_by: employee.id, store_id: employee.store_id,
-    });
   };
 
   return (
@@ -3104,10 +3066,6 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         if (contractErr) throw contractErr;
       }
 
-      await supabase.from("audit_logs").insert([
-        { table_name: "devices", record_id: newDevice.id, action: "create", new_data: newDevice, performed_by: employee.id, store_id: employee.store_id },
-        { table_name: "purchase_orders", record_id: purchase.id, action: "create", new_data: purchase, performed_by: employee.id, store_id: employee.store_id },
-      ]);
 
       onSaved();
     } catch (err) {
@@ -3525,10 +3483,6 @@ function EditPurchaseModal({ purchase, employee, onClose, onDone }) {
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "purchase_orders", record_id: purchase.id, action: "update",
-      old_data: purchase, new_data: form, performed_by: employee.id, store_id: employee.store_id,
-    });
     onDone();
   };
 
@@ -3629,7 +3583,6 @@ function PurchaseModule({ employee }) {
     if (!confirm(`Xóa phiếu thu mua "${p.purchase_code}"? Máy đã nhập kho sẽ không tự động bị xóa.`)) return;
     const { error } = await supabase.from("purchase_orders").delete().eq("id", p.id);
     if (error) { alert(error.message); return; }
-    await supabase.from("audit_logs").insert({ table_name: "purchase_orders", record_id: p.id, action: "delete", old_data: p, performed_by: employee.id, store_id: employee.store_id });
     load();
   };
 
@@ -3650,10 +3603,6 @@ function PurchaseModule({ employee }) {
       p_bank_account_id: payBankId,
     });
     if (error) { alert(error.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "purchase_orders", record_id: p.id, action: "update",
-      old_data: p, new_data: { ...p, con_no: remain }, performed_by: employee.id, store_id: employee.store_id,
-    });
     setPayingDebt(null); setPayBankId(null);
     load();
   };
@@ -4126,6 +4075,160 @@ function CapitalCard({ employee }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function CashFlowCard({ employee, fromDate, toDate }) {
+  const [rows, setRows] = useState([]);
+  const [rc, setRc] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([
+      supabase.rpc("cash_flow_statement", { p_from: fromDate, p_to: toDate }),
+      supabase.rpc("revenue_vs_cash", { p_from: fromDate, p_to: toDate }),
+    ]).then(([a, b]) => {
+      if (!active) return;
+      setRows((a.data || []).sort((x, y) => x.sort_order - y.sort_order));
+      setRc(Array.isArray(b.data) ? b.data[0] : b.data);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [fromDate, toDate]);
+
+  const n = (v) => Number(v || 0);
+  const pick = (sec, dir) => rows.filter((r) => r.section === sec && r.direction === dir && n(r.amount) > 0);
+  const sum = (list) => list.reduce((s, r) => s + n(r.amount), 0);
+
+  const opIn = pick("operating", "in"), opOut = pick("operating", "out");
+  const fiIn = pick("financing", "in"), fiOut = pick("financing", "out");
+  const opNet = sum(opIn) - sum(opOut);
+  const fiNet = sum(fiIn) - sum(fiOut);
+  const net = opNet + fiNet;
+
+  const Line = ({ label, amount, out }) => (
+    <div className="flex justify-between py-1.5 pl-4 text-sm">
+      <span className="text-slate-600">{label}</span>
+      <span className={classNames("whitespace-nowrap", out ? "text-rose-600" : "text-emerald-700")}>
+        {out ? "−" : "+"}{fmtVND(amount)}
+      </span>
+    </div>
+  );
+
+  const Subtotal = ({ label, amount }) => (
+    <div className="flex justify-between py-2 mt-1 border-t border-slate-200 text-sm">
+      <span className="font-medium text-slate-700">{label}</span>
+      <span className={classNames("font-semibold whitespace-nowrap",
+        amount >= 0 ? "text-emerald-700" : "text-rose-600")}>
+        {amount >= 0 ? "+" : "−"}{fmtVND(Math.abs(amount))}
+      </span>
+    </div>
+  );
+
+  if (loading) return (
+    <Card className="p-4 sm:p-5 mb-4">
+      <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-300" /></div>
+    </Card>
+  );
+
+  return (
+    <Card className="p-4 sm:p-5 mb-4">
+      <p className="text-sm font-medium text-slate-700 mb-1">Báo cáo dòng tiền</p>
+      <p className="text-[11px] text-slate-500 mb-4">
+        Tiền thực vào và thực ra trong kỳ. Không tính bù trừ công nợ, chuyển hàng nội bộ và tạm ứng —
+        những khoản đó tất toán mà không có đồng nào chạy qua tài khoản.
+      </p>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className={classNames("rounded-xl p-3", opNet >= 0 ? "bg-emerald-50" : "bg-rose-50")}>
+          <p className={classNames("text-xs mb-1", opNet >= 0 ? "text-emerald-700" : "text-rose-600")}>Kinh doanh</p>
+          <p className={classNames("text-base font-semibold", opNet >= 0 ? "text-emerald-800" : "text-rose-700")}>
+            {opNet >= 0 ? "+" : "−"}{fmtVND(Math.abs(opNet))}
+          </p>
+        </div>
+        <div className={classNames("rounded-xl p-3", fiNet >= 0 ? "bg-sky-50" : "bg-amber-50")}>
+          <p className={classNames("text-xs mb-1", fiNet >= 0 ? "text-sky-700" : "text-amber-700")}>Tài chính</p>
+          <p className={classNames("text-base font-semibold", fiNet >= 0 ? "text-sky-800" : "text-amber-800")}>
+            {fiNet >= 0 ? "+" : "−"}{fmtVND(Math.abs(fiNet))}
+          </p>
+        </div>
+        <div className={classNames("rounded-xl p-3", net >= 0 ? "bg-brand-50" : "bg-rose-50")}>
+          <p className={classNames("text-xs mb-1", net >= 0 ? "text-brand-700" : "text-rose-600")}>Ròng trong kỳ</p>
+          <p className={classNames("text-base font-semibold", net >= 0 ? "text-brand-800" : "text-rose-700")}>
+            {net >= 0 ? "+" : "−"}{fmtVND(Math.abs(net))}
+          </p>
+        </div>
+      </div>
+
+      <div className="text-sm">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1">Hoạt động kinh doanh</p>
+        {opIn.length === 0 && opOut.length === 0 ? (
+          <p className="text-xs text-slate-500 py-2 pl-4">Không có phát sinh.</p>
+        ) : (<>
+          {opIn.map((r) => <Line key={r.label} label={r.label} amount={r.amount} />)}
+          {opOut.map((r) => <Line key={r.label} label={r.label} amount={r.amount} out />)}
+          <Subtotal label="Dòng tiền từ kinh doanh" amount={opNet} />
+        </>)}
+
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500 mb-1 mt-5">Hoạt động tài chính</p>
+        {fiIn.length === 0 && fiOut.length === 0 ? (
+          <p className="text-xs text-slate-500 py-2 pl-4">Không có phát sinh.</p>
+        ) : (<>
+          {fiIn.map((r) => <Line key={r.label} label={r.label} amount={r.amount} />)}
+          {fiOut.map((r) => <Line key={r.label} label={r.label} amount={r.amount} out />)}
+          <Subtotal label="Dòng tiền từ tài chính" amount={fiNet} />
+        </>)}
+
+        <div className={classNames("flex justify-between py-2.5 mt-4 px-3 rounded-xl",
+          net >= 0 ? "bg-brand-50" : "bg-rose-50")}>
+          <span className={classNames("font-semibold", net >= 0 ? "text-brand-800" : "text-rose-700")}>
+            Tiền tăng giảm trong kỳ
+          </span>
+          <span className={classNames("font-bold whitespace-nowrap", net >= 0 ? "text-brand-800" : "text-rose-700")}>
+            {net >= 0 ? "+" : "−"}{fmtVND(Math.abs(net))}
+          </span>
+        </div>
+      </div>
+
+      {rc && (
+        <div className="mt-5 bg-slate-50 rounded-xl p-3">
+          <p className="text-xs font-medium text-slate-700 mb-1">Vì sao doanh thu khác tiền thu</p>
+          <p className="text-[11px] text-slate-500 mb-2">
+            Chỉ tính các đơn bán trong kỳ này.
+          </p>
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-600">Doanh thu ghi nhận</span>
+              <span className="font-medium text-slate-800 whitespace-nowrap">{fmtVND(rc.revenue_recognised)}</span>
+            </div>
+            <div className="flex justify-between pl-4">
+              <span className="text-slate-500">Đã thu bằng tiền</span>
+              <span className="text-emerald-700 whitespace-nowrap">{fmtVND(rc.cash_collected)}</span>
+            </div>
+            {n(rc.offset_settled) > 0 && (
+              <div className="flex justify-between pl-4">
+                <span className="text-slate-500">Tất toán bằng bù trừ, không có tiền</span>
+                <span className="text-indigo-700 whitespace-nowrap">{fmtVND(rc.offset_settled)}</span>
+              </div>
+            )}
+            {n(rc.installment_pending) > 0 && (
+              <div className="flex justify-between pl-4">
+                <span className="text-slate-500">Trả góp chờ giải ngân</span>
+                <span className="text-violet-700 whitespace-nowrap">{fmtVND(rc.installment_pending)}</span>
+              </div>
+            )}
+            {n(rc.customer_debt) > 0 && (
+              <div className="flex justify-between pl-4">
+                <span className="text-slate-500">Khách còn nợ</span>
+                <span className="text-amber-700 whitespace-nowrap">{fmtVND(rc.customer_debt)}</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </Card>
@@ -4676,6 +4779,8 @@ function ReportsModule({ employee }) {
           <IncomeStatementCard employee={employee} fromDate={fromDate} toDate={toDate}
             storeName={employee.stores?.name || "Cửa hàng"} />
 
+          <CashFlowCard employee={employee} fromDate={fromDate} toDate={toDate} />
+
           <CapitalCard employee={employee} />
 
           <CommissionSection employee={employee} fromDate={fromDate} toDate={toDate} />
@@ -4965,11 +5070,6 @@ function SettleInstallmentModal({ row, employee, onClose, onDone }) {
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "order_payments", record_id: row.payment_id, action: "update",
-      new_data: { da_nhan: recv, phi: f, ngay: settledAt },
-      performed_by: employee.id, store_id: employee.store_id,
-    });
     onDone();
   };
 
@@ -5197,11 +5297,6 @@ function SettleAdvanceModal({ row, employee, onClose, onDone }) {
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "cash_advances", record_id: row.id, action: "update",
-      new_data: { nop: n, hinh_thuc: method, ngay: date },
-      performed_by: employee.id, store_id: employee.store_id,
-    });
     onDone();
   };
 
@@ -5572,11 +5667,6 @@ function InternalLoanModal({ employee, onClose, onDone }) {
     setSaving(false);
     if (err) { setError(err.message); return; }
     setOkCode(data);
-    await supabase.from("audit_logs").insert({
-      table_name: "internal_loans", record_id: null, action: "create",
-      new_data: { ma: data, so_tien: Number(amount) },
-      performed_by: employee.id, store_id: employee.store_id,
-    });
   };
 
   return (
@@ -6568,11 +6658,6 @@ function ConfirmReturnModal({ sale, employee, onClose, onDone }) {
     setSaving(false);
     if (err) { setError(err.message); return; }
     setOkCode(data);
-    await supabase.from("audit_logs").insert({
-      table_name: "sales_returns", record_id: sale.order_id, action: "create",
-      new_data: { ma: data, imei: sale.imei, hoan: refund },
-      performed_by: employee.id, store_id: employee.store_id,
-    });
   };
 
   return (
@@ -6961,11 +7046,6 @@ function SendServiceForm({ employee, onCancel, onSaved }) {
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "service_tickets", record_id: picked.id, action: "create",
-      new_data: { ma: data, loai: type, imei: picked.imei },
-      performed_by: employee.id, store_id: employee.store_id,
-    });
     onSaved(data);
   };
 
@@ -7104,11 +7184,6 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
     setSaving(false);
     if (res.error) { setError(res.error.message); return; }
     setOkCost(res.data);
-    await supabase.from("audit_logs").insert({
-      table_name: "service_tickets", record_id: ticket.id, action: "update",
-      new_data: { ma: ticket.ticket_code, gia_von_moi: res.data },
-      performed_by: employee.id, store_id: employee.store_id,
-    });
   };
 
   return (
@@ -7379,11 +7454,6 @@ function ScreenPurchaseForm({ employee, onCancel, onSaved }) {
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
-    await supabase.from("audit_logs").insert({
-      table_name: "screen_purchases", record_id: null, action: "create",
-      new_data: { ma: data, model: model.trim(), sl: n, tong: total },
-      performed_by: employee.id, store_id: employee.store_id,
-    });
     onSaved(data, n);
   };
 
