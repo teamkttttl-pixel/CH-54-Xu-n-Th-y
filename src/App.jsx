@@ -3455,29 +3455,30 @@ function parseDeviceLine(line, lineNo) {
 }
 
 function PasteImportModal({ employee, onClose, onDone }) {
+  const [step, setStep] = useState(1);          // 1 = dán · 2 = giá và chủ nợ
   const [text, setText] = useState("");
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [condition, setCondition] = useState("used");
   const [origin, setOrigin] = useState(null);
   const [creditor, setCreditor] = useState(null);
   const [sameCreditor, setSameCreditor] = useState(true);
   const [bulkPrice, setBulkPrice] = useState("");
-  const [condition, setCondition] = useState("used");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
-  const parse = () => {
-    setError(""); setResult(null);
+  const readList = () => {
+    setError("");
     const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
     if (lines.length === 0) { setError("Chưa dán danh sách máy."); return; }
     setRows(lines.map((l, i) => parseDeviceLine(l, i + 1)));
+    setStep(2);
   };
 
   const setField = (i, field, value) => {
     setRows((rs) => rs.map((r, k) => {
       if (k !== i) return r;
       const next = { ...r, [field]: value };
-      // Sửa tay thì bỏ lỗi tương ứng
       if (field === "model" && value) next.errors = next.errors.filter((e) => !e.includes("tên máy"));
       if (field === "imei" && value) next.errors = next.errors.filter((e) => !e.includes("IMEI"));
       next.warnings = next.warnings.filter((w) =>
@@ -3497,25 +3498,24 @@ function PasteImportModal({ employee, onClose, onDone }) {
     })));
   };
 
-  const ok = (rows || []).filter((r) => r.errors.length === 0 && r.model && r.price > 0);
-  const bad = (rows || []).filter((r) => r.errors.length > 0 || !r.model || !(r.price > 0));
+  const ok = rows.filter((r) => r.errors.length === 0 && r.model && r.price > 0);
+  const noPrice = rows.filter((r) => !(r.price > 0));
+  const broken = rows.filter((r) => r.errors.length > 0 || !r.model);
   const total = ok.reduce((s, r) => s + Number(r.price || 0), 0);
 
   const submit = async () => {
     if (!origin) { setError("Chọn nguồn hàng — máy lấy của ai."); return; }
     if (!sameCreditor && !creditor) { setError("Chọn chủ nợ — cửa hàng nợ tiền ai."); return; }
-    if (ok.length === 0) { setError("Không có dòng nào hợp lệ."); return; }
+    if (ok.length === 0) { setError("Chưa dòng nào đủ tên máy và giá nhập."); return; }
     setSaving(true); setError("");
-
-    const payload = ok.map((r) => ({
-      line: r.line, imei: r.imei || null, model: r.model,
-      storage: r.storage || null, color: r.color || null,
-      condition, price: r.price, notes: null,
-    }));
 
     const { data, error: err } = await supabase.rpc("import_purchase_batch", {
       p_supplier_id: origin.id,
-      p_rows: payload,
+      p_rows: ok.map((r) => ({
+        line: r.line, imei: r.imei || null, model: r.model,
+        storage: r.storage || null, color: r.color || null,
+        condition, price: r.price, notes: null,
+      })),
       p_creditor_supplier_id: sameCreditor ? null : creditor.id,
     });
     setSaving(false);
@@ -3530,11 +3530,26 @@ function PasteImportModal({ employee, onClose, onDone }) {
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
       <Card className="w-full max-w-4xl p-5 my-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1">
           <p className="font-semibold text-slate-800 text-sm">Nhập máy bằng cách dán danh sách</p>
           <button onClick={onClose} className="text-slate-500 hover:text-rose-600"><X size={16} /></button>
         </div>
 
+        {!result && (
+          <div className="flex items-center gap-2 mb-4 text-xs">
+            <span className={classNames("px-2.5 py-1 rounded-full font-medium",
+              step === 1 ? "bg-brand-600 text-white" : "bg-emerald-50 text-emerald-700")}>
+              1 · Dán danh sách
+            </span>
+            <span className="text-slate-300">→</span>
+            <span className={classNames("px-2.5 py-1 rounded-full font-medium",
+              step === 2 ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-500")}>
+              2 · Giá và chủ nợ
+            </span>
+          </div>
+        )}
+
+        {/* ================= XONG ================= */}
         {result ? (
           <div className="space-y-3">
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800">
@@ -3548,152 +3563,170 @@ function PasteImportModal({ employee, onClose, onDone }) {
             </div>
             <button onClick={onClose} className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">Xong</button>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {/* ---- Nguồn hàng và chủ nợ ---- */}
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <span className="text-xs font-medium text-slate-600 mb-1.5 block">Nguồn hàng — máy lấy của ai *</span>
-                <SupplierPicker value={origin} onSelect={setOrigin} employee={employee} />
-              </div>
-              <div>
-                <span className="text-xs font-medium text-slate-600 mb-1.5 block">Chủ nợ — cửa hàng nợ tiền ai</span>
-                <label className="flex items-center gap-2 text-xs text-slate-600 mb-2">
-                  <input type="checkbox" checked={sameCreditor}
-                    onChange={(e) => setSameCreditor(e.target.checked)} />
-                  Nợ luôn nguồn hàng
-                </label>
-                {!sameCreditor && <SupplierPicker value={creditor} onSelect={setCreditor} employee={employee} />}
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-500 -mt-1">
-              Bỏ tích khi có người khác ứng tiền trả thay — ví dụ máy của nhà cung cấp A nhưng chủ cửa hàng
-              trả trước, khi đó công nợ ghi cho chủ cửa hàng còn xuất xứ vẫn là A.
-            </p>
 
-            {/* ---- Ô dán ---- */}
+        /* ================= BƯỚC 1 ================= */
+        ) : step === 1 ? (
+          <div className="space-y-3">
             <div>
               <span className="text-xs font-medium text-slate-600 mb-1.5 block">
                 Dán danh sách máy, mỗi máy một dòng
               </span>
               <textarea
                 value={text} onChange={(e) => setText(e.target.value)}
-                rows={7}
-                placeholder={"iphone 14promax 128 đen 356789012345678 28500000\niphone 13pro 256 đen 356789012345679 19000000\niphone 12 mini 64 đen 356789012345680"}
+                rows={10} autoFocus
+                placeholder={"iphone 14promax 128 đen 356789012345678\niphone 13pro 256 đen 356789012345679\niphone 12 mini 64 đen 356789012345680"}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
               />
               <p className="text-[11px] text-slate-500 mt-1">
-                Thứ tự tự do. Hệ thống tự nhận tên máy, dung lượng, màu, IMEI và giá.
-                Không có giá thì điền sau ở bảng bên dưới.
+                Thứ tự tự do. Hệ thống tự nhận tên máy, dung lượng, màu và IMEI.
+                Gõ thêm giá vào cuối dòng cũng được — giá nào từ một triệu trở lên sẽ được hiểu là giá nhập.
               </p>
             </div>
 
-            <div className="flex gap-2 flex-wrap items-center">
-              <button onClick={parse}
-                className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium">
-                Đọc danh sách
-              </button>
-              <label className="flex items-center gap-2 text-xs text-slate-600">
-                Tình trạng
-                <select value={condition} onChange={(e) => setCondition(e.target.value)}
-                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
-                  <option value="used">Máy cũ</option>
-                  <option value="new">Máy mới</option>
-                </select>
-              </label>
-            </div>
-
-            {/* ---- Bảng xem trước ---- */}
-            {rows && (
-              <>
-                <div className="flex gap-2 flex-wrap items-center text-xs">
-                  <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded">
-                    Sẵn sàng: {ok.length} máy · {fmtVND(total)}
-                  </span>
-                  {bad.length > 0 && (
-                    <span className="bg-rose-50 text-rose-600 px-2 py-1 rounded">Cần sửa: {bad.length} dòng</span>
-                  )}
-                  <span className="ml-auto flex items-center gap-1.5">
-                    <input value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value.replace(/\D/g, ""))}
-                      placeholder="Giá cho tất cả"
-                      className="w-32 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-right tabular" />
-                    <button onClick={applyBulkPrice}
-                      className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-lg px-3 py-1.5">
-                      Áp giá
-                    </button>
-                  </span>
-                </div>
-
-                <div className="border border-slate-200 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-slate-50 sticky top-0"><tr className="text-left text-slate-500">
-                      <th className="px-2 py-1.5 w-8">#</th>
-                      <th className="px-2 py-1.5">Máy</th>
-                      <th className="px-2 py-1.5 w-20">Dung lượng</th>
-                      <th className="px-2 py-1.5 w-28">Màu</th>
-                      <th className="px-2 py-1.5 w-36">IMEI</th>
-                      <th className="px-2 py-1.5 w-28">Giá nhập</th>
-                    </tr></thead>
-                    <tbody>
-                      {rows.map((r, i) => {
-                        const rowBad = r.errors.length > 0 || !r.model || !(r.price > 0);
-                        return (
-                          <tr key={i} className={classNames("border-t border-slate-100",
-                            r.errors.length > 0 ? "bg-rose-50/60" : rowBad ? "bg-amber-50/50" : "")}>
-                            <td className="px-2 py-1.5 text-slate-400">{r.line}</td>
-                            <td className="px-2 py-1.5">
-                              <input value={r.model} onChange={(e) => setField(i, "model", e.target.value)}
-                                list="dl-models-paste"
-                                className={classNames("w-full rounded border px-1.5 py-1",
-                                  r.model ? "border-slate-200" : "border-rose-300 bg-rose-50")} />
-                              {(r.errors.length > 0 || r.warnings.length > 0) && (
-                                <p className={classNames("mt-0.5 text-[10px]", r.errors.length ? "text-rose-600" : "text-amber-700")}>
-                                  {[...r.errors, ...r.warnings].join(" · ")}
-                                </p>
-                              )}
-                              <p className="text-[10px] text-slate-400 mt-0.5 truncate" title={r.raw}>{r.raw}</p>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <input value={r.storage} onChange={(e) => setField(i, "storage", e.target.value)}
-                                list="dl-storage" className="w-full rounded border border-slate-200 px-1.5 py-1" />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <input value={r.color} onChange={(e) => setField(i, "color", e.target.value)}
-                                className="w-full rounded border border-slate-200 px-1.5 py-1" />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <input value={r.imei} onChange={(e) => setField(i, "imei", e.target.value.replace(/\D/g, ""))}
-                                className="w-full rounded border border-slate-200 px-1.5 py-1 font-mono" />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <input
-                                value={r.price ? Number(r.price).toLocaleString("vi-VN") : ""}
-                                onChange={(e) => setField(i, "price", Number(e.target.value.replace(/\D/g, "")) || 0)}
-                                className={classNames("w-full rounded border px-1.5 py-1 text-right tabular",
-                                  r.price > 0 ? "border-slate-200" : "border-amber-300 bg-amber-50")} />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <datalist id="dl-models-paste">
-                  {(typeof IPHONE_MODEL_LIST !== "undefined" ? IPHONE_MODEL_LIST : []).map((m) => <option key={m} value={m} />)}
-                </datalist>
-              </>
-            )}
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              Tình trạng cả lô
+              <select value={condition} onChange={(e) => setCondition(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+                <option value="used">Máy cũ</option>
+                <option value="new">Máy mới</option>
+              </select>
+            </label>
 
             {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
 
             <div className="flex gap-2">
-              {rows && (
-                <button onClick={submit} disabled={saving || ok.length === 0}
-                  className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
-                  {saving && <Loader2 size={15} className="animate-spin" />}
-                  Nhập {ok.length} máy vào kho
-                </button>
-              )}
+              <button onClick={readList}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">
+                Đọc danh sách
+              </button>
+              <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+            </div>
+          </div>
+
+        /* ================= BƯỚC 2 ================= */
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+              <div className="flex gap-2 flex-wrap">
+                <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded">Đọc được {rows.length} dòng</span>
+                {noPrice.length > 0 && (
+                  <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded">{noPrice.length} dòng chưa có giá</span>
+                )}
+                {broken.length > 0 && (
+                  <span className="bg-rose-50 text-rose-600 px-2 py-1 rounded">{broken.length} dòng lỗi tên máy</span>
+                )}
+              </div>
+              <button onClick={() => setStep(1)} className="text-brand-700 hover:underline">
+                ← Quay lại sửa danh sách
+              </button>
+            </div>
+
+            {/* ---- Giá ---- */}
+            <div className="flex items-center gap-2 flex-wrap bg-slate-50 rounded-xl px-3 py-2.5">
+              <span className="text-xs text-slate-600">Điền nhanh một giá cho cả lô:</span>
+              <input value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value.replace(/\D/g, ""))}
+                placeholder="0"
+                className="w-36 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-right tabular outline-none focus:ring-2 focus:ring-brand-400/40" />
+              <button onClick={applyBulkPrice}
+                className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-lg px-3 py-1.5 text-xs font-medium">
+                Áp giá
+              </button>
+              <span className="text-[11px] text-slate-500">rồi sửa lẻ từng dòng ở bảng dưới</span>
+            </div>
+
+            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 sticky top-0"><tr className="text-left text-slate-500">
+                  <th className="px-2 py-1.5 w-8">#</th>
+                  <th className="px-2 py-1.5">Máy</th>
+                  <th className="px-2 py-1.5 w-20">Dung lượng</th>
+                  <th className="px-2 py-1.5 w-28">Màu</th>
+                  <th className="px-2 py-1.5 w-36">IMEI gốc</th>
+                  <th className="px-2 py-1.5 w-32">Giá nhập</th>
+                </tr></thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} className={classNames("border-t border-slate-100",
+                      r.errors.length > 0 || !r.model ? "bg-rose-50/60" : !(r.price > 0) ? "bg-amber-50/50" : "")}>
+                      <td className="px-2 py-1.5 text-slate-400">{r.line}</td>
+                      <td className="px-2 py-1.5">
+                        <input value={r.model} onChange={(e) => setField(i, "model", e.target.value)}
+                          list="dl-models-paste"
+                          className={classNames("w-full rounded border px-1.5 py-1",
+                            r.model ? "border-slate-200" : "border-rose-300 bg-rose-50")} />
+                        {(r.errors.length > 0 || r.warnings.length > 0) && (
+                          <p className={classNames("mt-0.5 text-[10px]", r.errors.length ? "text-rose-600" : "text-amber-700")}>
+                            {[...r.errors, ...r.warnings].join(" · ")}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400 mt-0.5 truncate" title={r.raw}>{r.raw}</p>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input value={r.storage} onChange={(e) => setField(i, "storage", e.target.value)}
+                          list="dl-storage" className="w-full rounded border border-slate-200 px-1.5 py-1" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input value={r.color} onChange={(e) => setField(i, "color", e.target.value)}
+                          className="w-full rounded border border-slate-200 px-1.5 py-1" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input value={r.imei} onChange={(e) => setField(i, "imei", e.target.value.replace(/\D/g, ""))}
+                          className="w-full rounded border border-slate-200 px-1.5 py-1 font-mono" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          value={r.price ? Number(r.price).toLocaleString("vi-VN") : ""}
+                          onChange={(e) => setField(i, "price", Number(e.target.value.replace(/\D/g, "")) || 0)}
+                          placeholder="chưa có"
+                          className={classNames("w-full rounded border px-1.5 py-1 text-right tabular",
+                            r.price > 0 ? "border-slate-200" : "border-amber-300 bg-amber-50")} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <datalist id="dl-models-paste">
+              {(typeof IPHONE_MODEL_LIST !== "undefined" ? IPHONE_MODEL_LIST : []).map((m) => <option key={m} value={m} />)}
+            </datalist>
+
+            {/* ---- Chủ nợ ---- */}
+            <div className="border-t border-slate-100 pt-3">
+              <p className="text-sm font-medium text-slate-700 mb-2">Công nợ</p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <span className="text-xs font-medium text-slate-600 mb-1.5 block">Nguồn hàng — máy lấy của ai *</span>
+                  <SupplierPicker value={origin} onSelect={setOrigin} employee={employee} />
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-slate-600 mb-1.5 block">Chủ nợ — cửa hàng nợ tiền ai</span>
+                  <label className="flex items-center gap-2 text-xs text-slate-600 mb-2">
+                    <input type="checkbox" checked={sameCreditor}
+                      onChange={(e) => setSameCreditor(e.target.checked)} />
+                    Nợ luôn nguồn hàng
+                  </label>
+                  {!sameCreditor && <SupplierPicker value={creditor} onSelect={setCreditor} employee={employee} />}
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-2">
+                Bỏ tích khi có người khác ứng tiền trả thay — máy của nhà cung cấp A nhưng chủ cửa hàng
+                trả trước, khi đó công nợ ghi cho chủ cửa hàng còn xuất xứ vẫn là A.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-sm flex justify-between">
+              <span className="text-slate-600">Sẵn sàng nhập <span className="font-semibold">{ok.length}</span> máy</span>
+              <span className="font-semibold text-slate-800">{fmtVND(total)}</span>
+            </div>
+
+            {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+
+            <div className="flex gap-2">
+              <button onClick={submit} disabled={saving || ok.length === 0}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {saving && <Loader2 size={15} className="animate-spin" />}
+                Nhập {ok.length} máy vào kho
+              </button>
               <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
             </div>
           </div>
