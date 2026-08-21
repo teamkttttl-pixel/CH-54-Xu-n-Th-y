@@ -6171,7 +6171,8 @@ function InstallmentTracking({ employee }) {
     if (provider !== "all" && r.installment_provider !== provider) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return [r.order_code, r.customer_name, r.customer_phone, r.installment_contract_code, r.imei]
+    return [r.order_code, r.customer_name, r.customer_phone, r.installment_contract_code,
+            r.imei, r.original_imei, r.model]
       .some((v) => v?.toLowerCase().includes(q));
   });
 
@@ -6245,6 +6246,7 @@ function InstallmentTracking({ employee }) {
               <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Ngày bán</th>
                 <th className="px-3 py-2">Đơn / Khách</th>
+                <th className="px-3 py-2">Máy · IMEI</th>
                 <th className="px-3 py-2">Đơn vị</th>
                 <th className="px-3 py-2">Mã hồ sơ</th>
                 <th className="px-3 py-2 text-right">Số tiền</th>
@@ -6258,6 +6260,18 @@ function InstallmentTracking({ employee }) {
                     <td className="px-3 py-2.5">
                       <p className="font-medium text-slate-700">{r.order_code}</p>
                       <p className="text-xs text-slate-500">{r.customer_name}{r.customer_phone ? ` · ${r.customer_phone}` : ""}</p>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <p className="text-slate-700">
+                        {[r.model, r.storage, r.color].filter(Boolean).join(" ") || "—"}
+                      </p>
+                      {r.original_imei ? (
+                        <p className="text-[11px] text-slate-500 doc-code" title="IMEI gốc — dùng để đối chiếu với đơn vị trả góp">
+                          {r.original_imei}
+                        </p>
+                      ) : r.imei ? (
+                        <p className="text-[11px] text-slate-500 doc-code">{r.imei}</p>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{r.installment_provider || "—"}</td>
                     <td className="px-3 py-2.5 text-slate-500 text-xs">{r.installment_contract_code || "—"}</td>
@@ -7246,6 +7260,77 @@ function BankReconcileTab({ employee }) {
   );
 }
 
+function CustomerReceivablePanel({ partner }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    if (!partner?.customer_id) { setRows([]); setLoading(false); return; }
+    setLoading(true);
+    supabase.rpc("customer_receivable_detail", { p_customer_id: partner.customer_id })
+      .then(({ data }) => { if (active) { setRows(data || []); setLoading(false); } });
+    return () => { active = false; };
+  }, [partner?.customer_id]);
+
+  if (!partner?.customer_id) return null;
+  if (loading) return <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin text-slate-300" /></div>;
+  if (rows.length === 0) return null;
+
+  const total = rows.reduce((s, r) => s + Number(r.outstanding || 0), 0);
+
+  return (
+    <div className="mb-3">
+      <div className="flex items-baseline justify-between mb-1.5">
+        <p className="text-xs font-medium text-slate-700">Khoản nợ thuộc máy nào</p>
+        <p className="text-xs text-slate-500">
+          {rows.length} máy · <span className="font-semibold text-amber-700">{fmtVND(total)}</span>
+        </p>
+      </div>
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <table className="w-full text-xs">
+          <thead><tr className="text-left text-slate-500 border-b border-slate-100">
+            <th className="px-2 py-1.5">Đơn</th>
+            <th className="px-2 py-1.5">Máy</th>
+            <th className="px-2 py-1.5">IMEI gốc</th>
+            <th className="px-2 py-1.5 text-right">Giá bán</th>
+            <th className="px-2 py-1.5 text-right">Đã trả</th>
+            <th className="px-2 py-1.5 text-right">Còn nợ</th>
+            <th className="px-2 py-1.5 text-right">Đã bao lâu</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.order_id} className="border-b border-slate-50 last:border-0">
+                <td className="px-2 py-1.5">
+                  <p className="text-slate-600 doc-code">{r.order_code}</p>
+                  <p className="text-[10px] text-slate-400">{fmtDate(r.sale_date)}</p>
+                </td>
+                <td className="px-2 py-1.5 text-slate-700">
+                  {[r.model, r.storage, r.color].filter(Boolean).join(" ")}
+                </td>
+                <td className="px-2 py-1.5 text-slate-600 doc-code">
+                  {r.original_imei || r.imei || "—"}
+                </td>
+                <td className="px-2 py-1.5 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.total_amount)}</td>
+                <td className="px-2 py-1.5 text-right text-slate-500 whitespace-nowrap">{fmtVND(r.paid_amount)}</td>
+                <td className="px-2 py-1.5 text-right font-semibold text-amber-700 whitespace-nowrap">{fmtVND(r.outstanding)}</td>
+                <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                  <span className={classNames("text-[11px] px-1.5 py-0.5 rounded",
+                    r.days_outstanding > 90 ? "bg-rose-50 text-rose-700"
+                    : r.days_outstanding > 30 ? "bg-amber-50 text-amber-700"
+                    : "bg-slate-100 text-slate-600")}>
+                    {r.days_outstanding} ngày
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DebtModule({ employee }) {
   const [tab, setTab] = useState("partners");   // partners | installment
   const [rows, setRows] = useState([]);
@@ -7407,6 +7492,7 @@ function DebtModule({ employee }) {
                                 )}
                               </div>
                             )}
+                            <CustomerReceivablePanel partner={r} />
                             <PartnerLedgerPanel partner={r} />
                           </td>
                         </tr>
