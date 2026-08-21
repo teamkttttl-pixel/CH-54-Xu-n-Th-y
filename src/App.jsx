@@ -462,16 +462,22 @@ function CustomersModule({ employee, onCountChange }) {
   const [existingMatch, setExistingMatch] = useState(null);
 
   const canDelete = employee.role === "quan_ly";
+  const onlyMine = employee.role === "nhan_vien";
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false }).limit(1000);
+    // Nhân viên chỉ thấy khách do mình tạo. Lúc tạo đơn vẫn chọn được mọi
+    // khách — nếu chặn cứng, hai người sẽ tạo trùng hồ sơ một khách.
+    let q = supabase.from("customers").select("*")
+      .order("created_at", { ascending: false }).limit(1000);
+    if (onlyMine) q = q.eq("created_by", employee.id);
+    const { data, error } = await q;
     if (!error) {
       setCustomers(data || []);
       onCountChange?.((data || []).length);
     }
     setLoading(false);
-  }, [onCountChange]);
+  }, [onCountChange, onlyMine, employee.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -3125,7 +3131,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
       <div className="flex gap-2 mb-4">
         {[
           { key: "customer", label: "Khách lẻ", icon: Users },
-          { key: "supplier", label: "Nhà cung cấp", icon: Building2 },
+          ...(employee.role === "nhan_vien" ? [] : [{ key: "supplier", label: "Nhà cung cấp", icon: Building2 }]),
         ].map((opt) => (
           <button
             key={opt.key} type="button"
@@ -3585,7 +3591,10 @@ function PurchaseModule({ employee }) {
   const [runImport, setRunImport] = useState(false);
   const [importSupplier, setImportSupplier] = useState(null);
   const canEdit = employee.role !== "ke_toan";
-  const canImport = true;   // cả 3 vai đều nhập hàng loạt được, quyền do RPC kiểm tra
+  // Nhân viên chỉ làm nghiệp vụ thu cũ từ khách lẻ:
+  // không nhập từ nhà cung cấp, không nhập hàng loạt từ Excel.
+  const retailOnly = employee.role === "nhan_vien";
+  const canImport = !retailOnly;
   const [payingDebt, setPayingDebt] = useState(null);
   const [payAmount, setPayAmount] = useState("");
   const [payBankId, setPayBankId] = useState(null);
@@ -7358,6 +7367,252 @@ function ServiceModule({ employee }) {
   );
 }
 
+/* -------------------------------------------------------------- */
+/* Cá nhân — màn hình tài chính riêng cho vai nhân viên            */
+/* -------------------------------------------------------------- */
+
+function PersonalModule({ employee }) {
+  const [fromDate, setFromDate] = useState(startOfMonth());
+  const [toDate, setToDate] = useState(todayStr());
+
+  const [sum, setSum] = useState(null);
+  const [detail, setDetail] = useState([]);
+  const [advances, setAdvances] = useState([]);
+  const [bonuses, setBonuses] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: s }, { data: d }, { data: a }, { data: b }] = await Promise.all([
+      supabase.rpc("my_sales_summary", { p_from: fromDate, p_to: toDate }),
+      supabase.rpc("my_sales_detail", { p_from: fromDate, p_to: toDate }),
+      supabase.from("v_cash_advances").select("*")
+        .order("advance_date", { ascending: false }).limit(200),
+      supabase.from("expenses").select("*").eq("category", "bonus")
+        .gte("expense_date", fromDate).lte("expense_date", toDate)
+        .order("expense_date", { ascending: false }).limit(300),
+    ]);
+    setSum(Array.isArray(s) ? s[0] : s);
+    setDetail(d || []);
+    setAdvances(a || []);
+    setBonuses(b || []);
+    setLoading(false);
+  }, [fromDate, toDate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openAdv = advances.filter((r) => r.status !== "settled");
+  const holdingNow = openAdv.reduce((s, r) => s + Number(r.remaining || 0), 0);
+  const bonusTotal = bonuses.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  const byDay = {};
+  for (const r of bonuses) (byDay[r.expense_date] = byDay[r.expense_date] || []).push(r);
+  const bonusDays = Object.keys(byDay).sort().reverse();
+
+  const n = (v) => Number(v || 0);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Cá nhân</h2>
+          <p className="text-xs text-slate-500">{employee.full_name} · số liệu của riêng bạn</p>
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-xl px-3 py-1.5">
+          <Filter size={14} className="text-slate-500" />
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="text-sm outline-none" />
+          <span className="text-slate-400">—</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="text-sm outline-none" />
+        </div>
+      </div>
+
+      {loading ? (
+        <Card className="p-4"><div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div></Card>
+      ) : (
+        <>
+          {/* ---- Doanh số bán hàng ---- */}
+          <Card className="p-4 sm:p-5 mb-4">
+            <p className="text-sm font-medium text-slate-700 mb-1">Doanh số bán hàng</p>
+            <p className="text-[11px] text-slate-500 mb-3">
+              {fmtDate(fromDate)} đến {fmtDate(toDate)}
+            </p>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="bg-brand-50 rounded-xl p-3">
+                <p className="text-xs text-brand-700 mb-1">Máy bán được</p>
+                <p className="text-xl font-semibold text-brand-800">{n(sum?.device_count)}</p>
+              </div>
+              <div className="bg-emerald-50 rounded-xl p-3">
+                <p className="text-xs text-emerald-700 mb-1">Doanh thu</p>
+                <p className="text-base font-semibold text-emerald-800">{fmtVND(sum?.revenue)}</p>
+              </div>
+              <div className="bg-slate-100 rounded-xl p-3">
+                <p className="text-xs text-slate-600 mb-1">Tiền đã thu</p>
+                <p className="text-base font-semibold text-slate-800">
+                  {fmtVND(n(sum?.cash_in) + n(sum?.bank_in) + n(sum?.installment_in))}
+                </p>
+              </div>
+              <div className={classNames("rounded-xl p-3", n(sum?.debt_left) > 0 ? "bg-amber-50" : "bg-slate-100")}>
+                <p className={classNames("text-xs mb-1", n(sum?.debt_left) > 0 ? "text-amber-700" : "text-slate-600")}>Khách còn nợ</p>
+                <p className={classNames("text-base font-semibold", n(sum?.debt_left) > 0 ? "text-amber-800" : "text-slate-800")}>
+                  {fmtVND(sum?.debt_left)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-xs mb-4">
+              <span className="bg-slate-100 rounded-lg px-3 py-1.5">
+                <span className="text-slate-500">Tiền mặt </span>
+                <span className="font-medium text-slate-700">{fmtVND(sum?.cash_in)}</span>
+              </span>
+              <span className="bg-slate-100 rounded-lg px-3 py-1.5">
+                <span className="text-slate-500">Chuyển khoản </span>
+                <span className="font-medium text-slate-700">{fmtVND(sum?.bank_in)}</span>
+              </span>
+              <span className="bg-slate-100 rounded-lg px-3 py-1.5">
+                <span className="text-slate-500">Trả góp </span>
+                <span className="font-medium text-slate-700">{fmtVND(sum?.installment_in)}</span>
+              </span>
+              {n(sum?.excluded_count) > 0 && (
+                <span className="bg-rose-50 text-rose-600 rounded-lg px-3 py-1.5">
+                  {n(sum?.excluded_count)} đơn không tính (hủy, trả máy, bán sỉ)
+                </span>
+              )}
+            </div>
+
+            {detail.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">Chưa có đơn bán nào trong kỳ.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+                    <th className="px-2 py-2">Ngày</th>
+                    <th className="px-2 py-2">Đơn</th>
+                    <th className="px-2 py-2">Máy</th>
+                    <th className="px-2 py-2">Khách</th>
+                    <th className="px-2 py-2 text-right">Giá bán</th>
+                    <th className="px-2 py-2 text-right">Còn nợ</th>
+                  </tr></thead>
+                  <tbody>
+                    {detail.map((r) => {
+                      const left = Math.max(0, n(r.total_amount) - n(r.paid_amount));
+                      return (
+                        <tr key={r.order_id} className={classNames("border-b border-slate-50 last:border-0",
+                          !r.counts_for_commission && "opacity-60")}>
+                          <td className="px-2 py-2 text-slate-600 whitespace-nowrap">{fmtDate(r.sale_date)}</td>
+                          <td className="px-2 py-2 text-slate-600 doc-code whitespace-nowrap">{r.order_code}</td>
+                          <td className="px-2 py-2 text-slate-700">
+                            {[r.model, r.storage, r.color].filter(Boolean).join(" ")}
+                            <span className="text-slate-500"> · {r.imei || "—"}</span>
+                            {!r.counts_for_commission && (
+                              <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-rose-50 text-rose-600">{r.excluded_reason}</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2 text-slate-600">{r.customer_name || "—"}</td>
+                          <td className="px-2 py-2 text-right text-slate-700 whitespace-nowrap">{fmtVND(r.total_amount)}</td>
+                          <td className="px-2 py-2 text-right whitespace-nowrap">
+                            {left > 0 ? <span className="text-amber-700 font-medium">{fmtVND(left)}</span>
+                                      : <span className="text-slate-300">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* ---- Tạm ứng ---- */}
+          <Card className="p-4 sm:p-5 mb-4">
+            <div className="flex items-baseline justify-between mb-1 gap-2 flex-wrap">
+              <p className="text-sm font-medium text-slate-700">Tạm ứng tiền mặt</p>
+              <p className="text-xs text-slate-500">toàn bộ phiếu của bạn, không giới hạn theo kỳ</p>
+            </div>
+
+            <div className={classNames("rounded-xl px-3 py-2.5 mb-3 text-sm",
+              holdingNow > 0 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800")}>
+              {holdingNow > 0
+                ? <>Bạn đang giữ <span className="font-semibold">{fmtVND(holdingNow)}</span> trên {openAdv.length} phiếu chưa nộp đủ</>
+                : <>Bạn đã nộp đủ, không còn giữ tiền của cửa hàng</>}
+            </div>
+
+            {advances.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">Chưa có phiếu tạm ứng nào.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+                    <th className="px-2 py-2">Mã</th>
+                    <th className="px-2 py-2">Ngày</th>
+                    <th className="px-2 py-2 text-right">Đã ứng</th>
+                    <th className="px-2 py-2 text-right">Đã nộp</th>
+                    <th className="px-2 py-2 text-right">Còn giữ</th>
+                  </tr></thead>
+                  <tbody>
+                    {advances.map((r) => (
+                      <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                        <td className="px-2 py-2 text-slate-600 doc-code whitespace-nowrap">{r.advance_code}</td>
+                        <td className="px-2 py-2 text-slate-600 whitespace-nowrap">{fmtDate(r.advance_date)}</td>
+                        <td className="px-2 py-2 text-right text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                        <td className="px-2 py-2 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.settled_amount)}</td>
+                        <td className="px-2 py-2 text-right whitespace-nowrap">
+                          {r.status === "settled"
+                            ? <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Đã nộp đủ</span>
+                            : <span className="font-medium text-amber-700">{fmtVND(r.remaining)}</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* ---- Thưởng KPI ---- */}
+          <Card className="p-4 sm:p-5">
+            <div className="flex items-baseline justify-between mb-3 gap-2 flex-wrap">
+              <p className="text-sm font-medium text-slate-700">Thưởng KPI theo ngày</p>
+              <p className="text-sm">
+                <span className="text-slate-500">Tổng trong kỳ: </span>
+                <span className="font-semibold text-brand-700">{fmtVND(bonusTotal)}</span>
+              </p>
+            </div>
+
+            {bonusDays.length === 0 ? (
+              <div className="text-center py-6">
+                <Award size={28} className="mx-auto text-slate-300 mb-2" />
+                <p className="text-xs text-slate-500">Chưa có khoản thưởng nào trong kỳ này.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 -mx-1">
+                {bonusDays.map((day) => {
+                  const items = byDay[day];
+                  const dayTotal = items.reduce((s, r) => s + n(r.amount), 0);
+                  return (
+                    <div key={day} className="py-2.5 px-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-medium text-slate-600">{fmtDate(day)}</p>
+                        <p className="text-sm font-semibold text-emerald-700">{fmtVND(dayTotal)}</p>
+                      </div>
+                      {items.map((r) => (
+                        <p key={r.id} className="text-xs text-slate-500">
+                          <span className="doc-code text-slate-600">{r.expense_code}</span>
+                          {r.description ? ` · ${r.description}` : ""}
+                        </p>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, group: null },
   { key: "customers", label: "Khách hàng", icon: Users, group: "Bán hàng" },
@@ -7365,8 +7620,9 @@ const NAV_ITEMS = [
   { key: "inventory", label: "Kho hàng", icon: Smartphone, group: "Kho & dịch vụ" },
   { key: "purchases", label: "Nhập máy / Thu cũ", icon: ArrowLeftRight, group: "Kho & dịch vụ" },
   { key: "service", label: "Spa / Sửa chữa", icon: Settings, group: "Kho & dịch vụ" },
-  { key: "debts", label: "Công nợ", icon: Banknote, group: "Tài chính" },
-  { key: "expenses", label: "Chi phí", icon: Receipt, group: "Tài chính" },
+  { key: "personal", label: "Cá nhân", icon: Award, group: "Tài chính", allowedRoles: ["nhan_vien"] },
+  { key: "debts", label: "Công nợ", icon: Banknote, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
+  { key: "expenses", label: "Chi phí", icon: Receipt, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "reports", label: "Báo cáo", icon: BarChart3, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "employees", label: "Nhân viên", icon: UserCog, group: "Hệ thống", managerOnly: true },
   { key: "audit", label: "Nhật ký thao tác", icon: ScrollText, group: "Hệ thống", allowedRoles: ["quan_ly", "ke_toan"] },
@@ -7405,6 +7661,8 @@ function AppShell({ employee, onSignOut }) {
         return <PurchaseModule employee={employee} />;
       case "service":
         return <ServiceModule employee={employee} />;
+      case "personal":
+        return <PersonalModule employee={employee} />;
       case "expenses":
         return <ExpensesModule employee={employee} />;
       case "debts":
