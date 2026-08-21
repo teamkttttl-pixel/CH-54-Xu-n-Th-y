@@ -3785,6 +3785,116 @@ function PurchaseModule({ employee }) {
   );
 }
 
+
+/* -------------------------------------------------------------- */
+/* Nhật ký thao tác                                                */
+/* -------------------------------------------------------------- */
+
+// Nhãn loại bút toán trong sổ cái công nợ đối tác
+const LEDGER_TYPE_LABELS = {
+  sale: "Bán hàng",
+  sale_receipt: "Thu tiền khách",
+  purchase: "Nhập hàng",
+  purchase_payment: "Trả tiền nhà cung cấp",
+  offset: "Bù trừ công nợ",
+  adjustment: "Điều chỉnh",
+  installment: "Trả góp chờ giải ngân",
+  installment_settle: "Nhận giải ngân trả góp",
+  service: "Chi phí dịch vụ",
+};
+
+const AUDIT_TABLE_LABELS = {
+  customers: "Khách hàng", devices: "Kho hàng", suppliers: "Nhà cung cấp",
+  sales_orders: "Đơn hàng bán", order_payments: "Phiếu thu",
+  purchase_orders: "Phiếu nhập máy", contracts: "Hợp đồng",
+  sales_returns: "Trả hàng", debt_offsets: "Bù trừ công nợ",
+  internal_transfers: "Xuất nội bộ", internal_loans: "Vay nội bộ",
+  service_tickets: "Spa / Sửa chữa", screens: "Kho màn hình",
+  screen_purchases: "Nhập màn", expenses: "Chi phí",
+  capital_contributions: "Vốn góp", cash_advances: "Tạm ứng",
+  cash_advance_settlements: "Hoàn ứng", employees: "Nhân viên",
+  bank_accounts: "Tài khoản ngân hàng", installment_providers: "Đơn vị trả góp",
+};
+
+const AUDIT_ACTION_LABELS = {
+  create: "Tạo mới", update: "Cập nhật", delete: "Xóa",
+};
+
+const AUDIT_ACTION_STYLES = {
+  create: "bg-emerald-50 text-emerald-700",
+  update: "bg-sky-50 text-sky-700",
+  delete: "bg-rose-50 text-rose-700",
+};
+
+// Các trường đáng theo dõi khi có thay đổi. Trường nào không có ở đây thì
+// không hiện chi tiết — tránh nhật ký dài lê thê vì những cột kỹ thuật.
+const AUDIT_FIELD_LABELS = {
+  imei: "IMEI", model: "Model", storage: "Dung lượng", color: "Màu sắc",
+  condition: "Tình trạng", condition_percent: "Độ mới",
+  status: "Trạng thái", cost_price: "Giá vốn", sale_price: "Giá bán",
+  purchase_price: "Giá thu mua", total_amount: "Tổng tiền",
+  paid_amount: "Đã trả", debt_status: "Trạng thái nợ", due_date: "Hạn thanh toán",
+  amount: "Số tiền", full_name: "Họ tên", phone: "Điện thoại",
+  cccd: "CCCD", address: "Địa chỉ", role: "Vai trò", is_active: "Đang hoạt động",
+  store_id: "Cửa hàng", notes: "Ghi chú", note: "Ghi chú",
+  description: "Diễn giải", grade: "Chất lượng", unit_price: "Đơn giá",
+  settlement_status: "Trạng thái giải ngân", returned_at: "Ngày trả hàng",
+};
+
+
+/* -------------------------------------------------------------- */
+/* Lớp bắt lỗi — một màn hình vỡ không được kéo sập cả app         */
+/* -------------------------------------------------------------- */
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("Lỗi màn hình:", error, info);
+  }
+
+  componentDidUpdate(prev) {
+    // Đổi sang màn hình khác thì xóa lỗi cũ
+    if (prev.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <Card className="p-6 max-w-lg">
+        <div className="flex items-start gap-3">
+          <ShieldAlert size={22} className="text-rose-500 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-800 mb-1">Màn hình này gặp lỗi</p>
+            <p className="text-xs text-slate-600 mb-3">
+              Các phần khác của app vẫn dùng bình thường — chọn mục khác ở thanh bên để tiếp tục.
+              Nếu lỗi lặp lại, gửi dòng chữ đỏ bên dưới cho người phụ trách kỹ thuật.
+            </p>
+            <p className="text-[11px] text-rose-600 bg-rose-50 rounded-lg px-3 py-2 break-words font-mono">
+              {String(this.state.error?.message || this.state.error)}
+            </p>
+            <button
+              onClick={() => this.setState({ error: null })}
+              className="mt-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium"
+            >
+              Thử lại
+            </button>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+}
+
 function summarizeAuditChange(log) {
   if (log.action === "delete") {
     const d = log.old_data || {};
@@ -8529,7 +8639,9 @@ function AppShell({ employee, onSignOut }) {
 
       {/* Main content */}
       <main className="flex-1 p-4 sm:p-6 pb-24 lg:pb-6 max-w-6xl mx-auto w-full">
-        {renderModule()}
+        <ErrorBoundary resetKey={tab}>
+          {renderModule()}
+        </ErrorBoundary>
       </main>
     </div>
   );
