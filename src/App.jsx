@@ -3459,19 +3459,30 @@ function PasteImportModal({ employee, onClose, onDone }) {
   const [text, setText] = useState("");
   const [rows, setRows] = useState([]);
   const [condition, setCondition] = useState("used");
-  const [origin, setOrigin] = useState(null);
-  const [creditor, setCreditor] = useState(null);
-  const [sameCreditor, setSameCreditor] = useState(true);
+  const [suppliers, setSuppliers] = useState([]);
   const [bulkPrice, setBulkPrice] = useState("");
+  const [bulkOrigin, setBulkOrigin] = useState("");
+  const [bulkCreditor, setBulkCreditor] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("suppliers").select("id, name, phone").order("name");
+      setSuppliers(data || []);
+    })();
+  }, []);
 
   const readList = () => {
     setError("");
     const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
     if (lines.length === 0) { setError("Chưa dán danh sách máy."); return; }
-    setRows(lines.map((l, i) => parseDeviceLine(l, i + 1)));
+    setRows(lines.map((l, i) => ({
+      ...parseDeviceLine(l, i + 1),
+      origin_supplier_id: "",
+      creditor_supplier_id: "",
+    })));
     setStep(2);
   };
 
@@ -3498,25 +3509,35 @@ function PasteImportModal({ employee, onClose, onDone }) {
     })));
   };
 
-  const ok = rows.filter((r) => r.errors.length === 0 && r.model && r.price > 0);
+  const applyBulkSupplier = (field, value) => {
+    if (!value) return;
+    setRows((rs) => rs.map((r) => ({ ...r, [field]: value })));
+  };
+
+  const ok = rows.filter((r) => r.errors.length === 0 && r.model && r.price > 0 && r.origin_supplier_id);
   const noPrice = rows.filter((r) => !(r.price > 0));
+  const noOrigin = rows.filter((r) => !r.origin_supplier_id);
   const broken = rows.filter((r) => r.errors.length > 0 || !r.model);
   const total = ok.reduce((s, r) => s + Number(r.price || 0), 0);
 
   const submit = async () => {
-    if (!origin) { setError("Chọn nguồn hàng — máy lấy của ai."); return; }
-    if (!sameCreditor && !creditor) { setError("Chọn chủ nợ — cửa hàng nợ tiền ai."); return; }
-    if (ok.length === 0) { setError("Chưa dòng nào đủ tên máy và giá nhập."); return; }
+    if (ok.length === 0) {
+      setError("Chưa dòng nào đủ tên máy, giá nhập và nguồn hàng.");
+      return;
+    }
     setSaving(true); setError("");
 
+    // Mỗi dòng tự mang nguồn hàng và chủ nợ. Tham số chung chỉ là dự phòng.
     const { data, error: err } = await supabase.rpc("import_purchase_batch", {
-      p_supplier_id: origin.id,
+      p_supplier_id: ok[0].origin_supplier_id,
       p_rows: ok.map((r) => ({
         line: r.line, imei: r.imei || null, model: r.model,
         storage: r.storage || null, color: r.color || null,
         condition, price: r.price, notes: null,
+        origin_supplier_id: r.origin_supplier_id,
+        creditor_supplier_id: r.creditor_supplier_id || r.origin_supplier_id,
       })),
-      p_creditor_supplier_id: sameCreditor ? null : creditor.id,
+      p_creditor_supplier_id: null,
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
@@ -3529,7 +3550,7 @@ function PasteImportModal({ employee, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
-      <Card className="w-full max-w-4xl p-5 my-8">
+      <Card className="w-full max-w-6xl p-5 my-8">
         <div className="flex items-center justify-between mb-1">
           <p className="font-semibold text-slate-800 text-sm">Nhập máy bằng cách dán danh sách</p>
           <button onClick={onClose} className="text-slate-500 hover:text-rose-600"><X size={16} /></button>
@@ -3544,7 +3565,7 @@ function PasteImportModal({ employee, onClose, onDone }) {
             <span className="text-slate-300">→</span>
             <span className={classNames("px-2.5 py-1 rounded-full font-medium",
               step === 2 ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-500")}>
-              2 · Giá và chủ nợ
+              2 · Giá và nguồn hàng
             </span>
           </div>
         )}
@@ -3612,6 +3633,9 @@ function PasteImportModal({ employee, onClose, onDone }) {
                 {noPrice.length > 0 && (
                   <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded">{noPrice.length} dòng chưa có giá</span>
                 )}
+                {noOrigin.length > 0 && (
+                  <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded">{noOrigin.length} dòng chưa chọn nguồn hàng</span>
+                )}
                 {broken.length > 0 && (
                   <span className="bg-rose-50 text-rose-600 px-2 py-1 rounded">{broken.length} dòng lỗi tên máy</span>
                 )}
@@ -3621,17 +3645,43 @@ function PasteImportModal({ employee, onClose, onDone }) {
               </button>
             </div>
 
-            {/* ---- Giá ---- */}
-            <div className="flex items-center gap-2 flex-wrap bg-slate-50 rounded-xl px-3 py-2.5">
-              <span className="text-xs text-slate-600">Điền nhanh một giá cho cả lô:</span>
-              <input value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value.replace(/\D/g, ""))}
-                placeholder="0"
-                className="w-36 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-right tabular outline-none focus:ring-2 focus:ring-brand-400/40" />
-              <button onClick={applyBulkPrice}
-                className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-lg px-3 py-1.5 text-xs font-medium">
-                Áp giá
-              </button>
-              <span className="text-[11px] text-slate-500">rồi sửa lẻ từng dòng ở bảng dưới</span>
+            {/* ---- Điền nhanh cho cả lô ---- */}
+            <div className="bg-slate-50 rounded-xl px-3 py-2.5 space-y-2">
+              <p className="text-xs text-slate-600">
+                Điền nhanh cho cả lô, rồi sửa lẻ từng dòng ở bảng dưới
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Giá nhập"
+                  className="w-32 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-right tabular outline-none focus:ring-2 focus:ring-brand-400/40" />
+                <button onClick={applyBulkPrice}
+                  className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                  Áp giá
+                </button>
+
+                <select value={bulkOrigin} onChange={(e) => setBulkOrigin(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm max-w-[180px] outline-none focus:ring-2 focus:ring-brand-400/40">
+                  <option value="">— Nguồn hàng —</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <button onClick={() => applyBulkSupplier("origin_supplier_id", bulkOrigin)}
+                  className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                  Áp nguồn
+                </button>
+
+                <select value={bulkCreditor} onChange={(e) => setBulkCreditor(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm max-w-[180px] outline-none focus:ring-2 focus:ring-brand-400/40">
+                  <option value="">— Chủ nợ —</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <button onClick={() => applyBulkSupplier("creditor_supplier_id", bulkCreditor)}
+                  className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                  Áp chủ nợ
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Để trống chủ nợ thì mặc định nợ luôn nguồn hàng. Chỉ chọn khi có người ứng tiền trả thay.
+              </p>
             </div>
 
             <div className="border border-slate-200 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
@@ -3643,6 +3693,8 @@ function PasteImportModal({ employee, onClose, onDone }) {
                   <th className="px-2 py-1.5 w-28">Màu</th>
                   <th className="px-2 py-1.5 w-36">IMEI gốc</th>
                   <th className="px-2 py-1.5 w-32">Giá nhập</th>
+                  <th className="px-2 py-1.5 w-36">Nguồn hàng *</th>
+                  <th className="px-2 py-1.5 w-36">Chủ nợ</th>
                 </tr></thead>
                 <tbody>
                   {rows.map((r, i) => (
@@ -3681,6 +3733,23 @@ function PasteImportModal({ employee, onClose, onDone }) {
                           className={classNames("w-full rounded border px-1.5 py-1 text-right tabular",
                             r.price > 0 ? "border-slate-200" : "border-amber-300 bg-amber-50")} />
                       </td>
+                      <td className="px-2 py-1.5">
+                        <select value={r.origin_supplier_id}
+                          onChange={(e) => setField(i, "origin_supplier_id", e.target.value)}
+                          className={classNames("w-full rounded border px-1 py-1",
+                            r.origin_supplier_id ? "border-slate-200" : "border-amber-300 bg-amber-50")}>
+                          <option value="">— chọn —</option>
+                          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <select value={r.creditor_supplier_id}
+                          onChange={(e) => setField(i, "creditor_supplier_id", e.target.value)}
+                          className="w-full rounded border border-slate-200 px-1 py-1">
+                          <option value="">nợ nguồn hàng</option>
+                          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -3689,30 +3758,6 @@ function PasteImportModal({ employee, onClose, onDone }) {
             <datalist id="dl-models-paste">
               {(typeof IPHONE_MODEL_LIST !== "undefined" ? IPHONE_MODEL_LIST : []).map((m) => <option key={m} value={m} />)}
             </datalist>
-
-            {/* ---- Chủ nợ ---- */}
-            <div className="border-t border-slate-100 pt-3">
-              <p className="text-sm font-medium text-slate-700 mb-2">Công nợ</p>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <span className="text-xs font-medium text-slate-600 mb-1.5 block">Nguồn hàng — máy lấy của ai *</span>
-                  <SupplierPicker value={origin} onSelect={setOrigin} employee={employee} />
-                </div>
-                <div>
-                  <span className="text-xs font-medium text-slate-600 mb-1.5 block">Chủ nợ — cửa hàng nợ tiền ai</span>
-                  <label className="flex items-center gap-2 text-xs text-slate-600 mb-2">
-                    <input type="checkbox" checked={sameCreditor}
-                      onChange={(e) => setSameCreditor(e.target.checked)} />
-                    Nợ luôn nguồn hàng
-                  </label>
-                  {!sameCreditor && <SupplierPicker value={creditor} onSelect={setCreditor} employee={employee} />}
-                </div>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-2">
-                Bỏ tích khi có người khác ứng tiền trả thay — máy của nhà cung cấp A nhưng chủ cửa hàng
-                trả trước, khi đó công nợ ghi cho chủ cửa hàng còn xuất xứ vẫn là A.
-              </p>
-            </div>
 
             <div className="bg-slate-50 rounded-xl px-3 py-2.5 text-sm flex justify-between">
               <span className="text-slate-600">Sẵn sàng nhập <span className="font-semibold">{ok.length}</span> máy</span>
