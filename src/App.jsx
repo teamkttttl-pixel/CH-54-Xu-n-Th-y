@@ -3919,86 +3919,196 @@ function summarizeAuditChange(log) {
   return changes.length ? changes.join(" · ") : "Cập nhật thông tin";
 }
 
-function AuditLogModule() {
+function AuditLogModule({ employee }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fromDate, setFromDate] = useState(startOfMonth());
+  const [toDate, setToDate] = useState(todayStr());
+  const [actionFilter, setActionFilter] = useState("all");
   const [tableFilter, setTableFilter] = useState("all");
+  const [personFilter, setPersonFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [openId, setOpenId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    let q = supabase
       .from("audit_logs")
       .select("*, employees(full_name)")
+      .gte("created_at", `${fromDate}T00:00:00`)
+      .lte("created_at", `${toDate}T23:59:59`)
       .order("created_at", { ascending: false })
-      .limit(500);
+      .limit(2000);
+    if (actionFilter !== "all") q = q.eq("action", actionFilter);
+    const { data, error } = await q;
     if (!error) setLogs(data || []);
     setLoading(false);
-  }, []);
+  }, [fromDate, toDate, actionFilter]);
 
   useEffect(() => { load(); }, [load]);
 
+  const tables = [...new Set(logs.map((l) => l.table_name))].sort();
+  const people = [...new Set(logs.map((l) => l.employees?.full_name).filter(Boolean))].sort();
+
   const filtered = logs.filter((l) => {
     if (tableFilter !== "all" && l.table_name !== tableFilter) return false;
+    if (personFilter !== "all" && (l.employees?.full_name || "") !== personFilter) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
     const summary = summarizeAuditChange(l).toLowerCase();
     const performer = (l.employees?.full_name || "").toLowerCase();
-    return summary.includes(q) || performer.includes(q);
+    const raw = JSON.stringify(l.old_data || {}) + JSON.stringify(l.new_data || {});
+    return summary.includes(q) || performer.includes(q) || raw.toLowerCase().includes(q);
   });
+
+  const countBy = (a) => logs.filter((l) => l.action === a).length;
+  const deleteCount = countBy("delete");
 
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">Audit Log</h2>
-        <p className="text-xs text-slate-500">Lịch sử thao tác trên toàn hệ thống — chỉ Quản lý & Kế toán xem được</p>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Nhật ký thao tác</h2>
+          <p className="text-xs text-slate-500">
+            {filtered.length} bản ghi · quản lý và kế toán xem được, không ai sửa hoặc xóa từng dòng
+          </p>
+          <p className="text-[11px] text-amber-700 mt-1">
+            Nhật ký chỉ giữ 30 ngày gần nhất, tự động xóa sau đó. Cần lưu lâu hơn thì sao lưu ra Excel ở mục Báo cáo.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-xl px-3 py-1.5">
+          <Filter size={14} className="text-slate-500" />
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="text-sm outline-none" />
+          <span className="text-slate-400">—</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="text-sm outline-none" />
+        </div>
       </div>
+
+      {/* Lọc nhanh theo loại thao tác — xóa để riêng vì đây là thứ cần soát nhất */}
+      <div className="flex gap-2 mb-3 flex-wrap">
+        {[
+          ["all", "Tất cả", logs.length, "bg-brand-600 text-white border-brand-600"],
+          ["create", "Tạo mới", countBy("create"), "bg-emerald-600 text-white border-emerald-600"],
+          ["update", "Cập nhật", countBy("update"), "bg-sky-600 text-white border-sky-600"],
+          ["delete", "Đã xóa", deleteCount, "bg-rose-600 text-white border-rose-600"],
+        ].map(([k, label, n, activeCls]) => (
+          <button key={k} onClick={() => setActionFilter(k)}
+            className={classNames("px-3 py-1.5 rounded-lg text-xs border font-medium",
+              actionFilter === k ? activeCls : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
+          >
+            {label}
+            {actionFilter === "all" || actionFilter === k ? <span className="ml-1.5 opacity-70">{n}</span> : null}
+          </button>
+        ))}
+      </div>
+
+      {deleteCount > 0 && actionFilter !== "delete" && (
+        <button onClick={() => setActionFilter("delete")}
+          className="w-full text-left bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 mb-3 text-xs text-rose-700 hover:bg-rose-100 transition-colors">
+          <ShieldAlert size={14} className="inline mr-1.5" />
+          Có <span className="font-semibold">{deleteCount}</span> thao tác xóa trong kỳ này — bấm để xem riêng
+        </button>
+      )}
+
       <Card className="p-0 overflow-hidden">
         <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo nội dung thay đổi, người thực hiện..."
+              placeholder="Tìm IMEI, mã đơn, tên khách, người thực hiện..."
               className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
-          <select value={tableFilter} onChange={(e) => setTableFilter(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
-            <option value="all">Tất cả</option>
-            <option value="devices">Kho hàng</option>
-            <option value="sales_orders">Đơn hàng bán</option>
-            <option value="customers">Khách hàng</option>
+          <select value={tableFilter} onChange={(e) => setTableFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
+            <option value="all">Mọi phân hệ</option>
+            {tables.map((t) => <option key={t} value={t}>{AUDIT_TABLE_LABELS[t] || t}</option>)}
+          </select>
+          <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
+            <option value="all">Mọi người</option>
+            {people.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
+
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={ScrollText} text="Chưa có nhật ký thao tác nào." />
+          <EmptyState icon={ScrollText} text="Không có thao tác nào khớp bộ lọc." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                 <th className="px-3 py-2">Thời gian</th>
-                <th className="px-3 py-2">Bảng</th>
-                <th className="px-3 py-2">Hành động</th>
+                <th className="px-3 py-2">Phân hệ</th>
+                <th className="px-3 py-2">Thao tác</th>
                 <th className="px-3 py-2">Nội dung</th>
                 <th className="px-3 py-2">Người thực hiện</th>
+                <th className="px-3 py-2"></th>
               </tr></thead>
               <tbody>
-                {filtered.map((l) => (
-                  <tr key={l.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(l.created_at)} {new Date(l.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{AUDIT_TABLE_LABELS[l.table_name] || l.table_name}</td>
-                    <td className="px-3 py-2.5">
-                      <span className={classNames("text-xs px-2 py-0.5 rounded-full", AUDIT_ACTION_STYLES[l.action])}>
-                        {AUDIT_ACTION_LABELS[l.action] || l.action}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-slate-600 max-w-[320px] truncate" title={summarizeAuditChange(l)}>{summarizeAuditChange(l)}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{l.employees?.full_name || "—"}</td>
-                  </tr>
-                ))}
+                {filtered.map((l) => {
+                  const isOpen = openId === l.id;
+                  const isDelete = l.action === "delete";
+                  return (
+                    <React.Fragment key={l.id}>
+                      <tr
+                        onClick={() => setOpenId(isOpen ? null : l.id)}
+                        className={classNames("border-b border-slate-50 last:border-0 cursor-pointer",
+                          isDelete ? "bg-rose-50/40 hover:bg-rose-50/70" : "hover:bg-slate-50/60")}
+                      >
+                        <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                          {fmtDate(l.created_at)}{" "}
+                          <span className="text-slate-500">
+                            {new Date(l.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                          {AUDIT_TABLE_LABELS[l.table_name] || l.table_name}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className={classNames("text-xs px-2 py-0.5 rounded-full",
+                            AUDIT_ACTION_STYLES[l.action] || "bg-slate-100 text-slate-600")}>
+                            {AUDIT_ACTION_LABELS[l.action] || l.action}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600 max-w-[320px] truncate" title={summarizeAuditChange(l)}>
+                          {summarizeAuditChange(l)}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{l.employees?.full_name || "—"}</td>
+                        <td className="px-3 py-2.5 text-right">
+                          <ChevronDown size={15} className={classNames("inline text-slate-400 transition-transform", isOpen && "rotate-180")} />
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr>
+                          <td colSpan={6} className="bg-slate-50/70 px-4 py-3">
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              <div>
+                                <p className="text-[11px] font-medium text-slate-600 mb-1">Trước khi thay đổi</p>
+                                <pre className="text-[11px] bg-white border border-slate-200 rounded-lg p-2 overflow-x-auto max-h-56 text-slate-700">
+{l.old_data ? JSON.stringify(l.old_data, null, 1) : "(không có — bản ghi mới tạo)"}
+                                </pre>
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-medium text-slate-600 mb-1">Sau khi thay đổi</p>
+                                <pre className="text-[11px] bg-white border border-slate-200 rounded-lg p-2 overflow-x-auto max-h-56 text-slate-700">
+{l.new_data ? JSON.stringify(l.new_data, null, 1) : "(không có — bản ghi đã bị xóa)"}
+                                </pre>
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-2">
+                              Bảng gốc: <span className="doc-code">{l.table_name}</span> · Bản ghi:{" "}
+                              <span className="doc-code">{l.record_id || "—"}</span>
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -4007,10 +4117,6 @@ function AuditLogModule() {
     </div>
   );
 }
-
-/* ---------------------------------------------------------------------- */
-/* Reports module — doanh thu/lợi nhuận (quan_ly + ke_toan)               */
-/* ---------------------------------------------------------------------- */
 
 function startOfMonth() {
   const d = new Date();
@@ -8515,7 +8621,7 @@ function AppShell({ employee, onSignOut }) {
       case "reports":
         return ["quan_ly", "ke_toan"].includes(employee.role) ? <ReportsModule employee={employee} /> : null;
       case "audit":
-        return ["quan_ly", "ke_toan"].includes(employee.role) ? <AuditLogModule /> : null;
+        return ["quan_ly", "ke_toan"].includes(employee.role) ? <AuditLogModule employee={employee} /> : null;
       case "employees":
         return employee.role === "quan_ly" ? <EmployeesModule employee={employee} /> : null;
       default:
