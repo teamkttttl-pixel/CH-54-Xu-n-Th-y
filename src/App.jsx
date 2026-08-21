@@ -188,6 +188,38 @@ function Card({ className = "", children }) {
   );
 }
 
+
+// Ô nhập tiền: gõ số trần, hiện dấu ngăn cách hàng nghìn theo kiểu Việt Nam.
+// Giá trị trả về vẫn là chuỗi số trần nên mọi hàm xử lý cũ không phải sửa.
+// inputMode numeric để điện thoại bật thẳng bàn phím số.
+function MoneyField({ label, value, onChange, className = "", ...props }) {
+  const raw = value === null || value === undefined ? "" : String(value);
+  const digits = raw.replace(/[^\d]/g, "");
+  const display = digits === "" ? "" : Number(digits).toLocaleString("vi-VN");
+
+  const handle = (e) => {
+    const next = e.target.value.replace(/[^\d]/g, "");
+    onChange?.({ target: { value: next } });
+  };
+
+  return (
+    <label className={classNames("block", className)}>
+      {label && <span className="text-xs font-medium text-slate-600 mb-1.5 block">{label}</span>}
+      <div className="relative">
+        <input
+          {...props}
+          type="text"
+          inputMode="numeric"
+          value={display}
+          onChange={handle}
+          className="w-full rounded-lg border border-slate-300 bg-white pl-3 pr-8 py-2 text-sm text-slate-800 text-right tabular placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
+        />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">đ</span>
+      </div>
+    </label>
+  );
+}
+
 function TextField({ label, className = "", ...props }) {
   return (
     <label className={classNames("block", className)}>
@@ -258,8 +290,8 @@ function LoginPage({ onLoggedIn }) {
           <div className="w-14 h-14 rounded-2xl bg-brand-600 flex items-center justify-center mb-3">
             <Smartphone className="text-white" size={26} />
           </div>
-          <h1 className="text-lg font-semibold text-slate-800">Quản lý mua bán điện thoại</h1>
-          <p className="text-xs text-slate-500 mt-1">Hệ thống dùng chung cho nhiều cửa hàng</p>
+          <h1 className="text-lg font-semibold text-slate-800">Hệ thống CH ĐT</h1>
+          <p className="text-xs text-slate-500 mt-1">Quản lý cửa hàng điện thoại</p>
         </div>
 
         <form onSubmit={submit} className="space-y-3">
@@ -704,8 +736,8 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
         </label>
         <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} placeholder="99" disabled={isSold} />
         <TextField label="Nhà cung cấp / nguồn nhập" value={form.supplier} onChange={set("supplier")} disabled={lockedForStaff} />
-        <TextField label="Giá vốn (đ)" type="number" value={form.cost_price} onChange={set("cost_price")} disabled={isSold} />
-        <TextField label="Giá bán đề xuất (đ)" type="number" value={form.sale_price} onChange={set("sale_price")} disabled={isSold} />
+        <MoneyField label="Giá vốn (đ)" value={form.cost_price} onChange={set("cost_price")} disabled={isSold} />
+        <MoneyField label="Giá bán đề xuất (đ)" value={form.sale_price} onChange={set("sale_price")} disabled={isSold} />
         <TextField label="Ngày nhập" type="date" value={form.import_date || ""} onChange={set("import_date")} disabled={isSold} />
         <TextField label="Ghi chú" value={form.notes} onChange={set("notes")} className="sm:col-span-2" disabled={isSold} />
         {error && <p className="text-xs text-rose-600 sm:col-span-2">{error}</p>}
@@ -1177,7 +1209,7 @@ function PrintDocModal({ type, order, customer, device, payments, contract, stor
         </div>
 
         <div className="text-center mb-6">
-          <p className="text-xs text-slate-500">{storeName || "Cửa hàng"} — Quản lý mua bán điện thoại</p>
+          <p className="text-xs text-slate-500">{storeName || "Cửa hàng"} — Hệ thống CH ĐT</p>
           <h2 className="text-lg font-bold text-slate-800 mt-1">
             {type === "contract" ? "HỢP ĐỒNG MUA BÁN ĐIỆN THOẠI" : "PHIẾU THU TIỀN"}
           </h2>
@@ -1505,13 +1537,18 @@ function PaymentRows({ rows, setRows, total, supplierDebt = 0, supplierName = ""
                 <option value="debt">Khách nợ shop</option>
                 {supplierDebt > 0 && <option value="debt_offset">Bù trừ công nợ</option>}
               </select>
-              <input
-                type="number"
-                value={r.amount}
-                onChange={(e) => update(i, { amount: e.target.value })}
-                placeholder={r.method === "debt_offset" ? "Số tiền bù trừ" : r.method === "debt" ? "Số tiền ghi nợ" : "Số tiền"}
-                className="w-32 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-              />
+              <div className="relative w-36 shrink-0">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={r.amount === "" || r.amount === null || r.amount === undefined
+                    ? "" : Number(String(r.amount).replace(/[^\d]/g, "") || 0).toLocaleString("vi-VN")}
+                  onChange={(e) => update(i, { amount: e.target.value.replace(/[^\d]/g, "") })}
+                  placeholder={r.method === "debt_offset" ? "Bù trừ" : r.method === "debt" ? "Ghi nợ" : "Số tiền"}
+                  className="w-full rounded-lg border border-slate-300 pl-2 pr-6 py-1.5 text-sm text-right tabular outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">đ</span>
+              </div>
               {rows.length > 1 && (
                 <button type="button" onClick={() => removeRow(i)} className="text-rose-400 hover:text-rose-600"><X size={15} /></button>
               )}
@@ -1847,8 +1884,8 @@ function OrderForm({ onCancel, onSaved, employee }) {
           )}
         </div>
         <div className="grid sm:grid-cols-2 gap-3">
-          <TextField label="Giá bán (đ) *" type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} />
-          <TextField label="Giảm giá (đ)" type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+          <MoneyField label="Giá bán (đ) *" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} />
+          <MoneyField label="Giảm giá (đ)" value={discount} onChange={(e) => setDiscount(e.target.value)} />
         </div>
         <div className="flex justify-between items-center bg-brand-50 rounded-xl px-3 py-2.5 text-sm">
           <span className="text-slate-500">Tổng tiền đơn hàng</span>
@@ -1967,7 +2004,7 @@ function ReconcileModal({ order, device, employee, onClose, onDone }) {
           </label>
           <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} />
           <TextField label="Nhà cung cấp / nguồn nhập" value={form.supplier} onChange={set("supplier")} placeholder="Ví dụ: khách lẻ, tên NCC..." className="col-span-2" />
-          <TextField label="Giá vốn (đ) *" type="number" value={form.cost_price} onChange={set("cost_price")} className="col-span-2" />
+          <MoneyField label="Giá vốn (đ) *" value={form.cost_price} onChange={set("cost_price")} className="col-span-2" />
           {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 col-span-2">{error}</p>}
           <div className="col-span-2 flex gap-2 mt-1">
             <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
@@ -2038,7 +2075,7 @@ function CollectDebtModal({ order, employee, onClose, onDone }) {
             <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
           </div>
         )}
-        <TextField label="Số tiền thu (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <MoneyField label="Số tiền thu (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
         {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
         <div className="flex gap-2">
@@ -2099,7 +2136,7 @@ function PayCustomerDiffModal({ order, employee, onClose, onDone }) {
             <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
             <p className="text-[11px] text-slate-500 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
           </div>
-          <TextField label="Số tiền trả (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <MoneyField label="Số tiền trả (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
           {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
           <div className="flex gap-2">
             <button onClick={submit} disabled={saving}
@@ -2462,7 +2499,7 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
             {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </label>
-        <TextField label="Giá xuất bán nội bộ (đ) *" type="number" value={price}
+        <MoneyField label="Giá xuất bán nội bộ (đ) *" value={price}
           onChange={(e) => setPrice(e.target.value)} />
       </div>
 
@@ -2704,7 +2741,7 @@ function ReceiveTransferModal({ row, employee, onClose, onDone }) {
                 <span className="font-semibold text-slate-800">{fmtVND(row.transfer_price)}</span>
               </div>
             </div>
-            <TextField label="Giá bán dự kiến (đ)" type="number" value={salePrice}
+            <MoneyField label="Giá bán dự kiến (đ)" value={salePrice}
               onChange={(e) => setSalePrice(e.target.value)} placeholder="Để trống nếu chưa định giá" />
             <TextField label="Ghi chú khi nhận" value={note} onChange={(e) => setNote(e.target.value)} />
             <p className="text-[11px] text-slate-500">
@@ -3145,7 +3182,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
             </select>
           </label>
           <TextField label="Độ mới (%)" type="number" min="0" max="100" value={form.condition_percent} onChange={set("condition_percent")} placeholder="99" />
-          <TextField label="Giá thu mua (đ) *" type="number" value={form.purchase_price} onChange={set("purchase_price")} />
+          <MoneyField label="Giá thu mua (đ) *" value={form.purchase_price} onChange={set("purchase_price")} />
         </div>
 
         <label className="block">
@@ -3205,7 +3242,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           <div className="bg-slate-50 rounded-xl p-3 space-y-3">
             <p className="text-xs font-medium text-slate-600">Công nợ NCC</p>
             <div className="grid sm:grid-cols-2 gap-3">
-              <TextField label="Đã thanh toán (đ)" type="number" value={form.paid_amount} onChange={set("paid_amount")} placeholder={String(price)} />
+              <MoneyField label="Đã thanh toán (đ)" value={form.paid_amount} onChange={set("paid_amount")} placeholder={String(price)} />
               {debt > 0 && <TextField label="Hạn thanh toán" type="date" value={form.due_date} onChange={set("due_date")} />}
             </div>
             <div className={classNames("text-xs px-3 py-2 rounded-lg", debt === 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
@@ -3512,7 +3549,7 @@ function EditPurchaseModal({ purchase, employee, onClose, onDone }) {
           <datalist id="dl-models-edit">{IPHONE_MODEL_LIST.map((m) => <option key={m} value={m} />)}</datalist>
           <datalist id="dl-colors-edit">{coloroptionsForModel(form.model).map((c) => <option key={c} value={c} />)}</datalist>
 
-          <TextField label="Giá thu mua (đ) *" type="number" value={form.purchase_price} onChange={set("purchase_price")} />
+          <MoneyField label="Giá thu mua (đ) *" value={form.purchase_price} onChange={set("purchase_price")} />
           {diff !== 0 && newPrice > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800">
               Giá thay đổi {diff > 0 ? "tăng" : "giảm"} <span className="font-medium">{fmtVND(Math.abs(diff))}</span>.
@@ -3727,7 +3764,7 @@ function PurchaseModule({ employee }) {
             <p className="text-xs text-slate-500 mb-3">
               NCC: {payingDebt.suppliers?.name} · Còn nợ: {fmtVND(Math.max(0, Number(payingDebt.purchase_price) - Number(payingDebt.paid_amount ?? 0)))}
             </p>
-            <TextField label="Số tiền thanh toán thêm (đ)" type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+            <MoneyField label="Số tiền thanh toán thêm (đ)" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
             <div className="mt-3">
               <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chuyển tiền *</span>
               <BankSelect banks={banks} value={payBankId} onChange={setPayBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
@@ -4240,7 +4277,7 @@ function CapitalCard({ employee }) {
                 <option value="out">Rút vốn</option>
               </select>
             </label>
-            <TextField label="Số tiền (đ) *" type="number" value={form.amount}
+            <MoneyField label="Số tiền (đ) *" value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
           </div>
           <TextField label="Ghi chú" value={form.note}
@@ -5555,8 +5592,8 @@ function SettleInstallmentModal({ row, employee, onClose, onDone }) {
           </div>
           <TextField label="Ngày nhận theo sao kê" type="date" value={settledAt} onChange={(e) => setSettledAt(e.target.value)} />
           <div className="grid grid-cols-2 gap-2">
-            <TextField label="Số thực nhận (đ)" type="number" value={received} onChange={(e) => setReceived(e.target.value)} />
-            <TextField label="Phí giữ lại (đ)" type="number" value={fee} onChange={(e) => setFee(e.target.value)} />
+            <MoneyField label="Số thực nhận (đ)" value={received} onChange={(e) => setReceived(e.target.value)} />
+            <MoneyField label="Phí giữ lại (đ)" value={fee} onChange={(e) => setFee(e.target.value)} />
           </div>
           <div>
             <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản nhận tiền</span>
@@ -5805,7 +5842,7 @@ function SettleAdvanceModal({ row, employee, onClose, onDone }) {
               <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
             </div>
           )}
-          <TextField label="Số tiền nộp (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <MoneyField label="Số tiền nộp (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
           {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
           <div className="flex gap-2">
@@ -5916,7 +5953,7 @@ function CashAdvanceTab({ employee }) {
                 ))}
               </select>
             </label>
-            <TextField label="Số tiền tạm ứng (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <MoneyField label="Số tiền tạm ứng (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </div>
 
           {summary && (
@@ -6064,7 +6101,7 @@ function ManualOffsetModal({ partner, onClose, onDone }) {
               <div className="flex justify-between"><span className="text-slate-400">Cửa hàng nợ đối tác</span><span className="text-indigo-600 font-medium">{fmtVND(pay)}</span></div>
               <div className="flex justify-between border-t border-slate-200 pt-1 mt-1"><span className="text-slate-500">Bù trừ tối đa</span><span className="font-semibold text-slate-700">{fmtVND(maxOffset)}</span></div>
             </div>
-            <TextField label="Số tiền bù trừ (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <MoneyField label="Số tiền bù trừ (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
             <TextField label="Nội dung / ghi chú" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Hai bên thống nhất bù trừ công nợ..." />
             <p className="text-[11px] text-slate-500">
               Hệ thống phân bổ vào các chứng từ cũ nhất trước ở cả hai bên và sinh biên bản có mã BT để tra cứu.
@@ -6167,7 +6204,7 @@ function InternalLoanModal({ employee, onClose, onDone }) {
               <TextField label="Hẹn ngày trả" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
 
-            <TextField label="Số tiền cho vay (đ) *" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <MoneyField label="Số tiền cho vay (đ) *" value={amount} onChange={(e) => setAmount(e.target.value)} />
 
             <div>
               <span className="text-xs font-medium text-slate-600 mb-1.5 block">Tài khoản chuyển tiền *</span>
@@ -6235,7 +6272,7 @@ function PayInternalModal({ row, employee, onClose, onDone }) {
             <span className="font-semibold">{fmtVND(owed)}</span> — đã gồm cả tiền hàng và tiền vay.
           </div>
           <TextField label="Ngày chuyển" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <TextField label="Số tiền trả (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <MoneyField label="Số tiền trả (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <div>
             <span className="text-xs font-medium text-slate-600 mb-1.5 block">Tài khoản chuyển tiền *</span>
             <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-lg" />
@@ -6763,7 +6800,7 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
           <div className="grid sm:grid-cols-2 gap-3">
             <TextField label="Ngày phát sinh" type="date" value={form.expense_date}
               onChange={(e) => setForm((f) => ({ ...f, expense_date: e.target.value }))} />
-            <TextField label="Số tiền (đ) *" type="number" value={form.amount}
+            <MoneyField label="Số tiền (đ) *" value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
           </div>
           <div className="grid sm:grid-cols-2 gap-3 mt-3">
@@ -6883,7 +6920,7 @@ function MarketingTab({ employee, rows, onChanged }) {
           </p>
           <div className="grid sm:grid-cols-3 gap-3">
             <TextField label="Tháng" type="month" value={month} onChange={(e) => { setMonth(e.target.value); setPreview(null); }} />
-            <TextField label="Tổng chi phí (đ) *" type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setPreview(null); }} />
+            <MoneyField label="Tổng chi phí (đ) *" value={amount} onChange={(e) => { setAmount(e.target.value); setPreview(null); }} />
             <TextField label="Diễn giải" value={note} placeholder="Quảng cáo Facebook tháng 8" onChange={(e) => setNote(e.target.value)} />
           </div>
 
@@ -7320,7 +7357,7 @@ function BonusTab({ employee, rows, loading, onChanged, fromDate, toDate }) {
                 ))}
               </select>
             </label>
-            <TextField label="Số tiền thưởng (đ) *" type="number" value={form.amount}
+            <MoneyField label="Số tiền thưởng (đ) *" value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
             <div>
               <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chi *</span>
@@ -7686,11 +7723,11 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
             <TextField label="Ngày hoàn tất" type="date" value={doneAt} onChange={(e) => setDoneAt(e.target.value)} />
 
             {isSpa ? (
-              <TextField label="Chi phí spa (đ) *" type="number" value={spaCost} onChange={(e) => setSpaCost(e.target.value)} />
+              <MoneyField label="Chi phí spa (đ) *" value={spaCost} onChange={(e) => setSpaCost(e.target.value)} />
             ) : (
               <>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <TextField label="Đơn giá màn cũ tháo ra (đ) *" type="number" value={oldValue} onChange={(e) => setOldValue(e.target.value)} />
+                  <MoneyField label="Đơn giá màn cũ tháo ra (đ) *" value={oldValue} onChange={(e) => setOldValue(e.target.value)} />
                   <label className="block">
                     <span className="text-xs font-medium text-slate-600 mb-1 block">Chất lượng màn cũ</span>
                     <select value={oldGrade} onChange={(e) => setOldGrade(e.target.value)}
@@ -7719,7 +7756,7 @@ function CompleteServiceModal({ ticket, employee, onClose, onDone }) {
                     </select>
                   ) : (
                     <div className="grid sm:grid-cols-2 gap-3">
-                      <TextField label="Đơn giá màn mới (đ) *" type="number" value={newCost} onChange={(e) => setNewCost(e.target.value)} />
+                      <MoneyField label="Đơn giá màn mới (đ) *" value={newCost} onChange={(e) => setNewCost(e.target.value)} />
                       <label className="block">
                         <span className="text-xs font-medium text-slate-600 mb-1 block">Chất lượng màn mới</span>
                         <select value={newGrade} onChange={(e) => setNewGrade(e.target.value)}
@@ -7952,7 +7989,7 @@ function ScreenPurchaseForm({ employee, onCancel, onSaved }) {
         <datalist id="dl-models-screen">{IPHONE_MODEL_LIST.map((m) => <option key={m} value={m} />)}</datalist>
 
         <div className="grid sm:grid-cols-3 gap-3">
-          <TextField label="Đơn giá 1 tấm (đ) *" type="number" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+          <MoneyField label="Đơn giá 1 tấm (đ) *" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
           {mode === "batch" ? (
             <TextField label="Số lượng *" type="number" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="10" />
           ) : (
@@ -8034,7 +8071,7 @@ function PayScreenPurchaseModal({ row, employee, onClose, onDone }) {
               <span className="font-medium text-amber-700">{fmtVND(remaining)}</span>
             </div>
           </div>
-          <TextField label="Số tiền thanh toán (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <MoneyField label="Số tiền thanh toán (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <div>
             <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chuyển tiền *</span>
             <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
