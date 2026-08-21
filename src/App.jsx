@@ -4559,6 +4559,254 @@ function CommissionSection({ employee, fromDate, toDate }) {
   );
 }
 
+/* -------------------------------------------------------------- */
+/* Sao lưu toàn bộ dữ liệu ra một file Excel nhiều sheet           */
+/* -------------------------------------------------------------- */
+
+// Tên cột tiếng Việt dùng chung cho mọi bảng. Cột nào không có trong đây
+// thì giữ nguyên tên gốc — thà thấy tên tiếng Anh còn hơn mất cột.
+const BACKUP_COLS = {
+  id: "ID", created_at: "Tạo lúc", updated_at: "Sửa lúc",
+  created_by: "Người tạo", updated_by: "Người sửa", store_id: "Cửa hàng",
+  note: "Ghi chú", notes: "Ghi chú", description: "Diễn giải", status: "Trạng thái",
+  amount: "Số tiền", total_amount: "Tổng tiền", paid_amount: "Đã trả",
+  settled_amount: "Đã tất toán", remaining: "Còn lại",
+  full_name: "Họ tên", phone: "Điện thoại", email: "Email",
+  address: "Địa chỉ", cccd: "CCCD", date_of_birth: "Ngày sinh", role: "Vai trò",
+  imei: "IMEI", model: "Model", storage: "Dung lượng", color: "Màu sắc",
+  condition: "Tình trạng", condition_percent: "Độ mới (%)",
+  cost_price: "Giá vốn", sale_price: "Giá bán", purchase_price: "Giá thu mua",
+  import_date: "Ngày nhập", supplier: "Nhà cung cấp", supplier_id: "NCC",
+  customer_id: "Khách hàng", device_id: "Máy", order_id: "Đơn hàng",
+  employee_id: "Nhân viên", partner_id: "Đối tác",
+  order_code: "Mã đơn", purchase_code: "Mã phiếu nhập", payment_code: "Mã phiếu thu",
+  contract_code: "Mã hợp đồng", entry_code: "Mã bút toán", expense_code: "Mã chi phí",
+  transfer_code: "Mã xuất nội bộ", ticket_code: "Mã phiếu DV", screen_code: "Mã màn",
+  advance_code: "Mã tạm ứng", capital_code: "Mã vốn góp", offset_code: "Mã bù trừ",
+  loan_code: "Mã phiếu vay", return_code: "Mã trả hàng", partner_code: "Mã đối tác",
+  method: "Hình thức", payment_method: "Hình thức TT", bank_account_id: "Tài khoản NH",
+  installment_provider: "Đơn vị trả góp", installment_contract_code: "Mã hồ sơ TG",
+  settlement_status: "TT giải ngân", settled_at: "Ngày nhận tiền",
+  account: "Tài khoản", entry_type: "Loại bút toán", entry_date: "Ngày ghi sổ",
+  debt_status: "Trạng thái nợ", due_date: "Hạn thanh toán", returned_at: "Ngày trả hàng",
+  expense_date: "Ngày chi", category: "Nhóm chi phí",
+  advance_date: "Ngày tạm ứng", contribution_date: "Ngày góp vốn",
+  contributor_name: "Người góp vốn", transfer_date: "Ngày xuất",
+  from_store_id: "Từ cửa hàng", to_store_id: "Đến cửa hàng",
+  creditor_store_id: "Bên được nợ", debtor_store_id: "Bên nợ",
+  lender_store_id: "Bên cho vay", borrower_store_id: "Bên vay",
+  service_type: "Loại dịch vụ", spa_cost: "Chi phí spa",
+  old_screen_value: "Giá màn cũ", new_screen_cost: "Giá màn mới",
+  cost_before: "Giá vốn trước", cost_after: "Giá vốn sau",
+  origin: "Nguồn gốc", grade: "Chất lượng", unit_price: "Đơn giá", quantity: "Số lượng",
+  name: "Tên", bank_name: "Ngân hàng", account_number: "Số tài khoản",
+  account_holder: "Chủ tài khoản", short_label: "Nhãn ngắn",
+  is_active: "Đang dùng", user_id: "Tài khoản đăng nhập",
+  table_name: "Bảng", record_id: "Bản ghi", action: "Thao tác",
+  old_data: "Trước", new_data: "Sau", performed_by: "Người thực hiện",
+  reason: "Lý do", refund_amount: "Tiền hoàn", revenue_deduction: "Giảm trừ DT",
+};
+
+const BACKUP_TABLES = [
+  ["stores", "CuaHang"],
+  ["employees", "NhanVien"],
+  ["customers", "KhachHang"],
+  ["suppliers", "NhaCungCap"],
+  ["partners", "DoiTac"],
+  ["bank_accounts", "TaiKhoanNH"],
+  ["installment_providers", "DonViTraGop"],
+  ["devices", "KhoMay"],
+  ["purchase_orders", "PhieuNhapMay"],
+  ["sales_orders", "DonBan"],
+  ["order_payments", "PhieuThu"],
+  ["contracts", "HopDong"],
+  ["sales_returns", "TraHang"],
+  ["partner_ledger", "SoCaiCongNo"],
+  ["debt_offsets", "BienBanBuTru"],
+  ["debt_offset_allocations", "ChiTietBuTru"],
+  ["internal_transfers", "XuatNoiBo"],
+  ["internal_loans", "VayNoiBo"],
+  ["internal_ledger", "SoCaiNoiBo"],
+  ["service_tickets", "PhieuSpaSuaChua"],
+  ["screens", "KhoManHinh"],
+  ["screen_purchases", "PhieuNhapMan"],
+  ["expenses", "ChiPhi"],
+  ["capital_contributions", "VonGop"],
+  ["cash_advances", "TamUng"],
+  ["cash_advance_settlements", "HoanUng"],
+];
+
+function BackupCard({ employee }) {
+  const [running, setRunning] = useState(false);
+  const [step, setStep] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState("");
+  const [usage, setUsage] = useState([]);
+  const [totalSize, setTotalSize] = useState(null);
+  const [includeAudit, setIncludeAudit] = useState(false);
+
+  const loadUsage = useCallback(async () => {
+    const [{ data: u }, { data: t }] = await Promise.all([
+      supabase.rpc("database_usage"),
+      supabase.rpc("database_total_size"),
+    ]);
+    setUsage((u || []).slice(0, 8));
+    setTotalSize(typeof t === "string" ? t : null);
+  }, []);
+
+  useEffect(() => { loadUsage(); }, [loadUsage]);
+
+  // Supabase trả tối đa 1000 dòng mỗi lần, phải lấy theo trang
+  const fetchAll = async (table) => {
+    const out = [];
+    const step = 1000;
+    for (let from = 0; ; from += step) {
+      const { data, error: err } = await supabase.from(table).select("*").range(from, from + step - 1);
+      if (err) throw new Error(`${table}: ${err.message}`);
+      out.push(...(data || []));
+      if (!data || data.length < step) break;
+      if (out.length >= 100000) break;   // chặn an toàn
+    }
+    return out;
+  };
+
+  const viet = (rows) => rows.map((r) => {
+    const o = {};
+    for (const k of Object.keys(r)) {
+      const v = r[k];
+      o[BACKUP_COLS[k] || k] =
+        v === null || v === undefined ? "" :
+        typeof v === "object" ? JSON.stringify(v) : v;
+    }
+    return o;
+  });
+
+  const run = async () => {
+    setRunning(true); setError(""); setProgress(0);
+    try {
+      const list = includeAudit ? [...BACKUP_TABLES, ["audit_logs", "NhatKyThaoTac"]] : BACKUP_TABLES;
+      const wb = XLSX.utils.book_new();
+      const summary = [];
+
+      for (let i = 0; i < list.length; i++) {
+        const [table, sheet] = list[i];
+        setStep(`Đang lấy ${sheet}...`);
+        setProgress(Math.round((i / (list.length + 1)) * 100));
+        let rows = [];
+        try {
+          rows = await fetchAll(table);
+        } catch (e) {
+          summary.push({ "Sheet": sheet, "Bảng gốc": table, "Số dòng": 0, "Ghi chú": `Lỗi: ${e.message}` });
+          continue;
+        }
+        const ws = XLSX.utils.json_to_sheet(rows.length ? viet(rows) : [{ "Ghi chú": "Không có dữ liệu" }]);
+        XLSX.utils.book_append_sheet(wb, ws, sheet.slice(0, 31));
+        summary.push({ "Sheet": sheet, "Bảng gốc": table, "Số dòng": rows.length, "Ghi chú": "" });
+      }
+
+      setStep("Đang tạo sheet tổng hợp...");
+      setProgress(95);
+
+      const head = [
+        { "Mục": "Cửa hàng", "Giá trị": employee.stores?.name || "" },
+        { "Mục": "Người xuất", "Giá trị": employee.full_name },
+        { "Mục": "Thời điểm xuất", "Giá trị": new Date().toLocaleString("vi-VN") },
+        { "Mục": "Dung lượng database", "Giá trị": totalSize || "" },
+        { "Mục": "Tổng số dòng", "Giá trị": summary.reduce((s, r) => s + Number(r["Số dòng"] || 0), 0) },
+        { "Mục": "", "Giá trị": "" },
+        { "Mục": "LƯU Ý", "Giá trị": "File này để tra cứu và đối chiếu. Không khôi phục lại database từ file Excel được." },
+      ];
+      const wsHead = XLSX.utils.json_to_sheet(head);
+      XLSX.utils.book_append_sheet(wb, wsHead, "ThongTin");
+
+      const wsSum = XLSX.utils.json_to_sheet(summary);
+      XLSX.utils.book_append_sheet(wb, wsSum, "DanhSachSheet");
+
+      // Đưa 2 sheet tổng hợp lên đầu
+      wb.SheetNames = ["ThongTin", "DanhSachSheet",
+        ...wb.SheetNames.filter((n) => n !== "ThongTin" && n !== "DanhSachSheet")];
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `Sao-luu-${stamp}.xlsx`);
+      setProgress(100);
+      setStep("Đã tải file về máy.");
+    } catch (e) {
+      setError(e.message || "Không sao lưu được.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  if (employee.role !== "quan_ly") return null;
+
+  return (
+    <Card className="p-4 sm:p-5 mb-4">
+      <p className="text-sm font-medium text-slate-700 mb-1">Sao lưu dữ liệu</p>
+      <p className="text-[11px] text-slate-500 mb-3">
+        Xuất toàn bộ dữ liệu ra một file Excel, mỗi bảng một sheet. Dùng để tra cứu và đối chiếu —
+        không khôi phục lại database từ file Excel được.
+      </p>
+
+      {usage.length > 0 && (
+        <div className="bg-slate-50 rounded-xl p-3 mb-3">
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-xs font-medium text-slate-700">Dung lượng đang dùng</p>
+            <p className="text-sm font-semibold text-slate-800">{totalSize || "—"}</p>
+          </div>
+          <div className="space-y-1">
+            {usage.map((u) => (
+              <div key={u.table_name} className="flex justify-between text-xs">
+                <span className="text-slate-600">{u.table_name}</span>
+                <span className="text-slate-500">
+                  {Number(u.row_count).toLocaleString("vi-VN")} dòng · {u.pretty_size}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-2">
+            Gói Supabase miễn phí cho 500 MB. Chỉ cần dọn khi vượt quá một nửa mức đó.
+          </p>
+        </div>
+      )}
+
+      <label className="flex items-center gap-2 text-xs text-slate-600 mb-3">
+        <input type="checkbox" checked={includeAudit} onChange={(e) => setIncludeAudit(e.target.checked)} />
+        Kèm cả nhật ký thao tác (file sẽ nặng hơn nhiều)
+      </label>
+
+      {running && (
+        <div className="mb-3">
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
+          </div>
+          <p className="text-xs text-slate-500 mt-1">{step}</p>
+        </div>
+      )}
+      {!running && step && !error && (
+        <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 mb-3">{step}</p>
+      )}
+      {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
+
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={run} disabled={running}
+          className="bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+          {running ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}
+          Sao lưu ra Excel
+        </button>
+        <button onClick={loadUsage} disabled={running}
+          className="border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl px-4 py-2 text-sm">
+          Cập nhật dung lượng
+        </button>
+      </div>
+
+      <p className="text-[11px] text-slate-500 mt-3">
+        Muốn khôi phục được database khi có sự cố thì phải dùng bản sao lưu của Supabase, không phải file Excel.
+        Vào Supabase Dashboard → Database → Backups.
+      </p>
+    </Card>
+  );
+}
+
 function ReportsModule({ employee }) {
   const [fromDate, setFromDate] = useState(startOfMonth());
   const [toDate, setToDate] = useState(todayStr());
@@ -4782,6 +5030,8 @@ function ReportsModule({ employee }) {
           <CashFlowCard employee={employee} fromDate={fromDate} toDate={toDate} />
 
           <CapitalCard employee={employee} />
+
+          <BackupCard employee={employee} />
 
           <CommissionSection employee={employee} fromDate={fromDate} toDate={toDate} />
 
