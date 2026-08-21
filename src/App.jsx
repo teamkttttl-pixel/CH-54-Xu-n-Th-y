@@ -5523,6 +5523,419 @@ function ManualOffsetModal({ partner, onClose, onDone }) {
   );
 }
 
+const INTERNAL_ENTRY_LABELS = {
+  transfer: "Chuyển hàng",
+  loan: "Cho vay",
+  payment: "Thanh toán",
+  adjustment: "Điều chỉnh",
+};
+const INTERNAL_ENTRY_STYLES = {
+  transfer: "bg-violet-50 text-violet-700",
+  loan: "bg-sky-50 text-sky-700",
+  payment: "bg-emerald-50 text-emerald-700",
+  adjustment: "bg-slate-100 text-slate-600",
+};
+
+function InternalLoanModal({ employee, onClose, onDone }) {
+  const [stores, setStores] = useState([]);
+  const [borrower, setBorrower] = useState("");
+  const [amount, setAmount] = useState("");
+  const [loanDate, setLoanDate] = useState(todayStr());
+  const [dueDate, setDueDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [bankId, setBankId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [okCode, setOkCode] = useState(null);
+  const { banks } = usePaymentOptions();
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("stores").select("id, name").order("name");
+      setStores((data || []).filter((s) => s.id !== employee.store_id));
+    })();
+  }, [employee.store_id]);
+
+  const submit = async () => {
+    if (!borrower) { setError("Vui lòng chọn cửa hàng vay."); return; }
+    if ((Number(amount) || 0) <= 0) { setError("Số tiền phải lớn hơn 0."); return; }
+    if (!bankId) { setError("Vui lòng chọn tài khoản chuyển tiền."); return; }
+    setSaving(true); setError("");
+    const { data, error: err } = await supabase.rpc("create_internal_loan", {
+      p_borrower_store_id: borrower,
+      p_amount: Number(amount),
+      p_bank_account_id: bankId,
+      p_due_date: dueDate || null,
+      p_reason: reason.trim() || null,
+      p_loan_date: loanDate,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setOkCode(data);
+    await supabase.from("audit_logs").insert({
+      table_name: "internal_loans", record_id: null, action: "create",
+      new_data: { ma: data, so_tien: Number(amount) },
+      performed_by: employee.id, store_id: employee.store_id,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
+      <Card className="w-full max-w-md p-5 my-8">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Cho cửa hàng khác vay tiền</p>
+          <button onClick={onClose} className="text-slate-500 hover:text-rose-600"><X size={16} /></button>
+        </div>
+
+        {okCode ? (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800 space-y-1">
+              <p>Đã lập phiếu vay <span className="font-semibold">{okCode}</span>.</p>
+              <p className="text-xs">Số dư nội bộ giữa hai cửa hàng đã cập nhật. Nếu bên kia đang nợ bạn tiền hàng, khoản này cộng dồn vào cùng một số dư.</p>
+            </div>
+            <button onClick={onDone} className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">Xong</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <label className="block">
+              <span className="text-xs font-medium text-slate-600 mb-1.5 block">Cửa hàng vay *</span>
+              <select value={borrower} onChange={(e) => setBorrower(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
+                <option value="">— Chọn cửa hàng —</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <TextField label="Ngày cho vay" type="date" value={loanDate} onChange={(e) => setLoanDate(e.target.value)} />
+              <TextField label="Hẹn ngày trả" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+
+            <TextField label="Số tiền cho vay (đ) *" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+
+            <div>
+              <span className="text-xs font-medium text-slate-600 mb-1.5 block">Tài khoản chuyển tiền *</span>
+              <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-lg" />
+            </div>
+
+            <TextField label="Lý do" value={reason} placeholder="Hỗ trợ nhập hàng, thiếu vốn lưu động..."
+              onChange={(e) => setReason(e.target.value)} />
+
+            <p className="text-[11px] text-slate-500">
+              Vay nội bộ không tính lãi. Khoản này cộng chung vào số dư với nợ tiền hàng và tự bù trừ.
+            </p>
+
+            {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={submit} disabled={saving}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {saving && <Loader2 size={15} className="animate-spin" />} Lập phiếu cho vay
+              </button>
+              <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function PayInternalModal({ row, employee, onClose, onDone }) {
+  const owed = Math.abs(Number(row.net || 0));
+  const [amount, setAmount] = useState(String(owed));
+  const [bankId, setBankId] = useState(null);
+  const [date, setDate] = useState(todayStr());
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { banks } = usePaymentOptions();
+
+  const submit = async () => {
+    const v = Number(amount) || 0;
+    if (v <= 0) { setError("Số tiền phải lớn hơn 0."); return; }
+    if (v > owed) { setError(`Chỉ còn nợ ${fmtVND(owed)}.`); return; }
+    if (!bankId) { setError("Vui lòng chọn tài khoản chuyển tiền."); return; }
+    setSaving(true); setError("");
+    const { error: err } = await supabase.rpc("pay_internal_balance", {
+      p_counterparty_store_id: row.store_id,
+      p_amount: v, p_bank_account_id: bankId,
+      p_paid_date: date, p_note: note.trim() || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Trả nợ nội bộ</p>
+          <button onClick={onClose} className="text-slate-500 hover:text-rose-600"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="bg-amber-50 rounded-xl px-3 py-2.5 text-xs text-amber-800">
+            Cửa hàng bạn đang nợ <span className="font-medium">{row.store_name}</span>{" "}
+            <span className="font-semibold">{fmtVND(owed)}</span> — đã gồm cả tiền hàng và tiền vay.
+          </div>
+          <TextField label="Ngày chuyển" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <TextField label="Số tiền trả (đ)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <div>
+            <span className="text-xs font-medium text-slate-600 mb-1.5 block">Tài khoản chuyển tiền *</span>
+            <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-lg" />
+          </div>
+          <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
+          {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={submit} disabled={saving}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+              {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận đã trả
+            </button>
+            <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function InternalDebtTab({ employee }) {
+  const [balances, setBalances] = useState([]);
+  const [matrix, setMatrix] = useState([]);
+  const [entries, setEntries] = useState([]);
+  const [loans, setLoans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showLoan, setShowLoan] = useState(false);
+  const [paying, setPaying] = useState(null);
+  const [view, setView] = useState("balance");   // balance | ledger | loans
+
+  const canManage = employee.role !== "nhan_vien";
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [{ data: b }, { data: m }, { data: e }, { data: l }] = await Promise.all([
+      supabase.rpc("my_internal_balances"),
+      supabase.rpc("internal_balance_matrix"),
+      supabase.from("v_internal_ledger").select("*")
+        .order("entry_date", { ascending: false }).order("created_at", { ascending: false }).limit(300),
+      supabase.from("v_internal_loans").select("*")
+        .order("loan_date", { ascending: false }).limit(200),
+    ]);
+    setBalances(b || []);
+    setMatrix(m || []);
+    setEntries(e || []);
+    setLoans(l || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const n = (v) => Number(v || 0);
+  const receivable = balances.reduce((s, r) => s + Math.max(0, n(r.net)), 0);
+  const payable = balances.reduce((s, r) => s + Math.max(0, -n(r.net)), 0);
+  const overdueLoans = loans.filter((r) => r.is_overdue);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-4">
+          <p className="text-xs text-slate-600 mb-1">Cửa hàng khác nợ mình</p>
+          <p className="text-lg font-semibold text-emerald-700">{fmtVND(receivable)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-slate-600 mb-1">Mình nợ cửa hàng khác</p>
+          <p className="text-lg font-semibold text-amber-700">{fmtVND(payable)}</p>
+        </Card>
+      </div>
+
+      {overdueLoans.length > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2.5 text-xs text-rose-700 flex items-center gap-2">
+          <CalendarClock size={15} className="shrink-0" />
+          {overdueLoans.length} khoản vay đã quá hạn trả:{" "}
+          {overdueLoans.map((r) => r.loan_code).join(", ")}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex gap-2">
+          {[["balance", "Số dư"], ["loans", "Phiếu vay"], ["ledger", "Sổ chi tiết"]].map(([k, label]) => (
+            <button key={k} onClick={() => setView(k)}
+              className={classNames("px-3 py-1.5 rounded-lg text-xs border font-medium",
+                view === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-600 border-slate-200")}
+            >{label}</button>
+          ))}
+        </div>
+        {canManage && (
+          <button onClick={() => setShowLoan(true)}
+            className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+            <Plus size={15} /> Cho vay
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <Card className="p-4"><div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div></Card>
+      ) : view === "balance" ? (
+        <>
+          <Card className="p-0 overflow-hidden">
+            {balances.length === 0 ? (
+              <EmptyState icon={Building2} text="Chưa có cửa hàng nào khác trong hệ thống." />
+            ) : (
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+                  <th className="px-3 py-2">Cửa hàng</th>
+                  <th className="px-3 py-2 text-right">Họ nợ mình</th>
+                  <th className="px-3 py-2 text-right">Mình nợ họ</th>
+                  <th className="px-3 py-2 text-right">Số dư ròng</th>
+                  <th className="px-3 py-2"></th>
+                </tr></thead>
+                <tbody>
+                  {balances.map((r) => {
+                    const net = n(r.net);
+                    return (
+                      <tr key={r.store_id} className="border-b border-slate-50 last:border-0">
+                        <td className="px-3 py-2.5">
+                          <p className="font-medium text-slate-700">{r.store_name}</p>
+                          {r.last_entry_date && (
+                            <p className="text-xs text-slate-500">giao dịch gần nhất {fmtDate(r.last_entry_date)}</p>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.they_owe_me)}</td>
+                        <td className="px-3 py-2.5 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.i_owe_them)}</td>
+                        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                          {net > 0 ? (
+                            <span className="text-emerald-700 font-semibold">Họ nợ {fmtVND(net)}</span>
+                          ) : net < 0 ? (
+                            <span className="text-amber-700 font-semibold">Mình nợ {fmtVND(-net)}</span>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Cân bằng</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                          {canManage && net < 0 && (
+                            <button onClick={() => setPaying(r)} className="text-xs text-brand-700 hover:underline">Trả nợ</button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </Card>
+
+          {matrix.length > 0 && (
+            <Card className="p-4">
+              <p className="text-sm font-medium text-slate-700 mb-1">Toàn hệ thống</p>
+              <p className="text-[11px] text-slate-500 mb-3">Số dư ròng giữa từng cặp cửa hàng, đã bù trừ hai chiều.</p>
+              <div className="space-y-1.5">
+                {matrix.map((r, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm bg-slate-50 rounded-lg px-3 py-2">
+                    <span className="font-medium text-slate-700">{r.debtor_name}</span>
+                    <span className="text-slate-500">nợ</span>
+                    <span className="font-medium text-slate-700">{r.creditor_name}</span>
+                    <span className="ml-auto font-semibold text-slate-800 whitespace-nowrap">{fmtVND(r.net_amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      ) : view === "loans" ? (
+        <Card className="p-0 overflow-hidden">
+          {loans.length === 0 ? (
+            <EmptyState icon={Banknote} text="Chưa có phiếu vay nội bộ nào." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+                  <th className="px-3 py-2">Mã</th>
+                  <th className="px-3 py-2">Ngày</th>
+                  <th className="px-3 py-2">Bên cho vay</th>
+                  <th className="px-3 py-2">Bên vay</th>
+                  <th className="px-3 py-2">Lý do</th>
+                  <th className="px-3 py-2 text-right">Số tiền</th>
+                  <th className="px-3 py-2">Hạn trả</th>
+                </tr></thead>
+                <tbody>
+                  {loans.map((r) => (
+                    <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.loan_code}</td>
+                      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.loan_date)}</td>
+                      <td className="px-3 py-2.5 text-slate-700">{r.lender_name}</td>
+                      <td className="px-3 py-2.5 text-slate-700">{r.borrower_name}</td>
+                      <td className="px-3 py-2.5 text-slate-500 text-xs">{r.reason || "—"}</td>
+                      <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {r.due_date ? (
+                          <span className={classNames("text-xs px-2 py-0.5 rounded-full",
+                            r.is_overdue ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600")}>
+                            {fmtDate(r.due_date)}{r.is_overdue ? " · quá hạn" : ""}
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      ) : (
+        <Card className="p-0 overflow-hidden">
+          {entries.length === 0 ? (
+            <EmptyState icon={ScrollText} text="Chưa có bút toán nội bộ nào." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+                  <th className="px-3 py-2">Mã</th>
+                  <th className="px-3 py-2">Ngày</th>
+                  <th className="px-3 py-2">Loại</th>
+                  <th className="px-3 py-2">Bên nợ → bên được nợ</th>
+                  <th className="px-3 py-2">Chứng từ</th>
+                  <th className="px-3 py-2 text-right">Số tiền</th>
+                </tr></thead>
+                <tbody>
+                  {entries.map((r) => (
+                    <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                      <td className="px-3 py-2.5 text-slate-600 doc-code whitespace-nowrap">{r.entry_code}</td>
+                      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{fmtDate(r.entry_date)}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={classNames("text-xs px-2 py-0.5 rounded-full", INTERNAL_ENTRY_STYLES[r.entry_type])}>
+                          {INTERNAL_ENTRY_LABELS[r.entry_type] || r.entry_type}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-700 text-xs">
+                        {r.debtor_name} <span className="text-slate-400">→</span> {r.creditor_name}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-500 doc-code text-xs">
+                        {r.loan_code || r.transfer_code || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{fmtVND(r.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {showLoan && (
+        <InternalLoanModal employee={employee}
+          onClose={() => setShowLoan(false)}
+          onDone={() => { setShowLoan(false); load(); }} />
+      )}
+      {paying && (
+        <PayInternalModal row={paying} employee={employee}
+          onClose={() => setPaying(null)}
+          onDone={() => { setPaying(null); load(); }} />
+      )}
+    </div>
+  );
+}
+
 function DebtModule({ employee }) {
   const [tab, setTab] = useState("partners");   // partners | installment
   const [rows, setRows] = useState([]);
@@ -5562,7 +5975,8 @@ function DebtModule({ employee }) {
           <p className="text-xs text-slate-500">
             {tab === "partners" ? `${active.length} đối tác đang có số dư`
               : tab === "installment" ? "Đối soát tiền về từ đơn vị trả góp"
-              : "Tiền mặt cuối ngày giao cho nhân sự giữ"}
+              : tab === "advance" ? "Tiền mặt cuối ngày giao cho nhân sự giữ"
+              : "Nợ tiền hàng và tiền vay giữa các cửa hàng, đã bù trừ"}
           </p>
         </div>
         {tab === "partners" && (
@@ -5573,7 +5987,7 @@ function DebtModule({ employee }) {
       </div>
 
       <div className="flex gap-2 mb-4">
-        {[["partners", "Đối tác"], ["installment", "Trả góp"], ["advance", "Tạm ứng"]].map(([k, label]) => (
+        {[["partners", "Đối tác"], ["installment", "Trả góp"], ["advance", "Tạm ứng"], ["internal", "Nội bộ"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={classNames("px-4 py-2 rounded-xl text-sm border font-medium",
               tab === k ? "bg-brand-600 text-white border-brand-600" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50")}
@@ -5583,6 +5997,7 @@ function DebtModule({ employee }) {
 
       {tab === "installment" && <InstallmentTracking employee={employee} />}
       {tab === "advance" && <CashAdvanceTab employee={employee} />}
+      {tab === "internal" && <InternalDebtTab employee={employee} />}
       {tab === "partners" && (<>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
