@@ -946,6 +946,7 @@ function InventoryModule({ employee, onCountChange }) {
     const q = search.trim().toLowerCase();
     return (
       d.imei?.toLowerCase().includes(q) ||
+      d.original_imei?.toLowerCase().includes(q) ||
       d.model?.toLowerCase().includes(q) ||
       d.color?.toLowerCase().includes(q)
     );
@@ -1075,7 +1076,7 @@ function InventoryModule({ employee, onCountChange }) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo IMEI, model, màu..."
+              placeholder="Tìm mã máy, IMEI gốc, model, màu..."
               className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
             />
           </div>
@@ -1125,8 +1126,17 @@ function InventoryModule({ employee, onCountChange }) {
                     "border-b border-slate-50 last:border-0 hover:bg-slate-50/60",
                     DEVICE_ORIGIN_ROW[d.origin] || ""
                   )}>
-                    <td className="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap">
-                      {d.imei || (
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {d.imei ? (
+                        <>
+                          <p className="font-medium text-slate-700 doc-code">{d.imei}</p>
+                          {d.original_imei && d.original_imei !== d.imei && (
+                            <p className="text-[10px] text-slate-500 doc-code" title="IMEI gốc nhà sản xuất cấp">
+                              gốc {d.original_imei}
+                            </p>
+                          )}
+                        </>
+                      ) : (
                         <span className="inline-flex items-center gap-1 text-xs font-normal px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
                           <ShieldAlert size={11} /> Thiếu IMEI
                         </span>
@@ -2464,7 +2474,8 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
   const filtered = devices.filter((d) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return [d.imei, d.model, d.color, d.storage].some((v) => v?.toLowerCase().includes(q));
+    return [d.imei, d.original_imei, d.model, d.color, d.storage]
+      .some((v) => v?.toLowerCase().includes(q));
   }).slice(0, 50);
 
   const submit = async () => {
@@ -2508,7 +2519,7 @@ function InternalTransferForm({ employee, onCancel, onSaved }) {
         <div className="relative mb-2">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo IMEI, model, màu..."
+            placeholder="Tìm mã máy, IMEI gốc, model, màu..."
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition" />
         </div>
         <div className="border border-slate-200 rounded-xl max-h-56 overflow-y-auto">
@@ -3273,6 +3284,425 @@ const IMPORT_TEMPLATE_COLS = [
 const IMPORT_CONDITIONS = { "Máy mới": "new", "Máy cũ": "used" };
 const IMPORT_STORAGES = ["64GB", "128GB", "256GB", "512GB", "1TB"];
 
+/* -------------------------------------------------------------- */
+/* Đọc danh sách máy gõ tay kiểu "iphone 14promax 128 đen 12255"   */
+/* -------------------------------------------------------------- */
+
+// Bỏ dấu tiếng Việt và mọi khoảng trắng để so khớp lỏng.
+// "ipnhone 14promax" và "iPhone 14 Pro Max" đều thành "iphone14promax".
+function loosen(s) {
+  return String(s || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+// Các lỗi gõ hay gặp
+const MODEL_TYPOS = [
+  [/\bipnhone\b/gi, "iphone"], [/\biphoen\b/gi, "iphone"], [/\bipone\b/gi, "iphone"],
+  [/\biphon\b/gi, "iphone"], [/\bip\b/gi, "iphone"], [/\bipx\b/gi, "iphone x"],
+  [/\bpromax\b/gi, "pro max"], [/\bplusmax\b/gi, "plus"],
+];
+
+const STORAGE_VALUES = ["16", "32", "64", "128", "256", "512", "1024"];
+
+// Màu nhân viên gõ tiếng Việt -> tên trong danh mục Apple
+const COLOR_MAP = {
+  den: ["Black", "Space Black", "Space Gray", "Midnight", "Black Titanium"],
+  trang: ["White", "Silver", "Starlight", "White Titanium"],
+  bac: ["Silver", "White Titanium"],
+  xam: ["Space Gray", "Graphite", "Natural Titanium"],
+  vang: ["Gold", "Yellow", "Desert Titanium"],
+  hong: ["Pink", "Rose Gold"],
+  tim: ["Purple", "Deep Purple", "Violet"],
+  xanh: ["Blue", "Blue Titanium", "Sierra Blue", "Pacific Blue"],
+  xanhla: ["Green", "Alpine Green", "Midnight Green"],
+  xanhduong: ["Blue", "Blue Titanium", "Sierra Blue"],
+  do: ["(PRODUCT)RED"],
+  cam: ["Cosmic Orange", "Coral"],
+  kem: ["Cream", "Starlight"],
+  titan: ["Natural Titanium"],
+};
+
+function matchColor(word, model) {
+  const key = loosen(word);
+  if (!key) return { color: "", note: "" };
+  const candidates = COLOR_MAP[key];
+  if (!candidates) return { color: word, note: "" };   // giữ nguyên chữ họ gõ
+
+  const valid = (typeof coloroptionsForModel === "function" ? coloroptionsForModel(model) : []) || [];
+  const hit = candidates.find((c) => valid.includes(c));
+  if (hit) return { color: hit, note: "" };
+  return { color: candidates[0], note: `màu "${word}" không có trong danh mục ${model || "máy này"}` };
+}
+
+function matchModel(text) {
+  let t = String(text || "");
+  for (const [re, to] of MODEL_TYPOS) t = t.replace(re, to);
+  const key = loosen(t);
+  if (!key) return null;
+
+  const list = typeof IPHONE_MODEL_LIST !== "undefined" ? IPHONE_MODEL_LIST : [];
+  // Khớp chính xác sau khi bỏ dấu và khoảng trắng
+  let hit = list.find((m) => loosen(m) === key);
+  if (hit) return hit;
+  // Khớp một phần: lấy tên dài nhất nằm trong chuỗi
+  const partial = list.filter((m) => key.includes(loosen(m)));
+  if (partial.length > 0) {
+    return partial.sort((a, b) => loosen(b).length - loosen(a).length)[0];
+  }
+  return null;
+}
+
+// Đọc một dòng. Trả về { model, storage, color, imei, price, errors, warnings }
+//
+// THỨ TỰ QUAN TRỌNG: nhận diện tên máy TRƯỚC, rồi mới xét số.
+// Nếu tìm số trước, "iPhone 16 Pro Max 512" sẽ bắt nhầm 16 làm dung lượng,
+// và "iPhone 12 mini 64" sẽ bắt nhầm 12 làm giá.
+function parseDeviceLine(line, lineNo) {
+  const out = {
+    line: lineNo, raw: line,
+    model: "", storage: "", color: "", imei: "", price: 0,
+    errors: [], warnings: [],
+  };
+
+  let cleaned = String(line || "").replace(/[,;|\t]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) { out.errors.push("dòng trống"); return out; }
+  for (const [re, to] of MODEL_TYPOS) cleaned = cleaned.replace(re, to);
+
+  const tokens = cleaned.split(" ");
+  const used = new Array(tokens.length).fill(false);
+
+  // ---- 1. Tên máy: thử mọi cụm liên tiếp, lấy cụm khớp DÀI NHẤT ----
+  const list = typeof IPHONE_MODEL_LIST !== "undefined" ? IPHONE_MODEL_LIST : [];
+  let best = null;
+  for (let a = 0; a < tokens.length; a++) {
+    for (let b = tokens.length; b > a; b--) {
+      const key = loosen(tokens.slice(a, b).join(" "));
+      if (!key) continue;
+      const hit = list.find((m) => loosen(m) === key);
+      if (hit && (!best || b - a > best.b - best.a)) best = { a, b, model: hit };
+    }
+  }
+  if (!best) {
+    out.errors.push(`không nhận ra tên máy trong "${cleaned}"`);
+    return out;
+  }
+  out.model = best.model;
+  for (let k = best.a; k < best.b; k++) used[k] = true;
+
+  // ---- 2. Dung lượng: trong các chữ CÒN LẠI ----
+  tokens.forEach((tk, i2) => {
+    if (used[i2] || out.storage) return;
+    const m = /^(\d+)\s*(gb|tb)?$/i.exec(tk);
+    if (!m) return;
+    const num = m[1], unit = (m[2] || "").toLowerCase();
+    if (unit === "tb") { out.storage = `${num}TB`; used[i2] = true; }
+    else if (unit === "gb" || STORAGE_VALUES.includes(num)) {
+      out.storage = num === "1024" ? "1TB" : `${num}GB`;
+      used[i2] = true;
+    }
+  });
+
+  // ---- 3. Số còn lại: dài nhất là IMEI, số kia là giá ----
+  const numIdx = [];
+  tokens.forEach((tk, i2) => { if (!used[i2] && /^\d+$/.test(tk)) numIdx.push(i2); });
+
+  if (numIdx.length >= 2) {
+    // Phân biệt theo bản chất, không theo độ dài:
+    //   IMEI thật có 14–16 chữ số
+    //   giá máy luôn từ 1 triệu trở lên và không dài tới 14 chữ số
+    const isImeiLike  = (t) => t.length >= 14 && t.length <= 16;
+    const isPriceLike = (t) => !isImeiLike(t) && Number(t) >= 1000000;
+
+    let imeiI = numIdx.find((i2) => isImeiLike(tokens[i2]));
+    let priceI = numIdx.find((i2) => i2 !== imeiI && isPriceLike(tokens[i2]));
+
+    if (imeiI === undefined && priceI !== undefined) {
+      imeiI = numIdx.find((i2) => i2 !== priceI);
+    } else if (imeiI !== undefined && priceI === undefined) {
+      priceI = numIdx.find((i2) => i2 !== imeiI);
+    } else if (imeiI === undefined && priceI === undefined) {
+      // Không phân biệt được: theo thứ tự gõ, IMEI trước rồi tới giá
+      imeiI = numIdx[0]; priceI = numIdx[1];
+      out.warnings.push("không chắc số nào là IMEI, số nào là giá — kiểm tra lại");
+    }
+
+    if (imeiI !== undefined) { out.imei = tokens[imeiI]; used[imeiI] = true; }
+    if (priceI !== undefined) { out.price = Number(tokens[priceI]); used[priceI] = true; }
+    if (numIdx.length > 2) out.warnings.push("dòng có nhiều số hơn dự kiến, kiểm tra lại");
+  } else if (numIdx.length === 1) {
+    out.imei = tokens[numIdx[0]];
+    used[numIdx[0]] = true;
+    out.warnings.push("dòng không có giá nhập");
+  } else {
+    out.errors.push("không tìm thấy IMEI");
+  }
+
+  // ---- 4. Chữ còn lại là màu ----
+  const rest = tokens.filter((tk, i2) => !used[i2]);
+  if (rest.length === 0) {
+    out.warnings.push("dòng không ghi màu");
+  } else {
+    const c = matchColor(rest.join(" "), out.model);
+    out.color = c.color;
+    if (c.note) out.warnings.push(c.note);
+  }
+
+  if (!out.storage) out.warnings.push("dòng không ghi dung lượng");
+  return out;
+}
+
+function PasteImportModal({ employee, onClose, onDone }) {
+  const [text, setText] = useState("");
+  const [rows, setRows] = useState(null);
+  const [origin, setOrigin] = useState(null);
+  const [creditor, setCreditor] = useState(null);
+  const [sameCreditor, setSameCreditor] = useState(true);
+  const [bulkPrice, setBulkPrice] = useState("");
+  const [condition, setCondition] = useState("used");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+
+  const parse = () => {
+    setError(""); setResult(null);
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) { setError("Chưa dán danh sách máy."); return; }
+    setRows(lines.map((l, i) => parseDeviceLine(l, i + 1)));
+  };
+
+  const setField = (i, field, value) => {
+    setRows((rs) => rs.map((r, k) => {
+      if (k !== i) return r;
+      const next = { ...r, [field]: value };
+      // Sửa tay thì bỏ lỗi tương ứng
+      if (field === "model" && value) next.errors = next.errors.filter((e) => !e.includes("tên máy"));
+      if (field === "imei" && value) next.errors = next.errors.filter((e) => !e.includes("IMEI"));
+      next.warnings = next.warnings.filter((w) =>
+        !(field === "price" && Number(value) > 0 && w.includes("giá nhập")) &&
+        !(field === "color" && value && w.includes("màu")) &&
+        !(field === "storage" && value && w.includes("dung lượng")));
+      return next;
+    }));
+  };
+
+  const applyBulkPrice = () => {
+    const p = Number(String(bulkPrice).replace(/\D/g, "")) || 0;
+    if (p <= 0) return;
+    setRows((rs) => rs.map((r) => ({
+      ...r, price: p,
+      warnings: r.warnings.filter((w) => !w.includes("giá nhập")),
+    })));
+  };
+
+  const ok = (rows || []).filter((r) => r.errors.length === 0 && r.model && r.price > 0);
+  const bad = (rows || []).filter((r) => r.errors.length > 0 || !r.model || !(r.price > 0));
+  const total = ok.reduce((s, r) => s + Number(r.price || 0), 0);
+
+  const submit = async () => {
+    if (!origin) { setError("Chọn nguồn hàng — máy lấy của ai."); return; }
+    if (!sameCreditor && !creditor) { setError("Chọn chủ nợ — cửa hàng nợ tiền ai."); return; }
+    if (ok.length === 0) { setError("Không có dòng nào hợp lệ."); return; }
+    setSaving(true); setError("");
+
+    const payload = ok.map((r) => ({
+      line: r.line, imei: r.imei || null, model: r.model,
+      storage: r.storage || null, color: r.color || null,
+      condition, price: r.price, notes: null,
+    }));
+
+    const { data, error: err } = await supabase.rpc("import_purchase_batch", {
+      p_supplier_id: origin.id,
+      p_rows: payload,
+      p_creditor_supplier_id: sameCreditor ? null : creditor.id,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setResult({
+      done: data?.inserted || 0,
+      failed: (data?.errors || []).map((e) => ({ line: e.line, msg: e.message })),
+    });
+    if ((data?.inserted || 0) > 0) onDone();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
+      <Card className="w-full max-w-4xl p-5 my-8">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Nhập máy bằng cách dán danh sách</p>
+          <button onClick={onClose} className="text-slate-500 hover:text-rose-600"><X size={16} /></button>
+        </div>
+
+        {result ? (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800">
+              <p>Đã nhập kho <span className="font-semibold">{result.done}</span> máy.</p>
+              {result.failed.length > 0 && (
+                <div className="mt-2 text-rose-600 text-xs space-y-0.5">
+                  <p className="font-medium">{result.failed.length} dòng không nhập được:</p>
+                  {result.failed.map((f, k) => <p key={k}>Dòng {f.line}: {f.msg}</p>)}
+                </div>
+              )}
+            </div>
+            <button onClick={onClose} className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">Xong</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* ---- Nguồn hàng và chủ nợ ---- */}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <span className="text-xs font-medium text-slate-600 mb-1.5 block">Nguồn hàng — máy lấy của ai *</span>
+                <SupplierPicker value={origin} onSelect={setOrigin} employee={employee} />
+              </div>
+              <div>
+                <span className="text-xs font-medium text-slate-600 mb-1.5 block">Chủ nợ — cửa hàng nợ tiền ai</span>
+                <label className="flex items-center gap-2 text-xs text-slate-600 mb-2">
+                  <input type="checkbox" checked={sameCreditor}
+                    onChange={(e) => setSameCreditor(e.target.checked)} />
+                  Nợ luôn nguồn hàng
+                </label>
+                {!sameCreditor && <SupplierPicker value={creditor} onSelect={setCreditor} employee={employee} />}
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-500 -mt-1">
+              Bỏ tích khi có người khác ứng tiền trả thay — ví dụ máy của nhà cung cấp A nhưng chủ cửa hàng
+              trả trước, khi đó công nợ ghi cho chủ cửa hàng còn xuất xứ vẫn là A.
+            </p>
+
+            {/* ---- Ô dán ---- */}
+            <div>
+              <span className="text-xs font-medium text-slate-600 mb-1.5 block">
+                Dán danh sách máy, mỗi máy một dòng
+              </span>
+              <textarea
+                value={text} onChange={(e) => setText(e.target.value)}
+                rows={7}
+                placeholder={"iphone 14promax 128 đen 356789012345678 28500000\niphone 13pro 256 đen 356789012345679 19000000\niphone 12 mini 64 đen 356789012345680"}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Thứ tự tự do. Hệ thống tự nhận tên máy, dung lượng, màu, IMEI và giá.
+                Không có giá thì điền sau ở bảng bên dưới.
+              </p>
+            </div>
+
+            <div className="flex gap-2 flex-wrap items-center">
+              <button onClick={parse}
+                className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium">
+                Đọc danh sách
+              </button>
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                Tình trạng
+                <select value={condition} onChange={(e) => setCondition(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
+                  <option value="used">Máy cũ</option>
+                  <option value="new">Máy mới</option>
+                </select>
+              </label>
+            </div>
+
+            {/* ---- Bảng xem trước ---- */}
+            {rows && (
+              <>
+                <div className="flex gap-2 flex-wrap items-center text-xs">
+                  <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded">
+                    Sẵn sàng: {ok.length} máy · {fmtVND(total)}
+                  </span>
+                  {bad.length > 0 && (
+                    <span className="bg-rose-50 text-rose-600 px-2 py-1 rounded">Cần sửa: {bad.length} dòng</span>
+                  )}
+                  <span className="ml-auto flex items-center gap-1.5">
+                    <input value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value.replace(/\D/g, ""))}
+                      placeholder="Giá cho tất cả"
+                      className="w-32 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-right tabular" />
+                    <button onClick={applyBulkPrice}
+                      className="border border-brand-300 text-brand-700 hover:bg-brand-50 rounded-lg px-3 py-1.5">
+                      Áp giá
+                    </button>
+                  </span>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 sticky top-0"><tr className="text-left text-slate-500">
+                      <th className="px-2 py-1.5 w-8">#</th>
+                      <th className="px-2 py-1.5">Máy</th>
+                      <th className="px-2 py-1.5 w-20">Dung lượng</th>
+                      <th className="px-2 py-1.5 w-28">Màu</th>
+                      <th className="px-2 py-1.5 w-36">IMEI</th>
+                      <th className="px-2 py-1.5 w-28">Giá nhập</th>
+                    </tr></thead>
+                    <tbody>
+                      {rows.map((r, i) => {
+                        const rowBad = r.errors.length > 0 || !r.model || !(r.price > 0);
+                        return (
+                          <tr key={i} className={classNames("border-t border-slate-100",
+                            r.errors.length > 0 ? "bg-rose-50/60" : rowBad ? "bg-amber-50/50" : "")}>
+                            <td className="px-2 py-1.5 text-slate-400">{r.line}</td>
+                            <td className="px-2 py-1.5">
+                              <input value={r.model} onChange={(e) => setField(i, "model", e.target.value)}
+                                list="dl-models-paste"
+                                className={classNames("w-full rounded border px-1.5 py-1",
+                                  r.model ? "border-slate-200" : "border-rose-300 bg-rose-50")} />
+                              {(r.errors.length > 0 || r.warnings.length > 0) && (
+                                <p className={classNames("mt-0.5 text-[10px]", r.errors.length ? "text-rose-600" : "text-amber-700")}>
+                                  {[...r.errors, ...r.warnings].join(" · ")}
+                                </p>
+                              )}
+                              <p className="text-[10px] text-slate-400 mt-0.5 truncate" title={r.raw}>{r.raw}</p>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input value={r.storage} onChange={(e) => setField(i, "storage", e.target.value)}
+                                list="dl-storage" className="w-full rounded border border-slate-200 px-1.5 py-1" />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input value={r.color} onChange={(e) => setField(i, "color", e.target.value)}
+                                className="w-full rounded border border-slate-200 px-1.5 py-1" />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input value={r.imei} onChange={(e) => setField(i, "imei", e.target.value.replace(/\D/g, ""))}
+                                className="w-full rounded border border-slate-200 px-1.5 py-1 font-mono" />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={r.price ? Number(r.price).toLocaleString("vi-VN") : ""}
+                                onChange={(e) => setField(i, "price", Number(e.target.value.replace(/\D/g, "")) || 0)}
+                                className={classNames("w-full rounded border px-1.5 py-1 text-right tabular",
+                                  r.price > 0 ? "border-slate-200" : "border-amber-300 bg-amber-50")} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <datalist id="dl-models-paste">
+                  {(typeof IPHONE_MODEL_LIST !== "undefined" ? IPHONE_MODEL_LIST : []).map((m) => <option key={m} value={m} />)}
+                </datalist>
+              </>
+            )}
+
+            {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+
+            <div className="flex gap-2">
+              {rows && (
+                <button onClick={submit} disabled={saving || ok.length === 0}
+                  className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                  {saving && <Loader2 size={15} className="animate-spin" />}
+                  Nhập {ok.length} máy vào kho
+                </button>
+              )}
+              <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
   const [rows, setRows] = useState(null);
   const [fileName, setFileName] = useState("");
@@ -3579,6 +4009,7 @@ function PurchaseModule({ employee }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [showImport, setShowImport] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
   const [runImport, setRunImport] = useState(false);
   const [importSupplier, setImportSupplier] = useState(null);
   const canEdit = employee.role !== "nhan_vien";
@@ -3655,6 +4086,11 @@ function PurchaseModule({ employee }) {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {canImport && (
+            <button onClick={() => setShowPaste(true)} className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
+              <ScrollText size={15} /> Dán danh sách
+            </button>
+          )}
           {canImport && (
             <button onClick={() => setShowImport(true)} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1.5">
               <FileSpreadsheet size={15} /> Nhập từ Excel
@@ -3776,6 +4212,14 @@ function PurchaseModule({ employee }) {
             </div>
           </Card>
         </div>
+      )}
+
+      {showPaste && (
+        <PasteImportModal
+          employee={employee}
+          onClose={() => setShowPaste(false)}
+          onDone={load}
+        />
       )}
 
       {showImport && (
@@ -7734,7 +8178,8 @@ function SendServiceForm({ employee, onCancel, onSaved }) {
 
   const filtered = !search.trim() ? devices.slice(0, 25) : devices.filter((d) => {
     const q = search.trim().toLowerCase();
-    return [d.imei, d.model, d.color, d.storage].some((v) => v?.toLowerCase().includes(q));
+    return [d.imei, d.original_imei, d.model, d.color, d.storage]
+      .some((v) => v?.toLowerCase().includes(q));
   }).slice(0, 25);
 
   const submit = async () => {
