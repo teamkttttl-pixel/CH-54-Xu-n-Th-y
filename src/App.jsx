@@ -461,7 +461,7 @@ function CustomersModule({ employee, onCountChange }) {
   const [editing, setEditing] = useState(null);
   const [existingMatch, setExistingMatch] = useState(null);
 
-  const canDelete = employee.role === "quan_ly";
+  const canDelete = employee.role !== "nhan_vien";
   const onlyMine = employee.role === "nhan_vien";
 
   const load = useCallback(async () => {
@@ -601,7 +601,7 @@ function DeviceForm({ initial, onCancel, onSaved, employee, duplicateImei }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const isSold = initial?.status === "sold";
-  const canManagerEditSold = isSold && employee.role === "quan_ly";
+  const canManagerEditSold = isSold && employee.role !== "nhan_vien";
   const lockedForStaff = isSold && employee.role !== "quan_ly";
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -890,8 +890,8 @@ function InventoryModule({ employee, onCountChange }) {
 
   useEffect(() => { loadIncoming(); }, [loadIncoming]);
 
-  const canDelete = employee.role === "quan_ly";
-  const canManage = employee.role === "quan_ly";
+  const canDelete = employee.role !== "nhan_vien";
+  const canManage = employee.role !== "nhan_vien";
   const canSeeCost = employee.role !== "nhan_vien";
 
   const load = useCallback(async () => {
@@ -1137,7 +1137,7 @@ function InventoryModule({ employee, onCountChange }) {
                       <button onClick={() => setHistoryDevice(d)} className="text-slate-400 hover:text-brand-600 mr-3" title="Lý lịch máy">
                         <History size={14} className="inline" />
                       </button>
-                      {canManage && (d.status !== "sold" || employee.role === "quan_ly") && (
+                      {canManage && (d.status !== "sold" || employee.role !== "nhan_vien") && (
                         <button onClick={() => openEdit(d)} className="text-brand-600 hover:underline text-xs mr-3">
                           <Pencil size={12} className="inline mr-0.5" />Sửa
                         </button>
@@ -2127,10 +2127,10 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
     ? Math.max(0, Number(order.customer_debt))
     : Math.max(0, Number(order.total_amount) - Number(order.paid_amount || 0));
   const overdue = orderDebt > 0 && order.due_date && new Date(order.due_date) < new Date(new Date().toDateString());
-  const canCollect = employee.role !== "ke_toan" && orderDebt > 0 && order.status !== "cancelled";
-  const canPayDiff = employee.role !== "ke_toan" && shopDebt > 0 && order.status !== "cancelled";
-  const canDelete = employee.role === "quan_ly" && order.status !== "completed";
-  const canReconcile = employee.role === "quan_ly" && order.status === "pending_stock";
+  const canCollect = employee.role !== "nhan_vien" && orderDebt > 0 && order.status !== "cancelled";
+  const canPayDiff = employee.role !== "nhan_vien" && shopDebt > 0 && order.status !== "cancelled";
+  const canDelete = employee.role !== "nhan_vien" && order.status !== "completed";
+  const canReconcile = employee.role !== "nhan_vien" && order.status === "pending_stock";
 
   const loadDetail = async () => {
     if (detail) { setExpanded((s) => !s); return; }
@@ -2733,7 +2733,7 @@ function OrdersModule({ employee }) {
   const [showForm, setShowForm] = useState(false);
   const [showExport, setShowExport] = useState(false);
 
-  const canCreate = employee.role !== "ke_toan";
+  const canCreate = employee.role !== "nhan_vien";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2811,7 +2811,7 @@ function OrdersModule({ employee }) {
         </div>
       )}
 
-      {employee.role === "quan_ly" && orders.some((o) => o.status === "pending_stock") && (
+      {employee.role !== "nhan_vien" && orders.some((o) => o.status === "pending_stock") && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-4 text-xs text-amber-800 flex items-center gap-2">
           <ShieldAlert size={15} className="shrink-0" />
           Có <span className="font-medium">{orders.filter((o) => o.status === "pending_stock").length} đơn</span> đang chờ đối soát kho (IMEI nhân viên nhập tay lúc bán không khớp Kho hàng) — mở đơn để đối soát.
@@ -3544,7 +3544,7 @@ function PurchaseModule({ employee }) {
   const [showImport, setShowImport] = useState(false);
   const [runImport, setRunImport] = useState(false);
   const [importSupplier, setImportSupplier] = useState(null);
-  const canEdit = employee.role !== "ke_toan";
+  const canEdit = employee.role !== "nhan_vien";
   // Nhân viên chỉ làm nghiệp vụ thu cũ từ khách lẻ:
   // không nhập từ nhà cung cấp, không nhập hàng loạt từ Excel.
   const retailOnly = employee.role === "nhan_vien";
@@ -3554,8 +3554,8 @@ function PurchaseModule({ employee }) {
   const [payBankId, setPayBankId] = useState(null);
   const { banks } = usePaymentOptions();
 
-  const canCreate = employee.role !== "ke_toan";
-  const canDelete = employee.role === "quan_ly";
+  const canCreate = employee.role !== "nhan_vien";
+  const canDelete = employee.role !== "nhan_vien";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -4283,7 +4283,7 @@ function CapitalCard({ employee }) {
                     {Number(r.amount) < 0 ? "" : "+"}{fmtVND(r.amount)}
                   </td>
                   <td className="px-2 py-2 text-right">
-                    {employee.role === "quan_ly" && (
+                    {employee.role !== "nhan_vien" && (
                       <button onClick={() => remove(r)} className="text-slate-400 hover:text-rose-600"><Trash2 size={13} /></button>
                     )}
                   </td>
@@ -6500,7 +6500,7 @@ function DebtModule({ employee }) {
   const [filter, setFilter] = useState("all"); // all | receivable | payable
   const [openId, setOpenId] = useState(null);
   const [offsetting, setOffsetting] = useState(null);
-  const canOffset = employee.role !== "ke_toan";
+  const canOffset = employee.role !== "nhan_vien";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -8174,7 +8174,7 @@ function ServiceModule({ employee }) {
   const [okCode, setOkCode] = useState(null);
   const [showDone, setShowDone] = useState(false);
 
-  const canManage = employee.role !== "ke_toan";
+  const canManage = employee.role !== "nhan_vien";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -8575,7 +8575,7 @@ const NAV_ITEMS = [
   { key: "debts", label: "Công nợ", icon: Banknote, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "expenses", label: "Chi phí", icon: Receipt, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "reports", label: "Báo cáo", icon: BarChart3, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
-  { key: "employees", label: "Nhân viên", icon: UserCog, group: "Hệ thống", managerOnly: true },
+  { key: "employees", label: "Nhân viên", icon: UserCog, group: "Hệ thống", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "audit", label: "Nhật ký thao tác", icon: ScrollText, group: "Hệ thống", allowedRoles: ["quan_ly", "ke_toan"] },
 ];
 
@@ -8586,7 +8586,6 @@ function AppShell({ employee, onSignOut }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const visibleNav = NAV_ITEMS.filter((n) => {
-    if (n.managerOnly && employee.role !== "quan_ly") return false;
     if (n.allowedRoles && !n.allowedRoles.includes(employee.role)) return false;
     return true;
   });
@@ -8623,7 +8622,7 @@ function AppShell({ employee, onSignOut }) {
       case "audit":
         return ["quan_ly", "ke_toan"].includes(employee.role) ? <AuditLogModule employee={employee} /> : null;
       case "employees":
-        return employee.role === "quan_ly" ? <EmployeesModule employee={employee} /> : null;
+        return employee.role !== "nhan_vien" ? <EmployeesModule employee={employee} /> : null;
       default:
         return null;
     }
