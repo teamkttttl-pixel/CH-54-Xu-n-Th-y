@@ -9761,6 +9761,271 @@ function PersonalModule({ employee }) {
   );
 }
 
+const CASHBOOK_KIND_LABELS = {
+  sale: "Bán hàng", purchase: "Nhập máy", expense: "Chi phí",
+  advance: "Tạm ứng", settle: "Hoàn ứng", return: "Trả máy",
+  transfer: "Nội bộ", service: "Spa / Màn",
+};
+const CASHBOOK_KIND_STYLES = {
+  sale: "bg-emerald-50 text-emerald-700",
+  purchase: "bg-sky-50 text-sky-700",
+  expense: "bg-rose-50 text-rose-700",
+  advance: "bg-amber-50 text-amber-700",
+  settle: "bg-teal-50 text-teal-700",
+  return: "bg-orange-50 text-orange-700",
+  transfer: "bg-indigo-50 text-indigo-700",
+  service: "bg-fuchsia-50 text-fuchsia-700",
+};
+
+function CashBookModule({ employee }) {
+  const [date, setDate] = useState(todayStr());
+  const [rows, setRows] = useState([]);
+  const [sum, setSum] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [needOpening, setNeedOpening] = useState(false);
+  const [openAmt, setOpenAmt] = useState("");
+  const [openDate, setOpenDate] = useState(todayStr());
+  const [savingOpen, setSavingOpen] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    const [{ data: b, error: e1 }, { data: s }] = await Promise.all([
+      supabase.rpc("cash_book", { p_date: date }),
+      supabase.rpc("cash_book_summary", { p_date: date }),
+    ]);
+    if (e1) setError(e1.message);
+    setRows(b || []);
+    const su = Array.isArray(s) ? s[0] : s;
+    setSum(su || null);
+    setNeedOpening(su ? su.opening === null : false);
+    setLoading(false);
+  }, [date]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const n = (v) => Number(v || 0);
+
+  // Tồn CK chạy dồn từ số dư đầu ngày
+  let running = n(sum?.opening);
+  const withBalance = rows.map((r) => {
+    running = running + n(r.cash_in) - n(r.cash_out);
+    return { ...r, balance: running };
+  });
+
+  const saveOpening = async () => {
+    const v = Number(String(openAmt).replace(/\D/g, "")) || 0;
+    setSavingOpen(true); setError("");
+    const { error: err } = await supabase.from("cash_opening_balance").upsert({
+      store_id: employee.store_id,
+      opening_date: openDate,
+      opening_amount: v,
+      updated_by: employee.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "store_id" });
+    setSavingOpen(false);
+    if (err) { setError(err.message); return; }
+    load();
+  };
+
+  const exportExcel = () => {
+    const data = withBalance.map((r) => ({
+      "Loại": CASHBOOK_KIND_LABELS[r.kind] || r.kind,
+      "Nội dung": r.content,
+      "Chứng từ": r.doc_code || "",
+      "IMEI": r.imei || "",
+      "Giá nhập": n(r.cost_price),
+      "Giá bán": n(r.sale_price),
+      "Lãi": n(r.profit),
+      "Thu TM": n(r.cash_in),
+      "Chi TM": n(r.cash_out),
+      "Tồn CK": r.balance,
+      "Nợ": n(r.debt),
+      "Tên KH": r.customer_name || "",
+      "SĐT": r.customer_phone || "",
+      "Ghi chú": r.note || "",
+    }));
+    const head = [
+      { "Mục": "Cửa hàng", "Giá trị": employee.stores?.name || "" },
+      { "Mục": "Ngày", "Giá trị": fmtDate(date) },
+      { "Mục": "Tồn đầu ngày", "Giá trị": n(sum?.opening) },
+      { "Mục": "Thu tiền mặt", "Giá trị": n(sum?.cash_in) },
+      { "Mục": "Chi tiền mặt", "Giá trị": n(sum?.cash_out) },
+      { "Mục": "Tồn cuối ngày", "Giá trị": n(sum?.closing) },
+      { "Mục": "Doanh thu", "Giá trị": n(sum?.revenue) },
+      { "Mục": "Lãi gộp", "Giá trị": n(sum?.profit) },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(head), "TongHop");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), "SoQuy");
+    XLSX.writeFile(wb, `So-quy-${date}.xlsx`);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Sổ quỹ ngày</h2>
+          <p className="text-xs text-slate-500">
+            Mọi việc xảy ra trong ngày, xếp theo thời gian, tồn quỹ chạy dồn
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+            className="rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40" />
+          <button onClick={exportExcel} disabled={rows.length === 0}
+            className="border border-brand-300 text-brand-700 hover:bg-brand-50 disabled:opacity-50 rounded-xl px-3 py-2 text-sm flex items-center gap-1.5">
+            <FileSpreadsheet size={15} /> Xuất Excel
+          </button>
+        </div>
+      </div>
+
+      {needOpening && (
+        <Card className="p-4 mb-4 border-amber-200 bg-amber-50/50">
+          <p className="text-sm font-medium text-amber-900 mb-1">Chưa khai báo tồn quỹ ban đầu</p>
+          <p className="text-xs text-amber-800 mb-3">
+            Không có mốc này thì không tính được cột Tồn CK. Đếm tiền mặt thực tế trong két
+            vào một ngày, điền vào đây. Từ đó hệ thống tự cộng trừ tiếp.
+          </p>
+          <div className="flex gap-2 flex-wrap items-end">
+            <TextField label="Tính từ ngày" type="date" value={openDate}
+              onChange={(e) => setOpenDate(e.target.value)} className="w-40" />
+            <MoneyField label="Tiền mặt trong két (đ)" value={openAmt}
+              onChange={(e) => setOpenAmt(e.target.value)} className="w-48" />
+            <button onClick={saveOpening} disabled={savingOpen}
+              className="bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2">
+              {savingOpen && <Loader2 size={15} className="animate-spin" />} Lưu mốc
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {sum && !needOpening && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <Card className="p-3">
+            <p className="text-xs text-slate-500 mb-1">Tồn đầu ngày</p>
+            <p className="text-base font-semibold text-slate-800">{fmtVND(sum.opening)}</p>
+          </Card>
+          <Card className="p-3 bg-emerald-50/50 border-emerald-200">
+            <p className="text-xs text-emerald-700 mb-1">Thu tiền mặt</p>
+            <p className="text-base font-semibold text-emerald-800">+{fmtVND(sum.cash_in)}</p>
+          </Card>
+          <Card className="p-3 bg-amber-50/50 border-amber-200">
+            <p className="text-xs text-amber-700 mb-1">Chi tiền mặt</p>
+            <p className="text-base font-semibold text-amber-800">−{fmtVND(sum.cash_out)}</p>
+          </Card>
+          <Card className="p-3 bg-brand-50 border-brand-200">
+            <p className="text-xs text-brand-700 mb-1">Tồn cuối ngày</p>
+            <p className="text-lg font-semibold text-brand-800">{fmtVND(sum.closing)}</p>
+          </Card>
+        </div>
+      )}
+
+      {sum && n(sum.sale_count) > 0 && (
+        <div className="flex gap-2 flex-wrap text-xs mb-3">
+          <span className="bg-slate-100 rounded-lg px-3 py-1.5">
+            <span className="text-slate-500">Bán </span>
+            <span className="font-medium text-slate-700">{sum.sale_count} máy</span>
+          </span>
+          <span className="bg-slate-100 rounded-lg px-3 py-1.5">
+            <span className="text-slate-500">Doanh thu </span>
+            <span className="font-medium text-slate-700">{fmtVND(sum.revenue)}</span>
+          </span>
+          <span className="bg-slate-100 rounded-lg px-3 py-1.5">
+            <span className="text-slate-500">Lãi gộp </span>
+            <span className="font-medium text-emerald-700">{fmtVND(sum.profit)}</span>
+          </span>
+          {n(sum.new_debt) > 0 && (
+            <span className="bg-amber-50 rounded-lg px-3 py-1.5">
+              <span className="text-amber-600">Nợ phát sinh </span>
+              <span className="font-medium text-amber-800">{fmtVND(sum.new_debt)}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
+
+      <Card className="p-0 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-300" /></div>
+        ) : withBalance.length === 0 ? (
+          <EmptyState icon={Wallet} text="Ngày này chưa có giao dịch nào." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+                <th className="px-2 py-2 w-8">#</th>
+                <th className="px-2 py-2">Nội dung</th>
+                <th className="px-2 py-2 text-right">Giá nhập</th>
+                <th className="px-2 py-2 text-right">Giá bán</th>
+                <th className="px-2 py-2 text-right">Lãi</th>
+                <th className="px-2 py-2 text-right">Thu TM</th>
+                <th className="px-2 py-2 text-right">Chi TM</th>
+                <th className="px-2 py-2 text-right">Tồn CK</th>
+                <th className="px-2 py-2 text-right">Nợ</th>
+                <th className="px-2 py-2">Khách</th>
+              </tr></thead>
+              <tbody>
+                {withBalance.map((r, i) => (
+                  <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                    <td className="px-2 py-2 text-slate-400">{i + 1}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={classNames("text-[10px] px-1.5 py-0.5 rounded",
+                          CASHBOOK_KIND_STYLES[r.kind] || "bg-slate-100 text-slate-600")}>
+                          {CASHBOOK_KIND_LABELS[r.kind] || r.kind}
+                        </span>
+                        <span className="text-slate-700">{r.content}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        {r.doc_code && <span className="doc-code">{r.doc_code}</span>}
+                        {r.imei && <span className="doc-code"> · {r.imei}</span>}
+                        {r.note && ` · ${r.note}`}
+                      </p>
+                    </td>
+                    <td className="px-2 py-2 text-right text-slate-500 whitespace-nowrap">
+                      {r.cost_price != null ? fmtVND(r.cost_price) : ""}
+                    </td>
+                    <td className="px-2 py-2 text-right text-slate-700 whitespace-nowrap">
+                      {r.sale_price != null ? fmtVND(r.sale_price) : ""}
+                    </td>
+                    <td className={classNames("px-2 py-2 text-right whitespace-nowrap",
+                      n(r.profit) > 0 ? "text-emerald-700" : n(r.profit) < 0 ? "text-rose-600" : "text-slate-400")}>
+                      {r.profit != null ? fmtVND(r.profit) : ""}
+                    </td>
+                    <td className="px-2 py-2 text-right text-emerald-700 font-medium whitespace-nowrap">
+                      {n(r.cash_in) > 0 ? fmtVND(r.cash_in) : ""}
+                    </td>
+                    <td className="px-2 py-2 text-right text-amber-700 font-medium whitespace-nowrap">
+                      {n(r.cash_out) > 0 ? fmtVND(r.cash_out) : ""}
+                    </td>
+                    <td className="px-2 py-2 text-right font-semibold text-slate-800 whitespace-nowrap">
+                      {fmtVND(r.balance)}
+                    </td>
+                    <td className="px-2 py-2 text-right text-amber-600 whitespace-nowrap">
+                      {n(r.debt) > 0 ? fmtVND(r.debt) : ""}
+                    </td>
+                    <td className="px-2 py-2 text-slate-600">
+                      {r.customer_name && <p>{r.customer_name}</p>}
+                      {r.customer_phone && <p className="text-[10px] text-slate-400">{r.customer_phone}</p>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <p className="text-[11px] text-slate-500 mt-3">
+        Tiền mặt chỉ ra khỏi két qua tạm ứng. Các khoản chi khác đi chuyển khoản nên vẫn hiện
+        trong sổ nhưng không làm đổi tồn quỹ.
+      </p>
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, group: null },
   { key: "customers", label: "Khách hàng", icon: Users, group: "Bán hàng" },
@@ -9771,6 +10036,7 @@ const NAV_ITEMS = [
   { key: "personal", label: "Cá nhân", icon: Award, group: "Tài chính", allowedRoles: ["nhan_vien"] },
   { key: "debts", label: "Công nợ", icon: Banknote, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "expenses", label: "Chi phí", icon: Receipt, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
+  { key: "cashbook", label: "Sổ quỹ ngày", icon: Wallet, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "reports", label: "Báo cáo", icon: BarChart3, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "employees", label: "Nhân viên", icon: UserCog, group: "Hệ thống", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "audit", label: "Nhật ký thao tác", icon: ScrollText, group: "Hệ thống", allowedRoles: ["quan_ly", "ke_toan"] },
@@ -9810,6 +10076,8 @@ function AppShell({ employee, onSignOut }) {
         return <ServiceModule employee={employee} />;
       case "personal":
         return <PersonalModule employee={employee} />;
+      case "cashbook":
+        return ["quan_ly", "ke_toan"].includes(employee.role) ? <CashBookModule employee={employee} /> : null;
       case "expenses":
         return <ExpensesModule employee={employee} />;
       case "debts":
