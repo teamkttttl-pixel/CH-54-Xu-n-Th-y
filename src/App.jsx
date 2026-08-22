@@ -7331,6 +7331,212 @@ function CustomerReceivablePanel({ partner }) {
   );
 }
 
+const PAYABLE_SOURCE_LABELS = {
+  purchase: "Nhập máy",
+  service: "Spa / Sửa chữa",
+  screen_purchase: "Nhập màn",
+  other: "Khác",
+};
+const PAYABLE_SOURCE_STYLES = {
+  purchase: "bg-sky-50 text-sky-700",
+  service: "bg-fuchsia-50 text-fuchsia-700",
+  screen_purchase: "bg-violet-50 text-violet-700",
+  other: "bg-slate-100 text-slate-600",
+};
+
+function PartnerPayablePanel({ partner, onPaid }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(false);
+
+  const load = useCallback(() => {
+    if (!partner?.partner_id) { setRows([]); setLoading(false); return; }
+    setLoading(true);
+    supabase.rpc("partner_payable_detail", { p_partner_id: partner.partner_id })
+      .then(({ data }) => { setRows(data || []); setLoading(false); });
+  }, [partner?.partner_id]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin text-slate-300" /></div>;
+  if (rows.length === 0) return null;
+
+  const total = rows.reduce((s, r) => s + Number(r.outstanding || 0), 0);
+  const overdue = rows.filter((r) => r.is_overdue);
+  const overdueAmt = overdue.reduce((s, r) => s + Number(r.outstanding || 0), 0);
+
+  return (
+    <div className="mb-3">
+      <div className="flex items-baseline justify-between mb-1.5 gap-2 flex-wrap">
+        <p className="text-xs font-medium text-slate-700">Cửa hàng đang nợ những khoản nào</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-slate-500">
+            {rows.length} chứng từ · <span className="font-semibold text-indigo-700">{fmtVND(total)}</span>
+          </p>
+          <button onClick={() => setPaying(true)}
+            className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-1.5 font-medium">
+            Trả một cục
+          </button>
+        </div>
+      </div>
+
+      {overdue.length > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-[11px] text-rose-700">
+          <CalendarClock size={13} className="inline mr-1" />
+          {overdue.length} chứng từ đã quá hạn thanh toán, tổng <span className="font-semibold">{fmtVND(overdueAmt)}</span>
+        </div>
+      )}
+
+      <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead><tr className="text-left text-slate-500 border-b border-slate-100">
+            <th className="px-2 py-1.5">Nguồn</th>
+            <th className="px-2 py-1.5">Chứng từ</th>
+            <th className="px-2 py-1.5">Máy · IMEI</th>
+            <th className="px-2 py-1.5 text-right">Phát sinh</th>
+            <th className="px-2 py-1.5 text-right">Đã trả</th>
+            <th className="px-2 py-1.5 text-right">Còn nợ</th>
+            <th className="px-2 py-1.5">Hạn trả</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className={classNames("border-b border-slate-50 last:border-0",
+                r.is_overdue && "bg-rose-50/40")}>
+                <td className="px-2 py-1.5 whitespace-nowrap">
+                  <span className={classNames("text-[10px] px-1.5 py-0.5 rounded",
+                    PAYABLE_SOURCE_STYLES[r.source_type])}>
+                    {PAYABLE_SOURCE_LABELS[r.source_type] || r.source_type}
+                  </span>
+                </td>
+                <td className="px-2 py-1.5">
+                  <p className="text-slate-600 doc-code">{r.doc_code || "—"}</p>
+                  <p className="text-[10px] text-slate-400">{fmtDate(r.first_date)}</p>
+                </td>
+                <td className="px-2 py-1.5">
+                  {r.model ? (
+                    <>
+                      <p className="text-slate-700">{[r.model, r.storage, r.color].filter(Boolean).join(" ")}</p>
+                      {(r.original_imei || r.imei) && (
+                        <p className="text-[10px] text-slate-500 doc-code">{r.original_imei || r.imei}</p>
+                      )}
+                    </>
+                  ) : r.screen_quantity ? (
+                    <p className="text-slate-600">{r.screen_quantity} tấm màn</p>
+                  ) : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-2 py-1.5 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.original_amount)}</td>
+                <td className="px-2 py-1.5 text-right text-slate-500 whitespace-nowrap">{fmtVND(r.paid_amount)}</td>
+                <td className="px-2 py-1.5 text-right font-semibold text-indigo-700 whitespace-nowrap">{fmtVND(r.outstanding)}</td>
+                <td className="px-2 py-1.5 whitespace-nowrap">
+                  {r.due_date ? (
+                    <span className={classNames("text-[11px] px-1.5 py-0.5 rounded",
+                      r.is_overdue ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600")}>
+                      {fmtDate(r.due_date)}{r.is_overdue ? " · quá hạn" : ""}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-slate-400">{r.days_outstanding} ngày</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {paying && (
+        <PayPartnerBulkModal
+          partner={partner} total={total}
+          onClose={() => setPaying(false)}
+          onDone={() => { setPaying(false); load(); onPaid?.(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PayPartnerBulkModal({ partner, total, onClose, onDone }) {
+  const [amount, setAmount] = useState(String(total));
+  const [bankId, setBankId] = useState(null);
+  const [date, setDate] = useState(todayStr());
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+  const { banks } = usePaymentOptions();
+
+  const submit = async () => {
+    const v = Number(String(amount).replace(/\D/g, "")) || 0;
+    if (v <= 0) { setError("Số tiền phải lớn hơn 0."); return; }
+    if (v > total) { setError(`Chỉ còn nợ ${fmtVND(total)}.`); return; }
+    if (!bankId) { setError("Vui lòng chọn tài khoản chuyển tiền."); return; }
+    setSaving(true); setError("");
+    const { data, error: err } = await supabase.rpc("pay_partner_bulk", {
+      p_partner_id: partner.partner_id, p_amount: v,
+      p_bank_account_id: bankId, p_paid_date: date, p_note: note.trim() || null,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setResult(data);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-slate-800 text-sm">Trả một cục — {partner.name}</p>
+          <button onClick={onClose} className="text-slate-500 hover:text-rose-600"><X size={16} /></button>
+        </div>
+
+        {result ? (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-3 text-sm text-emerald-800 space-y-1">
+              <p>Đã trả <span className="font-semibold">{fmtVND(result.paid)}</span>, tự trừ vào <span className="font-semibold">{result.documents}</span> chứng từ.</p>
+              <p className="text-xs">Còn nợ đối tác này: {fmtVND(result.remaining_debt)}</p>
+            </div>
+            {Array.isArray(result.applied) && result.applied.length > 0 && (
+              <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
+                <table className="w-full text-xs">
+                  <tbody>
+                    {result.applied.map((a, i) => (
+                      <tr key={i} className="border-b border-slate-50 last:border-0">
+                        <td className="px-2 py-1.5 text-slate-600 doc-code">{a.doc_code}</td>
+                        <td className="px-2 py-1.5 text-right text-slate-700">{fmtVND(a.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <button onClick={onDone} className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-2.5 text-sm font-medium">Xong</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="bg-indigo-50 rounded-xl px-3 py-2.5 text-xs text-indigo-800">
+              Đang nợ <span className="font-semibold">{fmtVND(total)}</span>.
+              Tiền trả sẽ tự trừ vào các chứng từ cũ trước.
+            </div>
+            <TextField label="Ngày chuyển" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <MoneyField label="Số tiền trả (đ)" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <div>
+              <span className="text-xs font-medium text-slate-600 mb-1.5 block">Tài khoản chuyển tiền *</span>
+              <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-lg" />
+            </div>
+            <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
+            {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={submit} disabled={saving}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white rounded-xl py-2.5 text-sm font-medium flex items-center justify-center gap-2">
+                {saving && <Loader2 size={15} className="animate-spin" />} Xác nhận trả
+              </button>
+              <button onClick={onClose} className="px-4 rounded-xl border border-slate-200 text-sm text-slate-500 hover:bg-slate-50">Hủy</button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function DebtModule({ employee }) {
   const [tab, setTab] = useState("partners");   // partners | installment
   const [rows, setRows] = useState([]);
@@ -7493,6 +7699,7 @@ function DebtModule({ employee }) {
                               </div>
                             )}
                             <CustomerReceivablePanel partner={r} />
+                            <PartnerPayablePanel partner={r} onPaid={load} />
                             <PartnerLedgerPanel partner={r} />
                           </td>
                         </tr>
