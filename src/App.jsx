@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import * as XLSX from "xlsx";
+import ReportsExcelModule, { OwnerReconcileModule } from "./ReportsExcelModule";
 import {
   BarChart as RBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer,
 } from "recharts";
@@ -10,7 +11,7 @@ import {
   Loader2, ChevronRight, Menu, ShieldAlert, Pencil, Trash2, PackageSearch,
   History, Printer, Wallet, Landmark, CalendarClock, ChevronDown, FileSpreadsheet,
   Filter, TrendingUp, Package, Award, ArrowLeftRight, Banknote,
-  Building2,
+  Building2, BookOpen, Scale,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -21,6 +22,7 @@ const ROLE_LABELS = {
   nhan_vien: "Nhân viên",
   quan_ly: "Quản lý cửa hàng",
   ke_toan: "Kế toán thuế",
+  chu: "Chủ (đối soát 3 đơn vị)",
 };
 
 function classNames(...a) {
@@ -3879,7 +3881,9 @@ function ImportPurchaseModal({ employee, supplier, onClose, onDone }) {
 
     // Gọi 1 lần, database xử lý từng dòng độc lập — dòng lỗi không chặn dòng khác
     const { data, error: err } = await supabase.rpc("import_purchase_batch", {
-      p_supplier_id: supplier.id, p_rows: payload,
+      p_supplier_id: supplier.id,
+      p_rows: payload,
+      p_creditor_supplier_id: supplier.id,
     });
     setProgress(100);
     setSaving(false);
@@ -5929,6 +5933,7 @@ function EmployeesModule({ employee }) {
                 <option value="nhan_vien">Nhân viên</option>
                 <option value="quan_ly">Quản lý cửa hàng</option>
                 <option value="ke_toan">Kế toán thuế</option>
+                <option value="chu">Chủ (đối soát 3 đơn vị)</option>
               </select>
             </label>
             {error && <p className="text-xs text-rose-600 sm:col-span-3">{error}</p>}
@@ -10038,6 +10043,8 @@ const NAV_ITEMS = [
   { key: "expenses", label: "Chi phí", icon: Receipt, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "cashbook", label: "Sổ quỹ ngày", icon: Wallet, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "reports", label: "Báo cáo", icon: BarChart3, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
+  { key: "books", label: "Sổ sách", icon: BookOpen, group: "Tài chính", allowedRoles: ["quan_ly", "ke_toan"] },
+  { key: "reconcile", label: "Đối soát 3 đơn vị", icon: Scale, group: "Tài chính", allowedRoles: ["chu"] },
   { key: "employees", label: "Nhân viên", icon: UserCog, group: "Hệ thống", allowedRoles: ["quan_ly", "ke_toan"] },
   { key: "audit", label: "Nhật ký thao tác", icon: ScrollText, group: "Hệ thống", allowedRoles: ["quan_ly", "ke_toan"] },
 ];
@@ -10078,6 +10085,10 @@ function AppShell({ employee, onSignOut }) {
         return <PersonalModule employee={employee} />;
       case "cashbook":
         return ["quan_ly", "ke_toan"].includes(employee.role) ? <CashBookModule employee={employee} /> : null;
+      case "books":
+        return ["quan_ly", "ke_toan"].includes(employee.role) ? <ReportsExcelModule employee={employee} /> : null;
+      case "reconcile":
+        return employee.role === "chu" ? <OwnerReconcileModule /> : null;
       case "expenses":
         return <ExpensesModule employee={employee} />;
       case "debts":
