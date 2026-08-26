@@ -34,6 +34,18 @@ function ymd(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+/* 5 so cuoi IMEI - so sach cu chi ghi 5 so nay */
+function imei5(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  return d ? d.slice(-5) : "";
+}
+
+/* An dau nhap lieu dau ky khi hien thi. Dau van nam trong CSDL de
+   con duong lui khi can don du lieu. */
+function clean(v) {
+  return String(v || "").replace(/^SEED-[A-Z0-9]+-\d+\s*\|\s*/i, "").trim();
+}
+
 function todayStr() {
   const d = new Date();
   return ymd(d.getFullYear(), d.getMonth(), d.getDate());
@@ -356,6 +368,7 @@ function SheetCustomerDebt({ employee }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pay, setPay] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -373,12 +386,22 @@ function SheetCustomerDebt({ employee }) {
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
     { key: "khach", label: "Khách", strong: true },
-    { key: "noi_dung", label: "Nội dung" },
-    { key: "so_hd", label: "Công nợ phát sinh" },
+    { key: "sdt", label: "SĐT" },
+    { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Số hợp đồng" },
     { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
     { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
     { key: "ton_no", label: "Tồn nợ", align: "right", strong: true, render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
+    { key: "tt", label: "", render: (r) => (
+        r.partner_id && Math.abs(Number(r.ton_no || 0)) > 0 ? (
+          <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.khach,
+                                          account: "receivable", con_no: r.ton_no })}
+            className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
+            Thanh toán
+          </button>
+        ) : null
+      ), raw: () => "" },
   ];
 
   const groups = ["bad_debt", "khach", "ncc"]
@@ -419,6 +442,12 @@ function SheetCustomerDebt({ employee }) {
           </p>
         </>
       )}
+
+      {pay && (
+        <PayDebtBox employee={employee} target={pay}
+          onDone={() => { setPay(null); load(); }}
+          onCancel={() => setPay(null)} />
+      )}
     </div>
   );
 }
@@ -450,7 +479,7 @@ function SheetBadDebt({ employee }) {
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
     { key: "khach", label: "Khách", strong: true },
     { key: "sdt", label: "SĐT" },
-    { key: "noi_dung", label: "Nội dung" },
+    { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
     { key: "so_hd", label: "Công nợ phát sinh" },
     { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
     { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
@@ -492,6 +521,7 @@ function SheetPartnerDebt({ employee }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pay, setPay] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -509,11 +539,22 @@ function SheetPartnerDebt({ employee }) {
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
     { key: "doi_tac", label: "Đối tác", strong: true },
-    { key: "noi_dung", label: "Nội dung" },
+    { key: "sdt", label: "SĐT" },
+    { key: "so_hd", label: "Số hợp đồng" },
+    { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
     { key: "so_tien", label: "Số tiền", align: "right", render: (r) => fmtVND(r.so_tien), raw: (r) => Number(r.so_tien || 0) },
     { key: "thanh_toan", label: "Thanh toán", align: "right", render: (r) => fmtVND(r.thanh_toan), raw: (r) => Number(r.thanh_toan || 0) },
     { key: "no_con_lai", label: "Nợ còn lại", align: "right", strong: true, render: (r) => fmtVND(r.no_con_lai), raw: (r) => Number(r.no_con_lai || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
+    { key: "tt", label: "", render: (r) => (
+        r.partner_id && Math.abs(Number(r.no_con_lai || 0)) > 0 ? (
+          <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.doi_tac,
+                                          account: "payable", con_no: r.no_con_lai })}
+            className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
+            Thanh toán
+          </button>
+        ) : null
+      ), raw: () => "" },
   ];
 
   const tong = rows.reduce((s, r) => s + Number(r.no_con_lai || 0), 0);
@@ -539,6 +580,12 @@ function SheetPartnerDebt({ employee }) {
           </p>
         )}
       </Card>
+
+      {pay && (
+        <PayDebtBox employee={employee} target={pay}
+          onDone={() => { setPay(null); load(); }}
+          onCancel={() => setPay(null)} />
+      )}
     </div>
   );
 }
@@ -579,13 +626,13 @@ function SheetInventory({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày nhập", render: (r) => fmtDate(r.ngay) },
-    { key: "ten_may", label: "Tên máy", strong: true },
-    { key: "doi_may", label: "Đời" },
-    { key: "ma", label: "Mã" },
-    { key: "imei", label: "IMEI" },
+    { key: "ten_may", label: "Tên máy", strong: true,
+      render: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - "),
+      raw: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - ") },
+    { key: "imei", label: "IMEI", render: (r) => imei5(r.imei), raw: (r) => imei5(r.imei) },
     { key: "so_luong", label: "SL", align: "right" },
     { key: "gia_nhap", label: "Giá nhập", align: "right", render: (r) => fmtVND(r.gia_nhap), raw: (r) => Number(r.gia_nhap || 0) },
-    { key: "doi_tac", label: "Đối tác" },
+    { key: "doi_tac", label: "Nhà cung cấp" },
     { key: "gia_von", label: "Giá vốn", align: "right", render: (r) => fmtVND(r.gia_von), raw: (r) => Number(r.gia_von || 0) },
     { key: "ngay_ban", label: "Ngày bán", render: (r) => fmtDate(r.ngay_ban) },
     {
@@ -598,7 +645,7 @@ function SheetInventory({ employee }) {
       ),
       raw: (r) => (r.trang_thai === "Ton" ? "Tồn" : "Đã bán"),
     },
-    { key: "ghi_chu", label: "Ghi chú" },
+    { key: "ghi_chu", label: "Ghi chú", render: (r) => clean(r.ghi_chu), raw: (r) => clean(r.ghi_chu) },
   ];
 
   return (
@@ -663,14 +710,14 @@ function SheetIntake({ employee }) {
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
     { key: "ma_phieu", label: "Mã phiếu" },
     { key: "ten_may", label: "Tên máy", strong: true },
-    { key: "imei", label: "IMEI" },
+    { key: "imei", label: "IMEI", render: (r) => imei5(r.imei), raw: (r) => imei5(r.imei) },
     { key: "so_luong", label: "SL", align: "right" },
     { key: "gia_nhap", label: "Giá nhập", align: "right", render: (r) => fmtVND(r.gia_nhap), raw: (r) => Number(r.gia_nhap || 0) },
     { key: "doi_tac", label: "Đối tác" },
     { key: "gia_von", label: "Giá vốn", align: "right", render: (r) => fmtVND(r.gia_von), raw: (r) => Number(r.gia_von || 0) },
     { key: "ngay_ban", label: "Ngày bán", render: (r) => fmtDate(r.ngay_ban) },
     { key: "trang_thai", label: "Trạng thái", render: (r) => (r.trang_thai === "Ton" ? "Tồn" : "Đã bán") },
-    { key: "ghi_chu", label: "Ghi chú" },
+    { key: "ghi_chu", label: "Ghi chú", render: (r) => clean(r.ghi_chu), raw: (r) => clean(r.ghi_chu) },
   ];
 
   const tong = rows.reduce((s, r) => s + Number(r.gia_nhap || 0), 0);
@@ -752,7 +799,7 @@ function SheetInternalDebt({ employee }) {
     { key: "minh_no_ho", label: `Mình nợ ${tenDoiUng}`, align: "right", render: (r) => fmtVND(r.minh_no_ho), raw: (r) => Number(r.minh_no_ho || 0) },
     { key: "ho_no_minh", label: `${tenDoiUng} nợ mình`, align: "right", render: (r) => fmtVND(r.ho_no_minh), raw: (r) => Number(r.ho_no_minh || 0) },
     { key: "du_no", label: "Dư nợ lũy kế", align: "right", strong: true, render: (r) => fmtVND(r.du_no), raw: (r) => Number(r.du_no || 0) },
-    { key: "ghi_chu", label: "Ghi chú" },
+    { key: "ghi_chu", label: "Ghi chú", render: (r) => clean(r.ghi_chu), raw: (r) => clean(r.ghi_chu) },
   ];
 
   const canTru = summary.find((s) => s.loai === "CAN TRU CON LAI");
@@ -903,6 +950,144 @@ function SheetOwnerReconcile() {
         )}
       </Card>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Hop ghi phieu thanh toan cong no                                        */
+/*                                                                         */
+/* Ghi BUT TOAN MOI mang so am qua ham pay_debt_manual - khong sua dong    */
+/* no cu, vi so cai la bat bien. Ham o CSDL tu chan: so tien khong duong,  */
+/* chuyen khoan ma khong chon tai khoan, tra vuot qua so con no.           */
+/* ---------------------------------------------------------------------- */
+
+function PayDebtBox({ employee, target, onDone, onCancel }) {
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("");
+  const [bankId, setBankId] = useState("");
+  const [banks, setBanks] = useState([]);
+  const [date, setDate] = useState(todayStr());
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let bo = false;
+    (async () => {
+      const { data } = await supabase.from("bank_accounts")
+        .select("id, bank_name, account_number, short_label, is_active, sort_order")
+        .eq("store_id", employee.store_id)
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true });
+      if (!bo) setBanks(data || []);
+    })();
+    return () => { bo = true; };
+  }, [employee.store_id]);
+
+  /* short_label la cot danh rieng cho hien thi; khong co thi ghep
+     ten ngan hang voi 4 so cuoi tai khoan */
+  const bankLabel = (b) =>
+    b.short_label
+    || [b.bank_name, b.account_number ? "..." + String(b.account_number).slice(-4) : null]
+         .filter(Boolean).join(" ")
+    || "Tài khoản";
+
+  const soTien = Number(String(amount).replace(/\D/g, "") || 0);
+  const conNo = Math.abs(Number(target.con_no || 0));
+
+  const ghi = async () => {
+    if (!method) { setError("Chọn hình thức thu"); return; }
+    if (method === "bank_transfer" && !bankId) { setError("Chọn tài khoản ngân hàng"); return; }
+    if (soTien <= 0) { setError("Nhập số tiền lớn hơn 0"); return; }
+    if (soTien > conNo) { setError(`Số tiền vượt quá số còn nợ ${fmtVND(conNo)}`); return; }
+
+    setSaving(true); setError("");
+    const { error: e } = await supabase.rpc("pay_debt_manual", {
+      p_store_id: employee.store_id,
+      p_partner_id: target.partner_id,
+      p_account: target.account,
+      p_amount: soTien,
+      p_method: method,
+      p_bank_account_id: method === "bank_transfer" ? bankId : null,
+      p_date: date,
+      p_note: note || null,
+    });
+    setSaving(false);
+    if (e) { setError(e.message); return; }
+    onDone();
+  };
+
+  return (
+    <Card className="p-4 mt-4">
+      <p className="text-sm font-medium text-slate-700 mb-1">
+        {target.account === "receivable" ? "Thu nợ" : "Trả nợ"} — {target.ten}
+      </p>
+      <p className="text-xs text-slate-500 mb-3">
+        Còn nợ <span className="font-medium text-slate-700">{fmtVND(conNo)}</span>
+      </p>
+
+      <div className="flex flex-wrap gap-3 items-end">
+        <label className="text-xs text-slate-500">
+          Số tiền
+          <input type="text" inputMode="numeric" value={amount}
+            onChange={(e) => {
+              const raw = e.target.value.replace(/\D/g, "");
+              setAmount(raw ? Number(raw).toLocaleString("vi-VN") : "");
+            }}
+            className="block mt-1 rounded-xl border border-slate-200 px-3 py-1.5 text-sm w-40 tabular-nums" />
+        </label>
+
+        <div className="text-xs text-slate-500">
+          Hình thức thu
+          <div className="flex gap-1.5 mt-1">
+            {[["cash", "Tiền mặt"], ["bank_transfer", "Chuyển khoản"]].map(([v, l]) => (
+              <button key={v} onClick={() => setMethod(v)}
+                className={cx("rounded-xl px-3 py-1.5 text-sm transition border",
+                  method === v ? "bg-brand-600 text-white border-brand-600"
+                               : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {method === "bank_transfer" && (
+          <label className="text-xs text-slate-500">
+            Tài khoản nhận
+            <select value={bankId} onChange={(e) => setBankId(e.target.value)}
+              className="block mt-1 rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-800">
+              <option value="">— chọn —</option>
+              {banks.map((b) => (
+                <option key={b.id} value={b.id}>{bankLabel(b)}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <DateBox label="Ngày" value={date} onChange={setDate} />
+
+        <label className="text-xs text-slate-500 flex-1 min-w-[180px]">
+          Ghi chú
+          <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+            className="block mt-1 rounded-xl border border-slate-200 px-3 py-1.5 text-sm w-full" />
+        </label>
+
+        <button onClick={ghi} disabled={saving}
+          className="rounded-xl px-4 py-1.5 text-sm bg-brand-600 text-white hover:bg-brand-700 transition disabled:opacity-50">
+          {saving ? "Đang ghi..." : "Ghi phiếu"}
+        </button>
+        <button onClick={onCancel}
+          className="rounded-xl px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 transition">
+          Hủy
+        </button>
+      </div>
+
+      <ErrorNote msg={error} />
+      <p className="text-xs text-slate-400 mt-3">
+        Phiếu này ghi thêm một bút toán mới, không sửa dòng nợ cũ. Tiền sẽ chạy
+        vào Sổ quỹ đúng ngày và đúng dòng tồn đã chọn.
+      </p>
+    </Card>
   );
 }
 
