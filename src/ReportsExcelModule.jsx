@@ -17,7 +17,7 @@ import { supabase } from "./supabaseClient";
 import * as XLSX from "xlsx";
 import {
   Loader2, FileSpreadsheet, Wallet, Users, AlertTriangle,
-  Building2, Package, ArrowLeftRight, Scale, PiggyBank,
+  Building2, Package, ArrowLeftRight, Scale, PiggyBank, Search,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -44,6 +44,36 @@ function imei5(v) {
    con duong lui khi can don du lieu. */
 function clean(v) {
   return String(v || "").replace(/^SEED-[A-Z0-9]+-\d+\s*\|\s*/i, "").trim();
+}
+
+/* O tim kiem dung chung cho cac bang. Loc ngay tren du lieu da tai ve,
+   khong goi lai CSDL, nen go den dau loc den do. */
+function SearchBox({ value, onChange, placeholder }) {
+  return (
+    <label className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5">
+      <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+      <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder || "Tìm..."}
+        className="text-sm text-slate-800 outline-none w-40 bg-transparent" />
+      {value && (
+        <button onClick={() => onChange("")} className="text-slate-400 hover:text-slate-600 text-xs">
+          ×
+        </button>
+      )}
+    </label>
+  );
+}
+
+/* Bo dau tieng Viet de go "nguyen" van tim ra "Nguyễn" */
+function boDau(t) {
+  return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+}
+
+function locRows(rows, tu, keys) {
+  const q = boDau(tu).trim();
+  if (!q) return rows;
+  return rows.filter((r) => keys.some((k) => boDau(r[k]).includes(q)));
 }
 
 function todayStr() {
@@ -368,6 +398,7 @@ function SheetCustomerDebt({ employee }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tu, setTu] = useState("");
   const [pay, setPay] = useState(null);
 
   const load = useCallback(async () => {
@@ -388,7 +419,7 @@ function SheetCustomerDebt({ employee }) {
     { key: "khach", label: "Khách", strong: true },
     { key: "sdt", label: "SĐT" },
     { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
-    { key: "so_hd", label: "Số hợp đồng" },
+    { key: "so_hd", label: "Ghi chú", render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
     { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
     { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
     { key: "ton_no", label: "Tồn nợ", align: "right", strong: true, render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
@@ -404,8 +435,10 @@ function SheetCustomerDebt({ employee }) {
       ), raw: () => "" },
   ];
 
+  const loc = locRows(rows, tu, ['khach', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu']);
+
   const groups = ["bad_debt", "khach", "ncc"]
-    .map((s) => ({ key: s, rows: rows.filter((r) => r.section === s) }))
+    .map((s) => ({ key: s, rows: loc.filter((r) => r.section === s) }))
     .filter((g) => g.rows.length > 0);
 
   const tongTonNo = rows.reduce((s, r) => s + Number(r.ton_no || 0), 0);
@@ -415,6 +448,7 @@ function SheetCustomerDebt({ employee }) {
       <Toolbar onExport={() => exportSheet(rows, columns, `Khach no ${date}`)}
         exportDisabled={rows.length === 0}>
         <DateBox label="Tính đến" value={date} onChange={setDate} />
+        <SearchBox value={tu} onChange={setTu} placeholder="Tìm khách, SĐT..." />
       </Toolbar>
       <ErrorNote msg={error} />
 
@@ -461,6 +495,7 @@ function SheetBadDebt({ employee }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tu, setTu] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -480,7 +515,7 @@ function SheetBadDebt({ employee }) {
     { key: "khach", label: "Khách", strong: true },
     { key: "sdt", label: "SĐT" },
     { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
-    { key: "so_hd", label: "Công nợ phát sinh" },
+    { key: "so_hd", label: "Ghi chú", render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
     { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
     { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
     { key: "ton_no", label: "Tồn nợ", align: "right", strong: true, render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
@@ -495,11 +530,12 @@ function SheetBadDebt({ employee }) {
       <Toolbar onExport={() => exportSheet(rows, columns, `No kho doi ${date}`)}
         exportDisabled={rows.length === 0}>
         <DateBox label="Tính đến" value={date} onChange={setDate} />
+        <SearchBox value={tu} onChange={setTu} placeholder="Tìm khách, SĐT..." />
       </Toolbar>
       <ErrorNote msg={error} />
 
       <Card className="p-4">
-        <DataTable columns={columns} rows={rows} loading={loading}
+        <DataTable columns={columns} rows={locRows(rows, tu, ['khach', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu'])} loading={loading}
           empty="Chưa đánh dấu khoản nợ khó đòi nào" />
         {rows.length > 0 && (
           <p className="text-sm mt-3 text-right">
@@ -521,6 +557,7 @@ function SheetPartnerDebt({ employee }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tu, setTu] = useState("");
   const [pay, setPay] = useState(null);
 
   const load = useCallback(async () => {
@@ -540,7 +577,7 @@ function SheetPartnerDebt({ employee }) {
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
     { key: "doi_tac", label: "Đối tác", strong: true },
     { key: "sdt", label: "SĐT" },
-    { key: "so_hd", label: "Số hợp đồng" },
+    { key: "so_hd", label: "Ghi chú", render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
     { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
     { key: "so_tien", label: "Số tiền", align: "right", render: (r) => fmtVND(r.so_tien), raw: (r) => Number(r.so_tien || 0) },
     { key: "thanh_toan", label: "Thanh toán", align: "right", render: (r) => fmtVND(r.thanh_toan), raw: (r) => Number(r.thanh_toan || 0) },
@@ -564,6 +601,7 @@ function SheetPartnerDebt({ employee }) {
       <Toolbar onExport={() => exportSheet(rows, columns, `No doi tac ${date}`)}
         exportDisabled={rows.length === 0}>
         <DateBox label="Tính đến" value={date} onChange={setDate} />
+        <SearchBox value={tu} onChange={setTu} placeholder="Tìm đối tác..." />
       </Toolbar>
       <ErrorNote msg={error} />
       <p className="text-[11px] text-slate-500 mb-2">
@@ -571,7 +609,7 @@ function SheetPartnerDebt({ employee }) {
       </p>
 
       <Card className="p-4">
-        <DataTable columns={columns} rows={rows} loading={loading}
+        <DataTable columns={columns} rows={locRows(rows, tu, ['doi_tac', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu'])} loading={loading}
           empty="Chưa có công nợ đối tác" />
         {rows.length > 0 && (
           <p className="text-sm mt-3 text-right">
@@ -602,6 +640,7 @@ function SheetInventory({ employee }) {
   const [onlyStock, setOnlyStock] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tu, setTu] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -621,7 +660,7 @@ function SheetInventory({ employee }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const shown = onlyStock ? rows.filter((r) => r.trang_thai === "Ton") : rows;
+  const shown = locRows(onlyStock ? rows.filter((r) => r.trang_thai === "Ton") : rows, tu, ['ten_may', 'imei', 'doi_tac', 'ghi_chu']);
 
   const columns = [
     { key: "stt", label: "STT" },
@@ -658,6 +697,7 @@ function SheetInventory({ employee }) {
           <input type="checkbox" checked={onlyStock} onChange={(e) => setOnlyStock(e.target.checked)} />
           Chỉ máy còn tồn
         </label>
+        <SearchBox value={tu} onChange={setTu} placeholder="Tìm máy, IMEI..." />
       </Toolbar>
       <ErrorNote msg={error} />
 
@@ -692,6 +732,7 @@ function SheetIntake({ employee }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tu, setTu] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -728,11 +769,12 @@ function SheetIntake({ employee }) {
         exportDisabled={rows.length === 0}>
         <DateBox label="Từ" value={from} onChange={setFrom} />
         <DateBox label="Đến" value={to} onChange={setTo} />
+        <SearchBox value={tu} onChange={setTu} placeholder="Tìm máy, IMEI..." />
       </Toolbar>
       <ErrorNote msg={error} />
 
       <Card className="p-4">
-        <DataTable columns={columns} rows={rows} loading={loading} empty="Không có phiếu nhập trong kỳ" />
+        <DataTable columns={columns} rows={locRows(rows, tu, ['ten_may', 'imei', 'doi_tac', 'ghi_chu'])} loading={loading} empty="Không có phiếu nhập trong kỳ" />
         {rows.length > 0 && (
           <p className="text-sm mt-3 text-right">
             <span className="text-slate-500">{rows.length} phiếu · Tổng giá nhập: </span>
