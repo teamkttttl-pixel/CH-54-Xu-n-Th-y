@@ -1059,11 +1059,31 @@ function PayDebtBox({ employee, target, onDone, onCancel }) {
     onDone();
   };
 
+  /* Hop noi giua man hinh: bam o dong nao cung thay ngay, khong phai
+     cuon xuong cuoi bang. Bam ra ngoai nen toi hoac phim Esc de dong. */
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", esc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", esc);
+      document.body.style.overflow = "";
+    };
+  }, [onCancel]);
+
   return (
-    <Card className="p-4 mt-4">
-      <p className="text-sm font-medium text-slate-700 mb-1">
-        {target.account === "receivable" ? "Thu nợ" : "Trả nợ"} — {target.ten}
-      </p>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center
+                    bg-slate-900/40 backdrop-blur-[2px] p-0 sm:p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <Card className="p-4 w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto
+                       rounded-b-none sm:rounded-2xl">
+      <div className="flex items-start justify-between mb-1">
+        <p className="text-sm font-medium text-slate-700">
+          {target.account === "receivable" ? "Thu nợ" : "Trả nợ"} — {target.ten}
+        </p>
+        <button onClick={onCancel}
+          className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
+      </div>
       <p className="text-xs text-slate-500 mb-3">
         Còn nợ <span className="font-medium text-slate-700">{fmtVND(conNo)}</span>
       </p>
@@ -1129,7 +1149,8 @@ function PayDebtBox({ employee, target, onDone, onCancel }) {
         Phiếu này ghi thêm một bút toán mới, không sửa dòng nợ cũ. Tiền sẽ chạy
         vào Sổ quỹ đúng ngày và đúng dòng tồn đã chọn.
       </p>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
