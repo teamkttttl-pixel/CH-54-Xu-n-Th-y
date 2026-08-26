@@ -190,16 +190,15 @@ function DataTable({ columns, rows, loading, empty, rowClass }) {
               {columns.map((c) => (
                 <td key={c.key} style={stickyStyle(c)}
                   className={cx("px-3 py-2 border-b border-slate-100",
-                    c.truncate ? "align-top" : "whitespace-nowrap",
+                    (c.truncate || c.wrap) ? "align-top" : "whitespace-nowrap",
                     c.align === "right" ? "text-right tabular-nums" : "text-left",
                     c.strong ? "font-medium text-slate-800" : "text-slate-600",
                     stickyCls(c, false), "group-hover:bg-slate-50/60")}>
                   {/* line-clamp doi kieu hien thi, dat o the <td> se lam
                       o mat tinh chat o bang va vo bo cuc -> boc trong div */}
-                  {c.truncate ? (
-                    <div className="max-w-[20rem] line-clamp-2 leading-snug"
-                      title={typeof (c.raw ? c.raw(r) : r[c.key]) === "string"
-                             ? (c.raw ? c.raw(r) : r[c.key]) : undefined}>
+                  {(c.truncate || c.wrap) ? (
+                    <div className={cx("leading-snug whitespace-normal break-words",
+                      c.wrap ? "min-w-[15rem] max-w-[26rem]" : "max-w-[20rem] line-clamp-2")}>
                       {c.render ? c.render(r) : (r[c.key] ?? "")}
                     </div>
                   ) : (
@@ -457,10 +456,10 @@ function SheetCustomerDebt({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
-    { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 170 },
+    { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 132 },
     { key: "sdt", label: "SĐT" },
-    { key: "noi_dung", label: "Nội dung", truncate: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
-    { key: "so_hd", label: "Ghi chú", truncate: true, render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
+    { key: "noi_dung", label: "Nội dung", wrap: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Số HĐ", wrap: true, render: (r) => clean(r.so_hd), raw: (r) => clean(r.so_hd) },
     { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
     { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
     { key: "ton_no", label: "Tồn nợ", align: "right", strong: true, render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
@@ -553,10 +552,10 @@ function SheetBadDebt({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
-    { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 170 },
+    { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 132 },
     { key: "sdt", label: "SĐT" },
-    { key: "noi_dung", label: "Nội dung", truncate: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
-    { key: "so_hd", label: "Ghi chú", truncate: true, render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
+    { key: "noi_dung", label: "Nội dung", wrap: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Số HĐ", wrap: true, render: (r) => clean(r.so_hd), raw: (r) => clean(r.so_hd) },
     { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
     { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
     { key: "ton_no", label: "Tồn nợ", align: "right", strong: true, render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
@@ -616,10 +615,10 @@ function SheetPartnerDebt({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
-    { key: "doi_tac", label: "Đối tác", strong: true, sticky: "left", stickyW: 170 },
+    { key: "doi_tac", label: "Đối tác", strong: true, sticky: "left", stickyW: 132 },
     { key: "sdt", label: "SĐT" },
-    { key: "so_hd", label: "Ghi chú", truncate: true, render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
-    { key: "noi_dung", label: "Nội dung", truncate: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Số HĐ", wrap: true, render: (r) => clean(r.so_hd), raw: (r) => clean(r.so_hd) },
+    { key: "noi_dung", label: "Nội dung", wrap: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
     { key: "so_tien", label: "Số tiền", align: "right", render: (r) => fmtVND(r.so_tien), raw: (r) => Number(r.so_tien || 0) },
     { key: "thanh_toan", label: "Thanh toán", align: "right", render: (r) => fmtVND(r.thanh_toan), raw: (r) => Number(r.thanh_toan || 0) },
     { key: "no_con_lai", label: "Nợ còn lại", align: "right", strong: true, render: (r) => fmtVND(r.no_con_lai), raw: (r) => Number(r.no_con_lai || 0) },
@@ -706,7 +705,7 @@ function SheetInventory({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày nhập", render: (r) => fmtDate(r.ngay) },
-    { key: "ten_may", label: "Tên máy", strong: true, sticky: "left", stickyW: 230,
+    { key: "ten_may", label: "Tên máy", strong: true, sticky: "left", stickyW: 190,
       render: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - "),
       raw: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - ") },
     { key: "imei", label: "IMEI", render: (r) => imei5(r.imei), raw: (r) => imei5(r.imei) },
@@ -791,7 +790,7 @@ function SheetIntake({ employee }) {
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
     { key: "ma_phieu", label: "Mã phiếu" },
-    { key: "ten_may", label: "Tên máy", strong: true, sticky: "left", stickyW: 230,
+    { key: "ten_may", label: "Tên máy", strong: true, sticky: "left", stickyW: 190,
       render: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - "),
       raw: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - ") },
     { key: "imei", label: "IMEI", render: (r) => imei5(r.imei), raw: (r) => imei5(r.imei) },
@@ -987,7 +986,7 @@ function SheetOwnerReconcile() {
   useEffect(() => { load(); }, [load]);
 
   const columns = [
-    { key: "doi_tac", label: "Đối tác", strong: true, sticky: "left", stickyW: 170 },
+    { key: "doi_tac", label: "Đối tác", strong: true, sticky: "left", stickyW: 132 },
     ...stores.map((s) => ({
       key: s.id, label: s.name, align: "right",
       render: (r) => fmtVND(r[s.id]),
