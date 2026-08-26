@@ -139,15 +139,44 @@ function DataTable({ columns, rows, loading, empty, rowClass }) {
   if (!rows || rows.length === 0) {
     return <p className="text-sm text-slate-400 py-10 text-center">{empty || "Chưa có dữ liệu"}</p>;
   }
+  /* Cot danh dau sticky:"left" se DINH BEN TRAI khi cuon ngang,
+     sticky:"right" dinh ben phai. Nho vay xem den cot tien van
+     thay dang xem cua ai.
+     Vi tri chen ngang duoc tinh don theo thu tu cac cot sticky. */
+  let offL = 0;
+  const posL = {};
+  columns.filter((c) => c.sticky === "left").forEach((c) => {
+    posL[c.key] = offL;
+    offL += c.stickyW || 150;
+  });
+  const coSticky = Object.keys(posL).length > 0
+    || columns.some((c) => c.sticky === "right");
+
+  const stickyCls = (c, isHead) => {
+    if (c.sticky === "left") {
+      return cx("sticky z-10", isHead ? "bg-slate-100" : "bg-white",
+        "after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-slate-200");
+    }
+    if (c.sticky === "right") {
+      return cx("sticky right-0 z-10", isHead ? "bg-slate-100" : "bg-white",
+        "before:absolute before:top-0 before:left-0 before:h-full before:w-px before:bg-slate-200");
+    }
+    return "";
+  };
+  const stickyStyle = (c) =>
+    c.sticky === "left" ? { left: posL[c.key], minWidth: c.stickyW || 150 } : undefined;
+
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className={cx("w-full text-sm", coSticky && "border-separate border-spacing-0")}>
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50/60">
+          <tr className="bg-slate-50/60">
             {columns.map((c) => (
-              <th key={c.key}
+              <th key={c.key} style={stickyStyle(c)}
                 className={cx("px-3 py-2.5 font-medium text-slate-600 whitespace-nowrap",
-                  c.align === "right" ? "text-right" : "text-left")}>
+                  "border-b border-slate-200",
+                  c.align === "right" ? "text-right" : "text-left",
+                  stickyCls(c, true))}>
                 {c.label}
               </th>
             ))}
@@ -156,13 +185,15 @@ function DataTable({ columns, rows, loading, empty, rowClass }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i}
-              className={cx("border-b border-slate-100 hover:bg-slate-50/60 transition",
+              className={cx("group hover:bg-slate-50/60 transition",
                 rowClass ? rowClass(r) : "")}>
               {columns.map((c) => (
-                <td key={c.key}
-                  className={cx("px-3 py-2 whitespace-nowrap",
+                <td key={c.key} style={stickyStyle(c)}
+                  className={cx("px-3 py-2 whitespace-nowrap border-b border-slate-100",
                     c.align === "right" ? "text-right tabular-nums" : "text-left",
-                    c.strong ? "font-medium text-slate-800" : "text-slate-600")}>
+                    c.strong ? "font-medium text-slate-800" : "text-slate-600",
+                    c.truncate && "max-w-[22rem] truncate whitespace-normal line-clamp-2",
+                    stickyCls(c, false), "group-hover:bg-slate-50/60")}>
                   {c.render ? c.render(r) : (r[c.key] ?? "")}
                 </td>
               ))}
@@ -416,15 +447,15 @@ function SheetCustomerDebt({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
-    { key: "khach", label: "Khách", strong: true },
+    { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 170 },
     { key: "sdt", label: "SĐT" },
-    { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
-    { key: "so_hd", label: "Ghi chú", render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
+    { key: "noi_dung", label: "Nội dung", truncate: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Ghi chú", truncate: true, render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
     { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
     { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
     { key: "ton_no", label: "Tồn nợ", align: "right", strong: true, render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
-    { key: "tt", label: "", render: (r) => (
+    { key: "tt", label: "", sticky: "right", render: (r) => (
         r.partner_id && Math.abs(Number(r.ton_no || 0)) > 0 ? (
           <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.khach,
                                           account: "receivable", con_no: r.ton_no })}
@@ -512,10 +543,10 @@ function SheetBadDebt({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
-    { key: "khach", label: "Khách", strong: true },
+    { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 170 },
     { key: "sdt", label: "SĐT" },
-    { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
-    { key: "so_hd", label: "Ghi chú", render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
+    { key: "noi_dung", label: "Nội dung", truncate: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Ghi chú", truncate: true, render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
     { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
     { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
     { key: "ton_no", label: "Tồn nợ", align: "right", strong: true, render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
@@ -575,15 +606,15 @@ function SheetPartnerDebt({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
-    { key: "doi_tac", label: "Đối tác", strong: true },
+    { key: "doi_tac", label: "Đối tác", strong: true, sticky: "left", stickyW: 170 },
     { key: "sdt", label: "SĐT" },
-    { key: "so_hd", label: "Ghi chú", render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
-    { key: "noi_dung", label: "Nội dung", render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Ghi chú", truncate: true, render: (r) => clean(r.so_hd) || clean(r.ghi_chu), raw: (r) => clean(r.so_hd) || clean(r.ghi_chu) },
+    { key: "noi_dung", label: "Nội dung", truncate: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
     { key: "so_tien", label: "Số tiền", align: "right", render: (r) => fmtVND(r.so_tien), raw: (r) => Number(r.so_tien || 0) },
     { key: "thanh_toan", label: "Thanh toán", align: "right", render: (r) => fmtVND(r.thanh_toan), raw: (r) => Number(r.thanh_toan || 0) },
     { key: "no_con_lai", label: "Nợ còn lại", align: "right", strong: true, render: (r) => fmtVND(r.no_con_lai), raw: (r) => Number(r.no_con_lai || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
-    { key: "tt", label: "", render: (r) => (
+    { key: "tt", label: "", sticky: "right", render: (r) => (
         r.partner_id && Math.abs(Number(r.no_con_lai || 0)) > 0 ? (
           <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.doi_tac,
                                           account: "payable", con_no: r.no_con_lai })}
@@ -665,7 +696,7 @@ function SheetInventory({ employee }) {
   const columns = [
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày nhập", render: (r) => fmtDate(r.ngay) },
-    { key: "ten_may", label: "Tên máy", strong: true,
+    { key: "ten_may", label: "Tên máy", strong: true, sticky: "left", stickyW: 230,
       render: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - "),
       raw: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - ") },
     { key: "imei", label: "IMEI", render: (r) => imei5(r.imei), raw: (r) => imei5(r.imei) },
@@ -750,7 +781,9 @@ function SheetIntake({ employee }) {
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
     { key: "ma_phieu", label: "Mã phiếu" },
-    { key: "ten_may", label: "Tên máy", strong: true },
+    { key: "ten_may", label: "Tên máy", strong: true, sticky: "left", stickyW: 230,
+      render: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - "),
+      raw: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - ") },
     { key: "imei", label: "IMEI", render: (r) => imei5(r.imei), raw: (r) => imei5(r.imei) },
     { key: "so_luong", label: "SL", align: "right" },
     { key: "gia_nhap", label: "Giá nhập", align: "right", render: (r) => fmtVND(r.gia_nhap), raw: (r) => Number(r.gia_nhap || 0) },
@@ -944,7 +977,7 @@ function SheetOwnerReconcile() {
   useEffect(() => { load(); }, [load]);
 
   const columns = [
-    { key: "doi_tac", label: "Đối tác", strong: true },
+    { key: "doi_tac", label: "Đối tác", strong: true, sticky: "left", stickyW: 170 },
     ...stores.map((s) => ({
       key: s.id, label: s.name, align: "right",
       render: (r) => fmtVND(r[s.id]),
