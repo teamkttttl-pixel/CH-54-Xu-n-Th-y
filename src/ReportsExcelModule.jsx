@@ -34,6 +34,13 @@ function ymd(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+/* Bo chu "iPhone" o dau ten may. Gan het hang trong kho la iPhone nen
+   chu do chi to cot ma khong them thong tin. Du lieu trong kho GIU
+   NGUYEN, day chi la cach hien thi. */
+function tenMay(v) {
+  return String(v || "").replace(/^\s*iphone\s+/i, "").trim();
+}
+
 /* 5 so cuoi IMEI - so sach cu chi ghi 5 so nay */
 function imei5(v) {
   const d = String(v || "").replace(/\D/g, "");
@@ -709,8 +716,8 @@ function SheetInventory({ employee }) {
     { key: "stt", label: "STT" },
     { key: "ngay", label: "Ngày nhập", render: (r) => fmtDate(r.ngay) },
     { key: "ten_may", label: "Tên máy", strong: true, sticky: "left", stickyW: 190,
-      render: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - "),
-      raw: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - ") },
+      render: (r) => [tenMay(r.ten_may), imei5(r.imei)].filter(Boolean).join(" - "),
+      raw: (r) => [tenMay(r.ten_may), imei5(r.imei)].filter(Boolean).join(" - ") },
     { key: "imei", label: "IMEI", render: (r) => imei5(r.imei), raw: (r) => imei5(r.imei) },
     { key: "so_luong", label: "SL", align: "right" },
     { key: "gia_nhap", label: "Giá nhập", align: "right", render: (r) => fmtVND(r.gia_nhap), raw: (r) => Number(r.gia_nhap || 0) },
@@ -794,8 +801,8 @@ function SheetIntake({ employee }) {
     { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
     { key: "ma_phieu", label: "Mã phiếu" },
     { key: "ten_may", label: "Tên máy", strong: true, sticky: "left", stickyW: 190,
-      render: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - "),
-      raw: (r) => [r.ten_may, imei5(r.imei)].filter(Boolean).join(" - ") },
+      render: (r) => [tenMay(r.ten_may), imei5(r.imei)].filter(Boolean).join(" - "),
+      raw: (r) => [tenMay(r.ten_may), imei5(r.imei)].filter(Boolean).join(" - ") },
     { key: "imei", label: "IMEI", render: (r) => imei5(r.imei), raw: (r) => imei5(r.imei) },
     { key: "so_luong", label: "SL", align: "right" },
     { key: "gia_nhap", label: "Giá nhập", align: "right", render: (r) => fmtVND(r.gia_nhap), raw: (r) => Number(r.gia_nhap || 0) },
