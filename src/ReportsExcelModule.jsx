@@ -17,7 +17,7 @@ import { supabase } from "./supabaseClient";
 import * as XLSX from "xlsx";
 import {
   Loader2, FileSpreadsheet, Wallet, Users, AlertTriangle,
-  Building2, Package, ArrowLeftRight, Scale,
+  Building2, Package, ArrowLeftRight, Scale, PiggyBank,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -28,16 +28,23 @@ function cx(...a) {
   return a.filter(Boolean).join(" ");
 }
 
+/* LUU Y MUI GIO: toISOString() doi ve UTC, o VN (UTC+7) se lui lai 1 ngay.
+   Vi vay moi ham ngay o day deu ghep chuoi thu cong, khong dung toISOString. */
+function ymd(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return ymd(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 /* Ky ke toan chay tu ngay 26 thang truoc den 25 thang nay */
 function periodStart(dateStr) {
-  const d = new Date(dateStr);
-  const day = d.getDate();
-  const m = day >= 26 ? d.getMonth() : d.getMonth() - 1;
-  return new Date(d.getFullYear(), m, 26).toISOString().slice(0, 10);
+  const [y, m, d] = String(dateStr).split("-").map(Number);
+  const base = new Date(y, m - 1, d);
+  if (base.getDate() < 26) base.setMonth(base.getMonth() - 1);
+  return ymd(base.getFullYear(), base.getMonth(), 26);
 }
 
 function fmtVND(n) {
@@ -168,22 +175,27 @@ function SheetCashBook({ employee }) {
   const [date, setDate] = useState(todayStr());
   const [rows, setRows] = useState([]);
   const [opening, setOpening] = useState(null);
+  const [assets, setAssets] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
-    const [{ data, error: e1 }, { data: op }] = await Promise.all([
+    const [{ data, error: e1 }, { data: op }, { data: as }] = await Promise.all([
       supabase.rpc("report_cash_book_balance", {
         p_store_id: employee.store_id, p_date: date,
       }),
       supabase.rpc("report_cash_book_opening", {
         p_store_id: employee.store_id, p_date: date,
       }),
+      supabase.rpc("report_assets", {
+        p_store_id: employee.store_id, p_date: date,
+      }),
     ]);
     if (e1) setError(e1.message);
     setRows(data || []);
     setOpening(Array.isArray(op) ? op[0] : op);
+    setAssets(Array.isArray(as) ? as[0] : as);
     setLoading(false);
   }, [employee.store_id, date]);
 
@@ -254,7 +266,7 @@ function SheetCashBook({ employee }) {
       </Card>
 
       {last && (
-        <div className="flex flex-wrap gap-3 text-sm">
+        <div className="flex flex-wrap gap-3 text-sm mb-4">
           <div className="bg-emerald-50 rounded-xl px-4 py-2.5">
             <span className="text-emerald-600 text-xs block">Tồn tiền mặt cuối ngày</span>
             <span className="font-semibold text-emerald-800">{fmtVND(last.ton_tien_mat)}</span>
@@ -265,7 +277,67 @@ function SheetCashBook({ employee }) {
           </div>
         </div>
       )}
+
+      <AssetBlock a={assets} />
     </div>
+  );
+}
+
+/* Khoi tai san cuoi ngay - dung thu tu nhu so quy Excel cu.
+   May ton tach 3 nhom roi nhau (thuong + icl + co = tong), khong cong doi. */
+function AssetLine({ label, value, qty, sub, minus, strong }) {
+  return (
+    <div className={cx("flex items-center justify-between py-1.5 px-1",
+      strong && "border-t border-slate-200 mt-1 pt-2")}>
+      <span className={cx("text-slate-600", sub && "pl-4 text-slate-500",
+        strong && "font-semibold text-slate-800")}>
+        {minus ? "− " : ""}{label}
+        {qty !== undefined && qty !== null && (
+          <span className="text-slate-400 text-xs"> ({qty} cây)</span>
+        )}
+      </span>
+      <span className={cx("tabular-nums", strong ? "font-semibold text-slate-900" : "text-slate-700")}>
+        {fmtVND(value)}
+      </span>
+    </div>
+  );
+}
+
+function AssetBlock({ a }) {
+  if (!a) return null;
+  const lai = Number(a.profit_estimate || 0);
+  return (
+    <Card className="p-4">
+      <p className="text-sm font-medium text-slate-700 mb-2">TÀI SẢN CUỐI NGÀY</p>
+      <div className="text-sm">
+        <AssetLine label="Tồn tiền mặt" value={a.cash_close} />
+        <AssetLine label="Tồn ngân hàng" value={a.bank_close} />
+        <AssetLine label="Máy tồn" value={a.normal_value} qty={a.normal_qty} />
+        <AssetLine label="Máy tồn icl" value={a.icloud_value} qty={a.icloud_qty} sub />
+        <AssetLine label="Máy cỏ" value={a.co_value} qty={a.co_qty} sub />
+        <AssetLine label="Khách nợ" value={a.receivable} />
+        <AssetLine label="Cọc thuê nhà" value={a.house_deposit} />
+        <AssetLine label="Nợ cửa hàng khác" value={a.internal_debt} minus />
+        <AssetLine label="Nợ NCC + khách cọc máy" value={a.payable} minus />
+        <AssetLine label="Lợi nhuận chưa chia" value={a.undistributed} minus />
+        <AssetLine label="Tổng tài sản" value={a.total_assets} strong />
+        <AssetLine label="Vốn góp đầu kỳ" value={a.capital_opening} />
+      </div>
+      <div className={cx("mt-3 rounded-xl px-4 py-2.5 flex items-center justify-between",
+        lai >= 0 ? "bg-emerald-50" : "bg-rose-50")}>
+        <span className={cx("text-sm font-medium", lai >= 0 ? "text-emerald-700" : "text-rose-700")}>
+          Lãi tạm tính
+        </span>
+        <span className={cx("font-semibold tabular-nums",
+          lai >= 0 ? "text-emerald-800" : "text-rose-800")}>
+          {fmtVND(lai)}
+        </span>
+      </div>
+      <p className="text-xs text-slate-400 mt-2">
+        Lãi tạm tính = Tổng tài sản − Vốn góp đầu kỳ. Ba dòng máy rời nhau, cộng lại
+        bằng {fmtVND(a.stock_value)} ({a.stock_qty} cây).
+      </p>
+    </Card>
   );
 }
 
@@ -835,7 +907,142 @@ function SheetOwnerReconcile() {
 }
 
 /* ---------------------------------------------------------------------- */
-/* Vo ngoai: 7 sheet chung mot man co tab                                  */
+/* 8. Chu dau tu - loi nhuan chua chia                                     */
+/* ---------------------------------------------------------------------- */
+
+function SheetInvestors({ employee }) {
+  const [date, setDate] = useState(todayStr());
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState(null); // { investor_id, name, amount, note }
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    const { data, error: e } = await supabase.rpc("report_investors", {
+      p_store_id: employee.store_id, p_date: date,
+    });
+    if (e) setError(e.message);
+    setRows(data || []);
+    setLoading(false);
+  }, [employee.store_id, date]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const columns = [
+    { key: "name", label: "Chủ đầu tư", strong: true },
+    { key: "share_pct", label: "Tỷ lệ", align: "right",
+      render: (r) => `${Number(r.share_pct || 0)}%`, raw: (r) => Number(r.share_pct || 0) },
+    { key: "total_share", label: "Được chia", align: "right",
+      render: (r) => fmtVND(r.total_share), raw: (r) => Number(r.total_share || 0) },
+    { key: "total_drawn", label: "Đã rút", align: "right",
+      render: (r) => fmtVND(r.total_drawn), raw: (r) => Number(r.total_drawn || 0) },
+    { key: "balance", label: "Còn treo", align: "right",
+      render: (r) => fmtVND(r.balance), raw: (r) => Number(r.balance || 0) },
+  ];
+
+  const tongTreo = rows.reduce((s, r) => s + Number(r.balance || 0), 0);
+  const tongTyLe = rows.reduce((s, r) => s + Number(r.share_pct || 0), 0);
+
+  const chiTra = async () => {
+    const amt = Number(String(form.amount).replace(/[^\d-]/g, ""));
+    if (!amt || amt <= 0) { setError("Số tiền chi trả phải lớn hơn 0"); return; }
+    setSaving(true); setError("");
+    const { error: e } = await supabase.from("investor_ledger").insert({
+      investor_id: form.investor_id,
+      store_id: employee.store_id,
+      entry_date: date,
+      period_start: periodStart(date),
+      entry_type: "withdrawal",
+      amount: amt,
+      note: form.note || null,
+    });
+    setSaving(false);
+    if (e) { setError(e.message); return; }
+    setForm(null);
+    load();
+  };
+
+  return (
+    <div>
+      <Toolbar onExport={() => exportSheet(rows, columns, `Chu dau tu ${date}`)}
+        exportDisabled={rows.length === 0}>
+        <DateBox label="Tính đến ngày" value={date} onChange={setDate} />
+      </Toolbar>
+      <ErrorNote msg={error} />
+
+      {!loading && rows.length > 0 && tongTyLe !== 100 && (
+        <div className="bg-amber-50 text-amber-800 text-xs rounded-xl px-3 py-2 mb-3">
+          Tổng tỷ lệ góp vốn đang là {tongTyLe}%, chưa bằng 100%. Kiểm tra lại danh sách
+          chủ đầu tư trước khi chốt kỳ.
+        </div>
+      )}
+
+      <Card className="p-4">
+        <DataTable columns={columns} rows={rows} loading={loading}
+          empty="Chưa khai chủ đầu tư cho cửa hàng này" />
+        {rows.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+            <div className="bg-slate-50 rounded-xl px-4 py-2.5">
+              <span className="text-xs text-slate-500 block">Tổng lợi nhuận chưa chia</span>
+              <span className="font-semibold text-slate-800 tabular-nums">{fmtVND(tongTreo)}</span>
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {rows.map((r) => (
+                <button key={r.investor_id}
+                  onClick={() => setForm({ investor_id: r.investor_id, name: r.name, amount: "", note: "" })}
+                  className="text-xs rounded-xl px-3 py-1.5 bg-brand-50 text-brand-700 hover:bg-brand-100 transition">
+                  Chi trả {r.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {form && (
+        <Card className="p-4 mt-4">
+          <p className="text-sm font-medium text-slate-700 mb-3">
+            Chi trả lợi nhuận cho {form.name}
+          </p>
+          <div className="flex flex-wrap gap-3 items-end">
+            <label className="text-xs text-slate-500">
+              Số tiền
+              <input type="text" inputMode="numeric" value={form.amount}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^\d]/g, "");
+                  setForm({ ...form, amount: raw ? Number(raw).toLocaleString("vi-VN") : "" });
+                }}
+                className="block mt-1 rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-800 w-44 tabular-nums" />
+            </label>
+            <label className="text-xs text-slate-500 flex-1 min-w-[200px]">
+              Ghi chú
+              <input type="text" value={form.note}
+                onChange={(e) => setForm({ ...form, note: e.target.value })}
+                className="block mt-1 rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-800 w-full" />
+            </label>
+            <button onClick={chiTra} disabled={saving}
+              className="rounded-xl px-4 py-1.5 text-sm bg-brand-600 text-white hover:bg-brand-700 transition disabled:opacity-50">
+              {saving ? "Đang lưu..." : "Ghi phiếu chi"}
+            </button>
+            <button onClick={() => setForm(null)}
+              className="rounded-xl px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 transition">
+              Hủy
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mt-3">
+            Phiếu này trừ dần vào số còn treo. Muốn ghi thêm phần được chia cho kỳ mới
+            thì dùng chức năng chốt kỳ, không nhập ở đây.
+          </p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* Vo ngoai: 8 sheet chung mot man co tab                                  */
 /* ---------------------------------------------------------------------- */
 
 const SHEETS = [
@@ -846,6 +1053,7 @@ const SHEETS = [
   { key: "stock", label: "Máy tồn", icon: Package, Comp: SheetInventory },
   { key: "intake", label: "Nhập máy", icon: ArrowLeftRight, Comp: SheetIntake },
   { key: "internal", label: "Công nợ liên CH", icon: Scale, Comp: SheetInternalDebt },
+  { key: "investors", label: "Chủ đầu tư", icon: PiggyBank, Comp: SheetInvestors },
 ];
 
 export function ReportsExcelModule({ employee }) {
