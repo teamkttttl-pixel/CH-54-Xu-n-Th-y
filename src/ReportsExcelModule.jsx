@@ -1008,6 +1008,7 @@ function PayDebtBox({ employee, target, onDone, onCancel }) {
   const [method, setMethod] = useState("");
   const [bankId, setBankId] = useState("");
   const [banks, setBanks] = useState([]);
+  const [banksLoaded, setBanksLoaded] = useState(false);
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1016,12 +1017,17 @@ function PayDebtBox({ employee, target, onDone, onCancel }) {
   useEffect(() => {
     let bo = false;
     (async () => {
-      const { data } = await supabase.from("bank_accounts")
+      /* KHONG loc is_active = true trong cau truy van: neu cot nay de
+         trong (null) thi dieu kien do loai luon ban ghi. Chi loai
+         nhung tai khoan da tat han. */
+      const { data, error: e } = await supabase.from("bank_accounts")
         .select("id, bank_name, account_number, short_label, is_active, sort_order")
         .eq("store_id", employee.store_id)
-        .eq("is_active", true)
         .order("sort_order", { ascending: true });
-      if (!bo) setBanks(data || []);
+      if (bo) return;
+      if (e) setError("Không đọc được danh sách tài khoản: " + e.message);
+      setBanks((data || []).filter((b) => b.is_active !== false));
+      setBanksLoaded(true);
     })();
     return () => { bo = true; };
   }, [employee.store_id]);
@@ -1114,16 +1120,24 @@ function PayDebtBox({ employee, target, onDone, onCancel }) {
         </div>
 
         {method === "bank_transfer" && (
-          <label className="text-xs text-slate-500">
-            Tài khoản nhận
-            <select value={bankId} onChange={(e) => setBankId(e.target.value)}
-              className="block mt-1 rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-800">
-              <option value="">— chọn —</option>
-              {banks.map((b) => (
-                <option key={b.id} value={b.id}>{bankLabel(b)}</option>
-              ))}
-            </select>
-          </label>
+          banks.length > 0 ? (
+            <label className="text-xs text-slate-500">
+              Tài khoản nhận
+              <select value={bankId} onChange={(e) => setBankId(e.target.value)}
+                className="block mt-1 rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-800">
+                <option value="">— chọn —</option>
+                {banks.map((b) => (
+                  <option key={b.id} value={b.id}>{bankLabel(b)}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="text-xs bg-amber-50 text-amber-800 rounded-xl px-3 py-2 max-w-xs">
+              {banksLoaded
+                ? "Cửa hàng chưa khai tài khoản ngân hàng nào. Vào Cài đặt thêm tài khoản, hoặc chọn Tiền mặt."
+                : "Đang tải danh sách tài khoản..."}
+            </div>
+          )
         )}
 
         <DateBox label="Ngày" value={date} onChange={setDate} />
