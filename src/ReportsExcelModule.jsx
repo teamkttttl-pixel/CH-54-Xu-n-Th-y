@@ -189,12 +189,22 @@ function DataTable({ columns, rows, loading, empty, rowClass }) {
                 rowClass ? rowClass(r) : "")}>
               {columns.map((c) => (
                 <td key={c.key} style={stickyStyle(c)}
-                  className={cx("px-3 py-2 whitespace-nowrap border-b border-slate-100",
+                  className={cx("px-3 py-2 border-b border-slate-100",
+                    c.truncate ? "align-top" : "whitespace-nowrap",
                     c.align === "right" ? "text-right tabular-nums" : "text-left",
                     c.strong ? "font-medium text-slate-800" : "text-slate-600",
-                    c.truncate && "max-w-[22rem] truncate whitespace-normal line-clamp-2",
                     stickyCls(c, false), "group-hover:bg-slate-50/60")}>
-                  {c.render ? c.render(r) : (r[c.key] ?? "")}
+                  {/* line-clamp doi kieu hien thi, dat o the <td> se lam
+                      o mat tinh chat o bang va vo bo cuc -> boc trong div */}
+                  {c.truncate ? (
+                    <div className="max-w-[20rem] line-clamp-2 leading-snug"
+                      title={typeof (c.raw ? c.raw(r) : r[c.key]) === "string"
+                             ? (c.raw ? c.raw(r) : r[c.key]) : undefined}>
+                      {c.render ? c.render(r) : (r[c.key] ?? "")}
+                    </div>
+                  ) : (
+                    c.render ? c.render(r) : (r[c.key] ?? "")
+                  )}
                 </td>
               ))}
             </tr>
