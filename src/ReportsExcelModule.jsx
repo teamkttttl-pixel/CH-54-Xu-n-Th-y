@@ -152,13 +152,16 @@ function DataTable({ columns, rows, loading, empty, rowClass }) {
   const coSticky = Object.keys(posL).length > 0
     || columns.some((c) => c.sticky === "right");
 
+  /* O DINH BAT BUOC PHAI CO NEN DUC HOAN TOAN.
+     Neu dung mau trong suot (vi du bg-slate-50/60) thi chu o cac cot
+     dang truot ben duoi se hien xuyen qua - loi "bong mo". */
   const stickyCls = (c, isHead) => {
     if (c.sticky === "left") {
-      return cx("sticky z-10", isHead ? "bg-slate-100" : "bg-white",
+      return cx("sticky z-20", isHead ? "bg-slate-100" : "bg-white group-hover:bg-slate-100",
         "after:absolute after:top-0 after:right-0 after:h-full after:w-px after:bg-slate-200");
     }
     if (c.sticky === "right") {
-      return cx("sticky right-0 z-10", isHead ? "bg-slate-100" : "bg-white",
+      return cx("sticky right-0 z-20", isHead ? "bg-slate-100" : "bg-white group-hover:bg-slate-100",
         "before:absolute before:top-0 before:left-0 before:h-full before:w-px before:bg-slate-200");
     }
     return "";
@@ -170,7 +173,7 @@ function DataTable({ columns, rows, loading, empty, rowClass }) {
     <div className="overflow-x-auto">
       <table className={cx("w-full text-sm", coSticky && "border-separate border-spacing-0")}>
         <thead>
-          <tr className="bg-slate-50/60">
+          <tr className="bg-slate-100">
             {columns.map((c) => (
               <th key={c.key} style={stickyStyle(c)}
                 className={cx("px-3 py-2.5 font-medium text-slate-600 whitespace-nowrap",
@@ -185,15 +188,15 @@ function DataTable({ columns, rows, loading, empty, rowClass }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i}
-              className={cx("group hover:bg-slate-50/60 transition",
-                rowClass ? rowClass(r) : "")}>
+              className={cx("group transition", rowClass ? rowClass(r) : "")}>
               {columns.map((c) => (
                 <td key={c.key} style={stickyStyle(c)}
                   className={cx("px-3 py-2 border-b border-slate-100",
                     (c.truncate || c.wrap) ? "align-top" : "whitespace-nowrap",
                     c.align === "right" ? "text-right tabular-nums" : "text-left",
                     c.strong ? "font-medium text-slate-800" : "text-slate-600",
-                    stickyCls(c, false), "group-hover:bg-slate-50/60")}>
+                    !c.sticky && "group-hover:bg-slate-50",
+                    stickyCls(c, false))}>
                   {/* line-clamp doi kieu hien thi, dat o the <td> se lam
                       o mat tinh chat o bang va vo bo cuc -> boc trong div */}
                   {(c.truncate || c.wrap) ? (
