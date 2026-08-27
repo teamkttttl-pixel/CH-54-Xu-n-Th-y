@@ -434,6 +434,79 @@ function AssetBlock({ a }) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Gop cong no theo tung doi tac + hop xem chi tiet                        */
+/*                                                                         */
+/* Bang chinh chi hien MOT DONG cho moi khach: tong no, tong tra, con no.  */
+/* Bam "Chi tiet" moi mo ra tung don cua khach do.                         */
+/* Viec gop lam ngay tren du lieu da tai ve, khong goi them CSDL.          */
+/* ---------------------------------------------------------------------- */
+
+function gopTheoDoiTac(rows, tenKey, noKey, traKey, tonKey) {
+  const m = new Map();
+  rows.forEach((r) => {
+    const k = r.partner_id || ("__" + r[tenKey]);
+    if (!m.has(k)) {
+      m.set(k, {
+        partner_id: r.partner_id, [tenKey]: r[tenKey], sdt: r.sdt,
+        [noKey]: 0, [traKey]: 0, [tonKey]: 0,
+        so_don: 0, ngay_tra: null, chi_tiet: [],
+      });
+    }
+    const g = m.get(k);
+    g[noKey]  += Number(r[noKey]  || 0);
+    g[traKey] += Number(r[traKey] || 0);
+    g[tonKey] += Number(r[tonKey] || 0);
+    g.so_don += 1;
+    g.chi_tiet.push(r);
+    if (r.ngay_tra && (!g.ngay_tra || r.ngay_tra > g.ngay_tra)) g.ngay_tra = r.ngay_tra;
+  });
+  return [...m.values()];
+}
+
+function DetailBox({ target, columns, onClose, onEdit }) {
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", esc);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center
+                    bg-slate-900/40 backdrop-blur-[2px] p-0 sm:p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <Card className="p-4 w-full sm:max-w-5xl max-h-[90vh] overflow-y-auto
+                       rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between mb-1">
+          <div>
+            <p className="text-sm font-medium text-slate-700">{target.ten}</p>
+            <p className="text-xs text-slate-500">
+              {target.sdt ? target.sdt + " · " : ""}{target.chi_tiet.length} đơn ·
+              còn nợ <span className="font-medium text-slate-700">{fmtVND(target.con_no)}</span>
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
+        </div>
+        <div className="mt-3">
+          <DataTable columns={columns} rows={target.chi_tiet} loading={false}
+            empty="Không có đơn nào" />
+        </div>
+        {onEdit && (
+          <p className="text-xs text-slate-400 mt-3">
+            Dòng nhập đầu kỳ có nút Sửa. Bút toán phát sinh thật thì không sửa được —
+            muốn điều chỉnh phải ghi bút toán mới.
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* 2. Khach no                                                             */
 /* ---------------------------------------------------------------------- */
 
@@ -450,6 +523,7 @@ function SheetCustomerDebt({ employee }) {
   const [error, setError] = useState("");
   const [tu, setTu] = useState("");
   const [pay, setPay] = useState(null);
+  const [xem, setXem] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -463,29 +537,54 @@ function SheetCustomerDebt({ employee }) {
 
   useEffect(() => { load(); }, [load]);
 
+  /* Bang chinh: moi khach MOT DONG */
   const columns = [
-    { key: "stt", label: "STT" },
-    { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
-    { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 132 },
+    { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 150 },
     { key: "sdt", label: "SĐT" },
-    { key: "noi_dung", label: "Nội dung", wrap: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
-    { key: "so_hd", label: "Ghi chú", wrap: true, render: (r) => clean(r.so_hd), raw: (r) => clean(r.so_hd) },
-    { key: "no_ps", label: "Nợ", align: "right", render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
-    { key: "da_tra", label: "Trả", align: "right", render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
-    { key: "ton_no", label: "Tồn nợ", align: "right", strong: true, render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
+    { key: "so_don", label: "Số đơn", align: "right" },
+    { key: "no_ps", label: "Nợ", align: "right",
+      render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
+    { key: "da_tra", label: "Trả", align: "right",
+      render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
+    { key: "ton_no", label: "Tồn nợ", align: "right", strong: true,
+      render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
-    { key: "tt", label: "", sticky: "right", render: (r) => (
-        r.partner_id && Math.abs(Number(r.ton_no || 0)) > 0 ? (
-          <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.khach,
-                                          account: "receivable", con_no: r.ton_no })}
-            className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
-            Thanh toán
+    { key: "tt", label: "", sticky: "right", raw: () => "", render: (r) => (
+        <div className="flex gap-1.5 whitespace-nowrap">
+          <button onClick={() => setXem({ ten: r.khach, sdt: r.sdt,
+                                          con_no: r.ton_no, chi_tiet: r.chi_tiet })}
+            className="text-xs rounded-xl px-2.5 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+            Chi tiết
           </button>
-        ) : null
-      ), raw: () => "" },
+          {r.partner_id && Math.abs(Number(r.ton_no || 0)) > 0 && (
+            <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.khach,
+                                            account: "receivable", con_no: r.ton_no })}
+              className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition">
+              Thanh toán
+            </button>
+          )}
+        </div>
+      ) },
   ];
 
-  const loc = locRows(rows, tu, ['khach', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu']);
+  /* Bang trong hop Chi tiet: tung don mot */
+  const chiTietCols = [
+    { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
+    { key: "noi_dung", label: "Nội dung", wrap: true,
+      render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Ghi chú", wrap: true,
+      render: (r) => clean(r.so_hd), raw: (r) => clean(r.so_hd) },
+    { key: "no_ps", label: "Nợ", align: "right",
+      render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
+    { key: "da_tra", label: "Trả", align: "right",
+      render: (r) => fmtVND(r.da_tra), raw: (r) => Number(r.da_tra || 0) },
+    { key: "ton_no", label: "Tồn nợ", align: "right", strong: true,
+      render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
+  ];
+
+  const loc = gopTheoDoiTac(
+    locRows(rows, tu, ['khach', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu']),
+    'khach', 'no_ps', 'da_tra', 'ton_no');
 
   const groups = ["bad_debt", "khach", "ncc"]
     .map((s) => ({ key: s, rows: loc.filter((r) => r.section === s) }))
@@ -525,6 +624,10 @@ function SheetCustomerDebt({ employee }) {
             <span className="font-semibold text-slate-800">{fmtVND(tongTonNo)}</span>
           </p>
         </>
+      )}
+
+      {xem && (
+        <DetailBox target={xem} columns={chiTietCols} onClose={() => setXem(null)} />
       )}
 
       {pay && (
@@ -609,6 +712,7 @@ function SheetPartnerDebt({ employee }) {
   const [error, setError] = useState("");
   const [tu, setTu] = useState("");
   const [pay, setPay] = useState(null);
+  const [xem, setXem] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -623,25 +727,46 @@ function SheetPartnerDebt({ employee }) {
   useEffect(() => { load(); }, [load]);
 
   const columns = [
-    { key: "stt", label: "STT" },
-    { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
-    { key: "doi_tac", label: "Đối tác", strong: true, sticky: "left", stickyW: 132 },
+    { key: "doi_tac", label: "Đối tác", strong: true, sticky: "left", stickyW: 150 },
     { key: "sdt", label: "SĐT" },
-    { key: "so_hd", label: "Ghi chú", wrap: true, render: (r) => clean(r.so_hd), raw: (r) => clean(r.so_hd) },
-    { key: "noi_dung", label: "Nội dung", wrap: true, render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
-    { key: "so_tien", label: "Số tiền", align: "right", render: (r) => fmtVND(r.so_tien), raw: (r) => Number(r.so_tien || 0) },
-    { key: "thanh_toan", label: "Thanh toán", align: "right", render: (r) => fmtVND(r.thanh_toan), raw: (r) => Number(r.thanh_toan || 0) },
-    { key: "no_con_lai", label: "Nợ còn lại", align: "right", strong: true, render: (r) => fmtVND(r.no_con_lai), raw: (r) => Number(r.no_con_lai || 0) },
+    { key: "so_don", label: "Số đơn", align: "right" },
+    { key: "so_tien", label: "Số tiền", align: "right",
+      render: (r) => fmtVND(r.so_tien), raw: (r) => Number(r.so_tien || 0) },
+    { key: "thanh_toan", label: "Thanh toán", align: "right",
+      render: (r) => fmtVND(r.thanh_toan), raw: (r) => Number(r.thanh_toan || 0) },
+    { key: "no_con_lai", label: "Nợ còn lại", align: "right", strong: true,
+      render: (r) => fmtVND(r.no_con_lai), raw: (r) => Number(r.no_con_lai || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
-    { key: "tt", label: "", sticky: "right", render: (r) => (
-        r.partner_id && Math.abs(Number(r.no_con_lai || 0)) > 0 ? (
-          <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.doi_tac,
-                                          account: "payable", con_no: r.no_con_lai })}
-            className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
-            Thanh toán
+    { key: "tt", label: "", sticky: "right", raw: () => "", render: (r) => (
+        <div className="flex gap-1.5 whitespace-nowrap">
+          <button onClick={() => setXem({ ten: r.doi_tac, sdt: r.sdt,
+                                          con_no: r.no_con_lai, chi_tiet: r.chi_tiet })}
+            className="text-xs rounded-xl px-2.5 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+            Chi tiết
           </button>
-        ) : null
-      ), raw: () => "" },
+          {r.partner_id && Math.abs(Number(r.no_con_lai || 0)) > 0 && (
+            <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.doi_tac,
+                                            account: "payable", con_no: r.no_con_lai })}
+              className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition">
+              Thanh toán
+            </button>
+          )}
+        </div>
+      ) },
+  ];
+
+  const chiTietCols = [
+    { key: "ngay", label: "Ngày", render: (r) => fmtDate(r.ngay) },
+    { key: "noi_dung", label: "Nội dung", wrap: true,
+      render: (r) => clean(r.noi_dung), raw: (r) => clean(r.noi_dung) },
+    { key: "so_hd", label: "Ghi chú", wrap: true,
+      render: (r) => clean(r.so_hd), raw: (r) => clean(r.so_hd) },
+    { key: "so_tien", label: "Số tiền", align: "right",
+      render: (r) => fmtVND(r.so_tien), raw: (r) => Number(r.so_tien || 0) },
+    { key: "thanh_toan", label: "Thanh toán", align: "right",
+      render: (r) => fmtVND(r.thanh_toan), raw: (r) => Number(r.thanh_toan || 0) },
+    { key: "no_con_lai", label: "Nợ còn lại", align: "right", strong: true,
+      render: (r) => fmtVND(r.no_con_lai), raw: (r) => Number(r.no_con_lai || 0) },
   ];
 
   const tong = rows.reduce((s, r) => s + Number(r.no_con_lai || 0), 0);
@@ -659,7 +784,7 @@ function SheetPartnerDebt({ employee }) {
       </p>
 
       <Card className="p-4">
-        <DataTable columns={columns} rows={locRows(rows, tu, ['doi_tac', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu'])} loading={loading}
+        <DataTable columns={columns} rows={gopTheoDoiTac(locRows(rows, tu, ['doi_tac', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu']), 'doi_tac', 'so_tien', 'thanh_toan', 'no_con_lai')} loading={loading}
           empty="Chưa có công nợ đối tác" />
         {rows.length > 0 && (
           <p className="text-sm mt-3 text-right">
@@ -668,6 +793,10 @@ function SheetPartnerDebt({ employee }) {
           </p>
         )}
       </Card>
+
+      {xem && (
+        <DetailBox target={xem} columns={chiTietCols} onClose={() => setXem(null)} />
+      )}
 
       {pay && (
         <PayDebtBox employee={employee} target={pay}
