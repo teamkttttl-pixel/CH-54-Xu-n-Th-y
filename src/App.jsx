@@ -3369,6 +3369,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
           <span className="text-xs font-medium text-slate-600 mb-1 block">Hình thức chi trả</span>
           <select value={form.payment_method} onChange={set("payment_method")} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
             <option value="bank_transfer">Chuyển khoản</option>
+            <option value="cash">Tiền mặt</option>
             <option value="debt_offset">Bù trừ công nợ (không chi tiền)</option>
           </select>
           {form.payment_method === "debt_offset" && (
@@ -7998,12 +7999,37 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
           </div>
           <div className="grid sm:grid-cols-2 gap-3 mt-3">
             <div>
-              <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chi *</span>
-              <BankSelect banks={banks} value={form.bank_account_id}
-                onChange={(v) => setForm((f) => ({ ...f, bank_account_id: v }))}
-                className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
-              <p className="text-[11px] text-slate-500 mt-1">Mọi khoản chi ra đều qua chuyển khoản.</p>
+              <span className="text-xs font-medium text-slate-600 mb-1 block">Hình thức chi *</span>
+              <div className="flex gap-1.5">
+                {[["cash", "Tiền mặt"], ["bank_transfer", "Chuyển khoản"]].map(([v, l]) => (
+                  <button type="button" key={v}
+                    onClick={() => setForm((f) => ({
+                      ...f, payment_method: v,
+                      bank_account_id: v === "cash" ? null : f.bank_account_id,
+                    }))}
+                    className={classNames(
+                      "rounded-xl px-3 py-2 text-sm border transition",
+                      form.payment_method === v
+                        ? "bg-brand-600 text-white border-brand-600"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {form.payment_method === "cash"
+                  ? "Chi thẳng từ tiền mặt tại quỹ, làm giảm tồn quỹ tiền mặt."
+                  : "Chi qua tài khoản, làm giảm tồn ngân hàng."}
+              </p>
             </div>
+            {form.payment_method === "bank_transfer" && (
+              <div>
+                <span className="text-xs font-medium text-slate-600 mb-1 block">Tài khoản chi *</span>
+                <BankSelect banks={banks} value={form.bank_account_id}
+                  onChange={(v) => setForm((f) => ({ ...f, bank_account_id: v }))}
+                  className="w-full !text-sm !px-3 !py-2 !rounded-xl" />
+              </div>
+            )}
           </div>
           <div className="mt-3">
             <TextField label="Diễn giải *" value={form.description}
@@ -10200,8 +10226,9 @@ function CashBookModule({ employee }) {
       </Card>
 
       <p className="text-[11px] text-slate-500 mt-3">
-        Tiền mặt chỉ ra khỏi két qua tạm ứng. Các khoản chi khác đi chuyển khoản nên vẫn hiện
-        trong sổ nhưng không làm đổi tồn quỹ.
+        Tiền mặt ra khỏi két theo hai đường: chi trực tiếp bằng tiền mặt (chi phí, nhập máy),
+        hoặc lập phiếu tạm ứng cho nhân sự giữ tiền. Khoản chi qua chuyển khoản vẫn hiện
+        trong sổ nhưng không làm đổi tồn quỹ tiền mặt.
       </p>
     </div>
   );
