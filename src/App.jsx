@@ -410,8 +410,10 @@ function CustomerForm({ initial, onCancel, onSaved, employee, existingMatch, onU
     full_name: initial.full_name || "", cccd: initial.cccd || "", cccd_issue_date: initial.cccd_issue_date || "",
     cccd_issue_place: initial.cccd_issue_place || "", date_of_birth: initial.date_of_birth || "",
     address: initial.address || "", phone: initial.phone || "", email: initial.email || "",
+    customer_type: initial.customer_type || "khach_le",
   } : {
     full_name: "", cccd: "", cccd_issue_date: "", cccd_issue_place: "", date_of_birth: "", address: "", phone: "", email: "",
+    customer_type: "khach_le",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -431,6 +433,7 @@ function CustomerForm({ initial, onCancel, onSaved, employee, existingMatch, onU
         date_of_birth: form.date_of_birth || null,
         address: form.address.trim() || null,
         phone: form.phone.trim() || null,
+        customer_type: form.customer_type || "khach_le",
         email: form.email.trim() || null,
       };
       if (initial?.id) {
@@ -475,6 +478,21 @@ function CustomerForm({ initial, onCancel, onSaved, employee, existingMatch, onU
         <TextField label="Nơi cấp" value={form.cccd_issue_place} onChange={set("cccd_issue_place")} />
         <TextField label="Email" value={form.email} onChange={set("email")} />
         <TextField label="Địa chỉ" value={form.address} onChange={set("address")} className="sm:col-span-2" />
+        <div className="sm:col-span-2">
+          <span className="text-xs font-medium text-slate-600 mb-1.5 block">Loại khách hàng</span>
+          <div className="flex flex-wrap gap-1.5">
+            {LOAI_KHACH.map(([v, l]) => (
+              <button type="button" key={v}
+                onClick={() => setForm((f) => ({ ...f, customer_type: v }))}
+                className={classNames("rounded-xl px-3 py-1.5 text-sm border transition",
+                  form.customer_type === v
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
         {error && <p className="text-xs text-rose-600 sm:col-span-2">{error}</p>}
         <div className="sm:col-span-2 flex gap-2 mt-1">
           <button type="submit" disabled={saving} className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-60">
@@ -1290,6 +1308,7 @@ function PrintDocModal({ type, order, customer, device, payments, contract, stor
 const LOAI_KHACH = [
   ["khach_le", "Khách lẻ"],
   ["ncc", "NCC"],
+  ["chu_co_so", "Chủ cơ sở"],
   ["nhan_vien", "Nhân viên"],
   ["noi_bo", "Nội bộ"],
 ];
