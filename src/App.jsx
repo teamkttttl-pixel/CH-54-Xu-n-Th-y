@@ -51,6 +51,15 @@ function fmtDate(d) {
   }
 }
 
+/* So sach cu chi ghi 5 so cuoi IMEI. Du lieu nap dau ky duoc dem 10 so 0
+   phia truoc cho du 15 ky tu, hien nguyen ra thi rat kho doc. Ham nay cat
+   lay 5 so cuoi de hien; gia tri day du van con trong CSDL va van xem duoc
+   khi re chuot len. */
+function imei5(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  return d ? d.slice(-5) : "";
+}
+
 function fmtVND(n) {
   if (n === null || n === undefined || n === "") return "—";
   const num = Number(n);
@@ -1149,12 +1158,13 @@ function InventoryModule({ employee, onCountChange }) {
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       {d.imei ? (
                         <>
-                          <p className="font-medium text-slate-700 doc-code">{d.imei}</p>
-                          {d.original_imei && d.original_imei !== d.imei && (
-                            <p className="text-[10px] text-slate-500 doc-code" title="IMEI gốc nhà sản xuất cấp">
-                              gốc {d.original_imei}
-                            </p>
-                          )}
+                          <p className="font-medium text-slate-700 doc-code"
+                            title={d.original_imei || d.imei}>
+                            {imei5(d.original_imei || d.imei)}
+                          </p>
+                          <p className="text-[10px] text-slate-400 doc-code" title="Mã máy do hệ thống sinh">
+                            {d.imei}
+                          </p>
                         </>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs font-normal px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
