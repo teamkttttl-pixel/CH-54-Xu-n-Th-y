@@ -1287,6 +1287,14 @@ function PrintDocModal({ type, order, customer, device, payments, contract, stor
 /* ---------------------------------------------------------------------- */
 /* Them khach ngay trong don hang - khong phai bo do sang man Khach hang   */
 /* ---------------------------------------------------------------------- */
+const LOAI_KHACH = [
+  ["khach_le", "Khách lẻ"],
+  ["ncc", "NCC"],
+  ["nhan_vien", "Nhân viên"],
+  ["noi_bo", "Nội bộ"],
+];
+const LOAI_KHACH_LABEL = Object.fromEntries(LOAI_KHACH);
+
 function QuickCustomerModal({ initialText, employee, onClose, onSaved }) {
   /* Nguoi dung thuong go lien "Nguyen Van A 0912345678" -> tach san ra */
   const tach = (t) => {
@@ -1303,6 +1311,7 @@ function QuickCustomerModal({ initialText, employee, onClose, onSaved }) {
   const [sdt, setSdt] = useState(goi.sdt);
   const [cccd, setCccd] = useState("");
   const [diaChi, setDiaChi] = useState("");
+  const [loai, setLoai] = useState("khach_le");
   const [trung, setTrung] = useState([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -1329,16 +1338,35 @@ function QuickCustomerModal({ initialText, employee, onClose, onSaved }) {
   const luu = async () => {
     if (!ten.trim()) { setErr("Nhập tên khách"); return; }
     setSaving(true); setErr("");
-    const { data, error } = await supabase.from("customers").insert({
+
+    /* Ghi dung nhung truong ma man Khach hang van ghi - thieu created_by
+       hoac updated_by la lenh chen bi tu choi */
+    const payload = {
       full_name: ten.trim(),
       phone: sdt.trim() || null,
       cccd: cccd.trim() || null,
       address: diaChi.trim() || null,
+      customer_type: loai,
       store_id: employee?.store_id || null,
-    }).select().single();
+      created_by: employee?.id || null,
+      updated_by: employee?.id || null,
+    };
+
+    const { data, error } = await supabase
+      .from("customers").insert(payload).select().maybeSingle();
+
+    if (error) { setSaving(false); setErr(error.message); return; }
+
+    if (data) { setSaving(false); onSaved(data); return; }
+
+    /* Chen xong nhung khong doc lai duoc ban ghi (phan quyen dong chan
+       buoc tra ve) -> tim lai theo SDT hoac ten */
+    const { data: lai } = await supabase.from("customers").select("*")
+      .eq("full_name", payload.full_name)
+      .order("created_at", { ascending: false }).limit(1);
     setSaving(false);
-    if (error) { setErr(error.message); return; }
-    onSaved(data);
+    if (lai && lai[0]) { onSaved(lai[0]); return; }
+    setErr("Đã lưu khách nhưng không đọc lại được. Bấm Hủy rồi tìm lại tên khách.");
   };
 
   return (
@@ -1355,8 +1383,23 @@ function QuickCustomerModal({ initialText, employee, onClose, onSaved }) {
           <TextField label="Tên khách" value={ten} onChange={(e) => setTen(e.target.value)} autoFocus />
           <TextField label="Số điện thoại" value={sdt} inputMode="numeric"
             onChange={(e) => setSdt(e.target.value.replace(/\D/g, ""))} />
-          <TextField label="CCCD" value={cccd} onChange={(e) => setCccd(e.target.value)} />
+          <TextField label="CCCD (nếu có)" value={cccd} onChange={(e) => setCccd(e.target.value)} />
           <TextField label="Địa chỉ" value={diaChi} onChange={(e) => setDiaChi(e.target.value)} />
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Loại khách hàng</label>
+            <div className="flex flex-wrap gap-1.5">
+              {LOAI_KHACH.map(([v, l]) => (
+                <button type="button" key={v} onClick={() => setLoai(v)}
+                  className={classNames(
+                    "rounded-xl px-3 py-1.5 text-sm border transition",
+                    loai === v
+                      ? "bg-brand-600 text-white border-brand-600"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {trung.length > 0 && (
@@ -1460,7 +1503,12 @@ function CustomerPicker({ value, onSelect, employee }) {
                 className="w-full text-left px-3 py-2 hover:bg-slate-50 text-sm border-b border-slate-50 last:border-0"
               >
                 <p className="font-medium text-slate-700">{c.full_name}</p>
-                <p className="text-xs text-slate-500">{c.phone || "—"} {c.cccd ? `· CCCD ${c.cccd}` : ""}</p>
+                <p className="text-xs text-slate-500">
+                  {c.phone || "—"}
+                  {c.cccd ? ` · CCCD ${c.cccd}` : ""}
+                  {c.customer_type && c.customer_type !== "khach_le"
+                    ? ` · ${LOAI_KHACH_LABEL[c.customer_type] || c.customer_type}` : ""}
+                </p>
               </button>
             ))
           )}
