@@ -34,6 +34,16 @@ function ymd(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+const NHOM_KHACH = [
+  ["", "Tất cả"],
+  ["khach_le", "Khách lẻ"],
+  ["ncc", "NCC"],
+  ["chu_co_so", "Chủ cơ sở"],
+  ["nhan_vien", "Nhân viên"],
+  ["noi_bo", "Nội bộ"],
+];
+const NHOM_LABEL = Object.fromEntries(NHOM_KHACH);
+
 /* Bo chu "iPhone" o dau ten may. Gan het hang trong kho la iPhone nen
    chu do chi to cot ma khong them thong tin. Du lieu trong kho GIU
    NGUYEN, day chi la cach hien thi. */
@@ -447,7 +457,7 @@ function gopTheoDoiTac(rows, tenKey, noKey, traKey, tonKey) {
     const k = r.partner_id || ("__" + r[tenKey]);
     if (!m.has(k)) {
       m.set(k, {
-        partner_id: r.partner_id, [tenKey]: r[tenKey], sdt: r.sdt,
+        partner_id: r.partner_id, [tenKey]: r[tenKey], sdt: r.sdt, loai_kh: r.loai_kh,
         [noKey]: 0, [traKey]: 0, [tonKey]: 0,
         so_don: 0, ngay_tra: null, chi_tiet: [],
       });
@@ -539,6 +549,7 @@ function SheetCustomerDebt({ employee }) {
   const [tu, setTu] = useState("");
   const [pay, setPay] = useState(null);
   const [xem, setXem] = useState(null);
+  const [nhom, setNhom] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -556,6 +567,8 @@ function SheetCustomerDebt({ employee }) {
   const columns = [
     { key: "khach", label: "Khách", strong: true, sticky: "left", stickyW: 150 },
     { key: "sdt", label: "SĐT" },
+    { key: "loai_kh", label: "Nhóm",
+      render: (r) => NHOM_LABEL[r.loai_kh] || "", raw: (r) => NHOM_LABEL[r.loai_kh] || "" },
     { key: "so_don", label: "Số đơn", align: "right" },
     { key: "no_ps", label: "Nợ", align: "right",
       render: (r) => fmtVND(r.no_ps), raw: (r) => Number(r.no_ps || 0) },
@@ -590,7 +603,8 @@ function SheetCustomerDebt({ employee }) {
   ];
 
   const loc = gopTheoDoiTac(
-    locRows(rows, tu, ['khach', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu']),
+    locRows(rows, tu, ['khach', 'sdt', 'noi_dung', 'so_hd', 'ghi_chu'])
+      .filter((r) => !nhom || r.loai_kh === nhom),
     'khach', 'no_ps', 'da_tra', 'ton_no');
 
   const groups = ["bad_debt", "khach", "ncc"]
@@ -605,6 +619,16 @@ function SheetCustomerDebt({ employee }) {
         exportDisabled={rows.length === 0}>
         <DateBox label="Tính đến" value={date} onChange={setDate} />
         <SearchBox value={tu} onChange={setTu} placeholder="Tìm khách, SĐT..." />
+        <div className="flex flex-wrap gap-1">
+          {NHOM_KHACH.map(([v, l]) => (
+            <button key={v} onClick={() => setNhom(v)}
+              className={cx("text-xs rounded-xl px-2.5 py-1.5 border transition",
+                nhom === v ? "bg-brand-600 text-white border-brand-600"
+                           : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
+              {l}
+            </button>
+          ))}
+        </div>
       </Toolbar>
       <ErrorNote msg={error} />
 
