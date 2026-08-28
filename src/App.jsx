@@ -9714,6 +9714,30 @@ function ServiceModule({ employee }) {
     load();
   };
 
+  /* Huy phieu DA GHI NHAN: tra lai gia von, ghi but toan dao cho cong no,
+     va go dong chi khoi so quy. Chi dung khi ghi nham. */
+  const reverse = async (r) => {
+    const ly_do = prompt(
+      `Hủy phiếu ${r.ticket_code} (${fmtVND(r.spa_cost)})?\n\n` +
+      `Giá vốn máy sẽ trừ lại ${fmtVND(r.spa_cost)}, công nợ được ghi bút toán đảo, ` +
+      `và khoản chi biến khỏi sổ quỹ.\n\n` +
+      `Chỉ dùng khi ghi nhầm. Nếu tiền đã trả thật và bên kia không trả lại ` +
+      `thì đừng hủy — hãy ghi một khoản chi phí riêng.\n\n` +
+      `Nhập lý do hủy:`
+    );
+    if (ly_do === null) return;
+    const { data, error } = await supabase.rpc("reverse_spa_service", {
+      p_ticket_id: r.id, p_reason: ly_do || null,
+    });
+    if (error) { alert(error.message); return; }
+    alert(
+      `Đã hủy ${data.ticket_code}.\n` +
+      `Giá vốn máy: ${fmtVND(data.cost_before)} → ${fmtVND(data.cost_after)}\n` +
+      `Bút toán đảo: ${data.so_but_toan_dao} dòng`
+    );
+    load();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
@@ -9814,6 +9838,9 @@ function ServiceModule({ employee }) {
                           <td className="px-3 py-2.5 text-right whitespace-nowrap">
                             {canManage && r.status === "in_progress" && (
                               <button onClick={() => cancel(r)} className="text-xs text-rose-500 hover:underline">Hủy phiếu cũ</button>
+                            )}
+                            {canManage && r.status === "done" && (
+                              <button onClick={() => reverse(r)} className="text-xs text-rose-500 hover:underline">Hủy phiếu</button>
                             )}
                           </td>
                         </tr>
