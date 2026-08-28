@@ -463,7 +463,24 @@ function gopTheoDoiTac(rows, tenKey, noKey, traKey, tonKey) {
   return [...m.values()];
 }
 
-function DetailBox({ target, columns, onClose, onEdit }) {
+function DetailBox({ target, columns, onClose, onPay }) {
+  /* Nut Thanh toan nam o TUNG DON trong hop chi tiet, khong o bang ngoai.
+     So tien duoc dien san bang so con no cua chinh don do. */
+  const cotDayDu = onPay
+    ? [...columns, {
+        key: "tt", label: "", sticky: "right", raw: () => "",
+        render: (r) => {
+          const con = Number(r[target.tonKey] || 0);
+          return target.partner_id && Math.abs(con) > 0 ? (
+            <button onClick={() => onPay(r, con)}
+              className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
+              Thanh toán
+            </button>
+          ) : null;
+        },
+      }]
+    : columns;
+
   useEffect(() => {
     const esc = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", esc);
@@ -492,15 +509,13 @@ function DetailBox({ target, columns, onClose, onEdit }) {
             className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
         </div>
         <div className="mt-3">
-          <DataTable columns={columns} rows={target.chi_tiet} loading={false}
+          <DataTable columns={cotDayDu} rows={target.chi_tiet} loading={false}
             empty="Không có đơn nào" />
         </div>
-        {onEdit && (
-          <p className="text-xs text-slate-400 mt-3">
-            Dòng nhập đầu kỳ có nút Sửa. Bút toán phát sinh thật thì không sửa được —
-            muốn điều chỉnh phải ghi bút toán mới.
-          </p>
-        )}
+        <p className="text-xs text-slate-400 mt-3">
+          Thu tiền theo từng đơn. Số tiền được điền sẵn bằng số còn nợ của đơn đó,
+          sửa lại được nếu khách trả một phần.
+        </p>
       </Card>
     </div>
   );
@@ -550,20 +565,12 @@ function SheetCustomerDebt({ employee }) {
       render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
     { key: "tt", label: "", sticky: "right", raw: () => "", render: (r) => (
-        <div className="flex gap-1.5 whitespace-nowrap">
-          <button onClick={() => setXem({ ten: r.khach, sdt: r.sdt,
-                                          con_no: r.ton_no, chi_tiet: r.chi_tiet })}
-            className="text-xs rounded-xl px-2.5 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-            Chi tiết
-          </button>
-          {r.partner_id && Math.abs(Number(r.ton_no || 0)) > 0 && (
-            <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.khach,
-                                            account: "receivable", con_no: r.ton_no })}
-              className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition">
-              Thanh toán
-            </button>
-          )}
-        </div>
+        <button onClick={() => setXem({ ten: r.khach, sdt: r.sdt, partner_id: r.partner_id,
+                                        con_no: r.ton_no, chi_tiet: r.chi_tiet,
+                                        tonKey: "ton_no", account: "receivable" })}
+          className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
+          Chi tiết
+        </button>
       ) },
   ];
 
@@ -627,7 +634,12 @@ function SheetCustomerDebt({ employee }) {
       )}
 
       {xem && (
-        <DetailBox target={xem} columns={chiTietCols} onClose={() => setXem(null)} />
+        <DetailBox target={xem} columns={chiTietCols} onClose={() => setXem(null)}
+          onPay={(r, con) => setPay({
+            partner_id: xem.partner_id, ten: xem.ten, account: "receivable",
+            con_no: con, goi_y: fmtVND(con),
+            don: clean(r.noi_dung) || clean(r.so_hd) || "",
+          })} />
       )}
 
       {pay && (
@@ -738,20 +750,12 @@ function SheetPartnerDebt({ employee }) {
       render: (r) => fmtVND(r.no_con_lai), raw: (r) => Number(r.no_con_lai || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
     { key: "tt", label: "", sticky: "right", raw: () => "", render: (r) => (
-        <div className="flex gap-1.5 whitespace-nowrap">
-          <button onClick={() => setXem({ ten: r.doi_tac, sdt: r.sdt,
-                                          con_no: r.no_con_lai, chi_tiet: r.chi_tiet })}
-            className="text-xs rounded-xl px-2.5 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
-            Chi tiết
-          </button>
-          {r.partner_id && Math.abs(Number(r.no_con_lai || 0)) > 0 && (
-            <button onClick={() => setPay({ partner_id: r.partner_id, ten: r.doi_tac,
-                                            account: "payable", con_no: r.no_con_lai })}
-              className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition">
-              Thanh toán
-            </button>
-          )}
-        </div>
+        <button onClick={() => setXem({ ten: r.doi_tac, sdt: r.sdt, partner_id: r.partner_id,
+                                        con_no: r.no_con_lai, chi_tiet: r.chi_tiet,
+                                        tonKey: "no_con_lai", account: "payable" })}
+          className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
+          Chi tiết
+        </button>
       ) },
   ];
 
@@ -795,7 +799,12 @@ function SheetPartnerDebt({ employee }) {
       </Card>
 
       {xem && (
-        <DetailBox target={xem} columns={chiTietCols} onClose={() => setXem(null)} />
+        <DetailBox target={xem} columns={chiTietCols} onClose={() => setXem(null)}
+          onPay={(r, con) => setPay({
+            partner_id: xem.partner_id, ten: xem.ten, account: "payable",
+            con_no: con, goi_y: fmtVND(con),
+            don: clean(r.noi_dung) || clean(r.so_hd) || "",
+          })} />
       )}
 
       {pay && (
@@ -1185,13 +1194,14 @@ function SheetOwnerReconcile() {
 /* ---------------------------------------------------------------------- */
 
 function PayDebtBox({ employee, target, onDone, onCancel }) {
-  const [amount, setAmount] = useState("");
+  /* So tien dien san bang so con no cua chinh don duoc bam */
+  const [amount, setAmount] = useState(target.goi_y || "");
   const [method, setMethod] = useState("");
   const [bankId, setBankId] = useState("");
   const [banks, setBanks] = useState([]);
   const [banksLoaded, setBanksLoaded] = useState(false);
   const [date, setDate] = useState(todayStr());
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(target.don || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
