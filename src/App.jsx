@@ -7732,6 +7732,75 @@ function PayPartnerBulkModal({ partner, total, onClose, onDone }) {
               <span className="text-xs font-medium text-slate-600 mb-1.5 block">Tài khoản chuyển tiền *</span>
               <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-lg" />
             </div>
+            {/* Tach BEN NHAN TIEN khoi DON VI LAM, giong man Nhap may.
+                De trong ca hai thi giu cach cu: treo no cho don vi lam
+                cua tung hang muc. */}
+            <div className="border border-slate-200 rounded-xl p-3 space-y-3">
+              <p className="text-xs font-medium text-slate-600">Thanh toán chi phí spa</p>
+
+              <label className="block">
+                <span className="text-xs text-slate-500 mb-1 block">
+                  Bên nhận tiền <span className="text-slate-400">(để trống = treo nợ cho đơn vị làm ở từng hạng mục)</span>
+                </span>
+                <select value={creditor} onChange={(e) => setCreditor(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
+                  <option value="">— theo từng hạng mục —</option>
+                  {suppliers.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </label>
+
+              <div>
+                <span className="text-xs text-slate-500 mb-1 block">Hình thức</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[["", "Treo nợ"], ["cash", "Tiền mặt"], ["bank_transfer", "Chuyển khoản"]].map(([v, l]) => (
+                    <button type="button" key={v || "debt"}
+                      onClick={() => { setPayMethod(v); if (v !== "bank_transfer") setBankId(""); if (!v) setPaid(""); }}
+                      className={classNames("rounded-xl px-3 py-1.5 text-sm border transition",
+                        payMethod === v
+                          ? "bg-brand-600 text-white border-brand-600"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {payMethod === "bank_transfer" && (
+                <label className="block">
+                  <span className="text-xs text-slate-500 mb-1 block">Tài khoản chi *</span>
+                  <select value={bankId} onChange={(e) => setBankId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
+                    <option value="">— chọn —</option>
+                    {banks.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.short_label || [b.bank_name, b.account_number ? "..." + String(b.account_number).slice(-4) : null].filter(Boolean).join(" ")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {payMethod && (
+                <label className="block">
+                  <span className="text-xs text-slate-500 mb-1 block">
+                    Số tiền trả <span className="text-slate-400">(để trống = trả hết {fmtVND(total)})</span>
+                  </span>
+                  <input type="text" inputMode="numeric" value={paid}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      setPaid(raw ? Number(raw).toLocaleString("vi-VN") : "");
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition" />
+                  {paid.trim() && Number(paid.replace(/\D/g, "")) < total && (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      Còn treo nợ {fmtVND(total - Number(paid.replace(/\D/g, "")))}
+                      {creditor ? "" : " — cần chọn bên nhận tiền để ghi khoản treo này"}
+                    </p>
+                  )}
+                </label>
+              )}
+            </div>
+
             <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
             {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
             <div className="flex gap-2">
@@ -8853,6 +8922,12 @@ function SpaServiceModal({ employee, onClose, onDone }) {
   const [device, setDevice] = useState(null);
   const [items, setItems] = useState([{ item_type: "battery", description: "", cost: "", vendor_id: "" }]);
   const [suppliers, setSuppliers] = useState([]);
+  const [banks, setBanks] = useState([]);
+  /* Ben nhan tien - de trong thi treo no cho don vi lam cua tung hang muc */
+  const [creditor, setCreditor] = useState("");
+  const [payMethod, setPayMethod] = useState("");   // "" = treo no
+  const [bankId, setBankId] = useState("");
+  const [paid, setPaid] = useState("");             // de trong = tra het
   const [doneAt, setDoneAt] = useState(todayStr());
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -8865,6 +8940,11 @@ function SpaServiceModal({ employee, onClose, onDone }) {
     (async () => {
       const { data } = await supabase.from("suppliers").select("id, name").order("name");
       setSuppliers(data || []);
+      const { data: bk } = await supabase.from("bank_accounts")
+        .select("id, bank_name, account_number, short_label, is_active, sort_order")
+        .eq("store_id", employee.store_id)
+        .order("sort_order", { ascending: true });
+      setBanks((bk || []).filter((b) => b.is_active !== false));
     })();
   }, []);
 
@@ -8881,6 +8961,10 @@ function SpaServiceModal({ employee, onClose, onDone }) {
     if (!device) { setError("Chọn máy cần spa."); return; }
     const valid = items.filter((x) => (Number(String(x.cost).replace(/\D/g, "")) || 0) > 0);
     if (valid.length === 0) { setError("Cần ít nhất một hạng mục có chi phí."); return; }
+    if (payMethod === "bank_transfer" && !bankId) { setError("Chọn tài khoản chi."); return; }
+    if (payMethod && paid.trim() && Number(paid.replace(/\D/g, "")) > total) {
+      setError("Số tiền trả vượt quá tổng chi phí spa."); return;
+    }
     setSaving(true); setError("");
     const { data, error: err } = await supabase.rpc("record_spa_service", {
       p_device_id: device.id,
@@ -8892,6 +8976,12 @@ function SpaServiceModal({ employee, onClose, onDone }) {
       })),
       p_note: note.trim() || null,
       p_done_at: doneAt,
+      p_creditor_vendor_id: creditor || null,
+      p_payment_method: payMethod || null,
+      p_bank_account_id: payMethod === "bank_transfer" ? (bankId || null) : null,
+      p_paid_amount: payMethod
+        ? (paid.trim() ? Number(paid.replace(/\D/g, "")) : null)
+        : null,
     });
     setSaving(false);
     if (err) { setError(err.message); return; }
