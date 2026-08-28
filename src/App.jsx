@@ -1284,11 +1284,118 @@ function PrintDocModal({ type, order, customer, device, payments, contract, stor
 /* Orders module — sales order + multi-method payments + auto contract   */
 /* ---------------------------------------------------------------------- */
 
-function CustomerPicker({ value, onSelect }) {
+/* ---------------------------------------------------------------------- */
+/* Them khach ngay trong don hang - khong phai bo do sang man Khach hang   */
+/* ---------------------------------------------------------------------- */
+function QuickCustomerModal({ initialText, employee, onClose, onSaved }) {
+  /* Nguoi dung thuong go lien "Nguyen Van A 0912345678" -> tach san ra */
+  const tach = (t) => {
+    const m = String(t || "").match(/(0\d[\d\s.()-]{7,})/);
+    if (!m) return { ten: String(t || "").trim(), sdt: "" };
+    return {
+      ten: String(t).replace(m[1], " ").replace(/\s+/g, " ").trim(),
+      sdt: m[1].replace(/\D/g, ""),
+    };
+  };
+  const goi = tach(initialText);
+
+  const [ten, setTen] = useState(goi.ten);
+  const [sdt, setSdt] = useState(goi.sdt);
+  const [cccd, setCccd] = useState("");
+  const [diaChi, setDiaChi] = useState("");
+  const [trung, setTrung] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  /* Canh bao truoc khi tao trung khach da co */
+  useEffect(() => {
+    const q = sdt.trim();
+    if (q.length < 8) { setTrung([]); return; }
+    let song = true;
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from("customers").select("*")
+        .ilike("phone", `%${q}%`).limit(5);
+      if (song) setTrung(data || []);
+    }, 300);
+    return () => { song = false; clearTimeout(t); };
+  }, [sdt]);
+
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+
+  const luu = async () => {
+    if (!ten.trim()) { setErr("Nhập tên khách"); return; }
+    setSaving(true); setErr("");
+    const { data, error } = await supabase.from("customers").insert({
+      full_name: ten.trim(),
+      phone: sdt.trim() || null,
+      cccd: cccd.trim() || null,
+      address: diaChi.trim() || null,
+      store_id: employee?.store_id || null,
+    }).select().single();
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    onSaved(data);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <Card className="p-4 w-full sm:max-w-lg rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-sm font-semibold text-slate-800">Thêm khách mới</p>
+          <button type="button" onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
+        </div>
+
+        <div className="space-y-3">
+          <TextField label="Tên khách" value={ten} onChange={(e) => setTen(e.target.value)} autoFocus />
+          <TextField label="Số điện thoại" value={sdt} inputMode="numeric"
+            onChange={(e) => setSdt(e.target.value.replace(/\D/g, ""))} />
+          <TextField label="CCCD" value={cccd} onChange={(e) => setCccd(e.target.value)} />
+          <TextField label="Địa chỉ" value={diaChi} onChange={(e) => setDiaChi(e.target.value)} />
+        </div>
+
+        {trung.length > 0 && (
+          <div className="mt-3 bg-amber-50 rounded-xl p-3">
+            <p className="text-xs text-amber-800 mb-2">
+              Đã có khách trùng số điện thoại. Chọn khách cũ để tránh tạo hai hồ sơ cho một người:
+            </p>
+            {trung.map((c) => (
+              <button type="button" key={c.id} onClick={() => onSaved(c)}
+                className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-amber-100 text-sm">
+                <span className="font-medium text-slate-700">{c.full_name}</span>
+                <span className="text-xs text-slate-500"> · {c.phone || "—"}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {err && <p className="text-xs text-rose-600 mt-3">{err}</p>}
+
+        <div className="flex gap-2 mt-4">
+          <button type="button" onClick={luu} disabled={saving}
+            className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50">
+            {saving ? "Đang lưu..." : "Lưu và chọn"}
+          </button>
+          <button type="button" onClick={onClose}
+            className="text-slate-500 hover:bg-slate-50 rounded-xl px-3 py-2 text-sm">Hủy</button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function CustomerPicker({ value, onSelect, employee }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  /* Tao khach ngay tai day, khong phai bo do don hang de sang man Khach hang */
+  const [them, setThem] = useState(null);
 
   useEffect(() => {
     if (!query.trim()) { setResults([]); return; }
@@ -1330,6 +1437,14 @@ function CustomerPicker({ value, onSelect }) {
           className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-sm placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
         />
       </div>
+      {them !== null && (
+        <QuickCustomerModal
+          initialText={them}
+          employee={employee}
+          onClose={() => setThem(null)}
+          onSaved={(c) => { setThem(null); setQuery(""); onSelect(c); }}
+        />
+      )}
       {open && query.trim() && (
         <div className="absolute z-10 w-full bg-white border border-slate-100 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
           {loading ? (
@@ -1349,9 +1464,13 @@ function CustomerPicker({ value, onSelect }) {
               </button>
             ))
           )}
-          <p className="px-3 py-2 text-xs text-slate-500 border-t border-slate-50">
-            Không thấy khách? Vào mục Khách hàng để thêm mới trước.
-          </p>
+          <button
+            type="button"
+            onClick={() => { setThem(query.trim()); setOpen(false); }}
+            className="w-full text-left px-3 py-2 border-t border-slate-100 text-sm text-brand-700 hover:bg-brand-50 flex items-center gap-1.5"
+          >
+            <Plus size={13} /> Thêm khách mới{query.trim() ? `: "${query.trim()}"` : ""}
+          </button>
         </div>
       )}
     </div>
@@ -1840,7 +1959,7 @@ function OrderForm({ onCancel, onSaved, employee }) {
       <form onSubmit={submit} className="space-y-4">
         <div>
           <span className="text-xs font-medium text-slate-600 mb-1 block">Khách hàng *</span>
-          <CustomerPicker value={customer} onSelect={setCustomer} />
+          <CustomerPicker value={customer} onSelect={setCustomer} employee={employee} />
         </div>
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -3008,7 +3127,7 @@ function SupplierPicker({ value, onSelect, employee }) {
                 <p className="text-[11px] text-slate-500 mb-1">
                   NCC này cũng mua máy của cửa hàng? Liên kết hồ sơ khách hàng để cấn trừ công nợ được.
                 </p>
-                <CustomerPicker value={linkCustomer} onSelect={setLinkCustomer} />
+                <CustomerPicker value={linkCustomer} onSelect={setLinkCustomer} employee={employee} />
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={createNew} disabled={creating || !newName.trim()} className="bg-brand-600 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-50">
@@ -3158,7 +3277,7 @@ function PurchaseForm({ onCancel, onSaved, employee }) {
         {sourceType === "customer" ? (
           <div>
             <span className="text-xs font-medium text-slate-600 mb-1 block">Khách hàng (bên bán máy) *</span>
-            <CustomerPicker value={customer} onSelect={setCustomer} />
+            <CustomerPicker value={customer} onSelect={setCustomer} employee={employee} />
             {customer && !customer.cccd && (
               <p className="text-xs text-amber-600 mt-1.5">⚠ Khách này chưa có CCCD trong hồ sơ — cần vào mục Khách hàng bổ sung trước.</p>
             )}
