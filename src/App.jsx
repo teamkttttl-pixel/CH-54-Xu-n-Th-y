@@ -3545,6 +3545,10 @@ const MODEL_TYPOS = [
   [/\bipnhone\b/gi, "iphone"], [/\biphoen\b/gi, "iphone"], [/\bipone\b/gi, "iphone"],
   [/\biphon\b/gi, "iphone"], [/\bip\b/gi, "iphone"], [/\bipx\b/gi, "iphone x"],
   [/\bpromax\b/gi, "pro max"], [/\bplusmax\b/gi, "plus"],
+  // Viet tat Pro Max ke toan hay dung
+  [/\bpxmax\b/gi, "pro max"], [/\bpmax\b/gi, "pro max"], [/\bprm\b/gi, "pro max"],
+  [/\bpmx\b/gi, "pro max"], [/\bprmax\b/gi, "pro max"], [/\bpx\b/gi, "pro max"],
+  [/\bpr\b/gi, "pro"], [/\bpl\b/gi, "plus"], [/\bmn\b/gi, "mini"],
 ];
 
 const STORAGE_VALUES = ["16", "32", "64", "128", "256", "512", "1024"];
@@ -3595,15 +3599,45 @@ function matchModel(text) {
   if (!key) return null;
 
   const list = typeof IPHONE_MODEL_LIST !== "undefined" ? IPHONE_MODEL_LIST : [];
+
   // Khớp chính xác sau khi bỏ dấu và khoảng trắng
   let hit = list.find((m) => loosen(m) === key);
   if (hit) return hit;
+
+  /* Nhân viên thường bỏ chữ "iPhone" và gõ thẳng "14promax 128 den ...".
+     Bỏ chữ iphone ở CẢ HAI PHÍA rồi so, thì "14promax..." vẫn khớp với
+     "iPhone 14 Pro Max".
+
+     So từ ĐẦU CHUỖI chứ không tìm ở giữa: người gõ luôn viết tên máy
+     trước. Tìm ở giữa thì "13pro 256 den 356789012345679" sẽ bắt nhầm
+     số 12 trong dãy IMEI thành iPhone 12.
+
+     Xếp tên dài trước để "14promax" thắng "14pro" và "14". */
+  const boIphone = (x) => loosen(x).replace(/^iphone/, "");
+  const keyNgan = key.replace(/^iphone/, "");
+  const theoDoDai = [...list].sort((a, b) => boIphone(b).length - boIphone(a).length);
+
+  hit = theoDoDai.find((m) => {
+    const t2 = boIphone(m);
+    return t2.length >= 1 && keyNgan.startsWith(t2);
+  });
+  if (hit) return hit;
+
   // Khớp một phần: lấy tên dài nhất nằm trong chuỗi
   const partial = list.filter((m) => key.includes(loosen(m)));
   if (partial.length > 0) {
     return partial.sort((a, b) => loosen(b).length - loosen(a).length)[0];
   }
   return null;
+}
+
+/* Sổ cũ chỉ ghi 5 số cuối IMEI. Đệm 10 số 0 phía trước cho đủ 15 ký tự,
+   giống hệt cách dữ liệu đầu kỳ đã nạp — nhờ vậy máy nhập tay hôm nay và
+   máy nạp từ sổ cũ nằm chung một khuôn, tìm kiếm ra cả hai. */
+function chuanImei(t) {
+  const d = String(t || "").replace(/\D/g, "");
+  if (!d) return "";
+  return d.length === 5 ? "0".repeat(10) + d : d;
 }
 
 // Đọc một dòng. Trả về { model, storage, color, imei, price, errors, warnings }
@@ -3662,9 +3696,10 @@ function parseDeviceLine(line, lineNo) {
 
   if (numIdx.length >= 2) {
     // Phân biệt theo bản chất, không theo độ dài:
-    //   IMEI thật có 14–16 chữ số
-    //   giá máy luôn từ 1 triệu trở lên và không dài tới 14 chữ số
-    const isImeiLike  = (t) => t.length >= 14 && t.length <= 16;
+    //   IMEI đầy đủ có 14–16 chữ số
+    //   sổ cũ chỉ ghi 5 SỐ CUỐI, nên 5 chữ số cũng tính là IMEI
+    //   giá máy luôn từ 1 triệu trở lên
+    const isImeiLike  = (t) => (t.length >= 14 && t.length <= 16) || t.length === 5;
     const isPriceLike = (t) => !isImeiLike(t) && Number(t) >= 1000000;
 
     let imeiI = numIdx.find((i2) => isImeiLike(tokens[i2]));
@@ -3680,11 +3715,11 @@ function parseDeviceLine(line, lineNo) {
       out.warnings.push("không chắc số nào là IMEI, số nào là giá — kiểm tra lại");
     }
 
-    if (imeiI !== undefined) { out.imei = tokens[imeiI]; used[imeiI] = true; }
+    if (imeiI !== undefined) { out.imei = chuanImei(tokens[imeiI]); used[imeiI] = true; }
     if (priceI !== undefined) { out.price = Number(tokens[priceI]); used[priceI] = true; }
     if (numIdx.length > 2) out.warnings.push("dòng có nhiều số hơn dự kiến, kiểm tra lại");
   } else if (numIdx.length === 1) {
-    out.imei = tokens[numIdx[0]];
+    out.imei = chuanImei(tokens[numIdx[0]]);
     used[numIdx[0]] = true;
     out.warnings.push("dòng không có giá nhập");
   } else {
@@ -3850,7 +3885,7 @@ function PasteImportModal({ employee, onClose, onDone }) {
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition"
               />
               <p className="text-[11px] text-slate-500 mt-1">
-                Thứ tự tự do. Hệ thống tự nhận tên máy, dung lượng, màu và IMEI.
+                Thứ tự tự do, gõ chữ "iPhone" hay không đều được. Viết tắt pxmax, pmax, pr, mn cũng hiểu. IMEI ghi 5 số cuối hay đủ 15 số đều nhận.
                 Gõ thêm giá vào cuối dòng cũng được — giá nào từ một triệu trở lên sẽ được hiểu là giá nhập.
               </p>
             </div>
