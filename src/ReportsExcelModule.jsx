@@ -422,6 +422,7 @@ function EditOpeningBox({ a, employee, date, onClose, onDone }) {
   const [cash, setCash] = useState(so(a.cash_close));
   const [bank, setBank] = useState(so(a.bank_close));
   const [von, setVon]   = useState(so(a.capital_opening));
+  const [coc, setCoc]   = useState(so(a.house_deposit));
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -447,6 +448,7 @@ function EditOpeningBox({ a, employee, date, onClose, onDone }) {
       p_bank_opening: num(bank),
       p_capital_opening: num(von),
       p_note: note.trim() || null,
+      p_deposit: num(coc),
     });
     setSaving(false);
     if (e) { setError(e.message); return; }
@@ -485,6 +487,8 @@ function EditOpeningBox({ a, employee, date, onClose, onDone }) {
           <O label="Tồn ngân hàng đầu kỳ" value={bank} onChange={setBank} />
           <O label="Vốn góp đầu kỳ" value={von} onChange={setVon}
             hint="Mốc để tính Lãi tạm tính. Sửa số này là đổi lãi của cả kỳ." />
+          <O label="Cọc thuê nhà" value={coc} onChange={setCoc}
+            hint="Khoản bên cho thuê đang giữ. Không liên quan tiền nhà hàng tháng." />
           <label className="block">
             <span className="text-xs text-slate-500 mb-1 block">Ghi chú</span>
             <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
@@ -497,7 +501,8 @@ function EditOpeningBox({ a, employee, date, onClose, onDone }) {
           <span className="font-medium text-slate-800 tabular-nums">
             {fmtVND(Number(a.total_assets || 0)
               - Number(a.cash_close || 0) - Number(a.bank_close || 0)
-              + num(cash) + num(bank) - num(von))}
+              + num(cash) + num(bank) - num(von)
+              - Number(a.house_deposit || 0) + num(coc))}
           </span>
         </div>
 
@@ -570,6 +575,172 @@ function AssetBlock({ a, employee, date, onSaved }) {
         chỗ phát sinh, không sửa thẳng tại đây.
       </p>
     </Card>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* But toan tho cua mot doi tac - sua / xoa tung dong                      */
+/*                                                                         */
+/* Bao cao Khach no GOP nhieu but toan thanh mot dong theo chung tu, nen   */
+/* dong tren bang khong co ma de thao tac. Hop nay lay ve tung but toan    */
+/* mot, co ma, co loai - sua duoc dong nhap dau ky, xoa duoc moi dong.     */
+/* ---------------------------------------------------------------------- */
+function LedgerEntriesBox({ employee, target, onClose, onChanged }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [edit, setEdit] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    const { data, error: e } = await supabase.rpc("list_ledger_entries", {
+      p_store_id: employee.store_id,
+      p_partner_id: target.partner_id,
+      p_account: target.account,
+    });
+    if (e) setError(e.message);
+    setRows(data || []);
+    setLoading(false);
+  }, [employee.store_id, target.partner_id, target.account]);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", esc);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  const xoa = async (r) => {
+    const ly_do = prompt(
+      `Xóa bút toán ${r.entry_code || ""} ${fmtVND(r.amount)}?\n\n` +
+      `Bản sao đầy đủ được lưu lại kèm lý do.\n\nNhập lý do xóa:`
+    );
+    if (ly_do === null) return;
+    if (!ly_do.trim()) { setError("Phải nhập lý do xóa."); return; }
+    const { error: e } = await supabase.rpc("admin_delete_ledger_entry", {
+      p_entry_id: r.id, p_reason: ly_do.trim(),
+    });
+    if (e) { setError(e.message); return; }
+    load(); onChanged?.();
+  };
+
+  const luuSua = async () => {
+    const { error: e } = await supabase.rpc("edit_opening_ledger", {
+      p_id: edit.id,
+      p_amount: Number(String(edit.amount).replace(/[^\d-]/g, "")) || null,
+      p_note: edit.note || null,
+      p_contract_no: edit.contract_no ?? null,
+      p_entry_date: edit.entry_date || null,
+    });
+    if (e) { setError(e.message); return; }
+    setEdit(null); load(); onChanged?.();
+  };
+
+  const tong = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center
+                    bg-slate-900/40 backdrop-blur-[2px] p-0 sm:p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <Card className="p-4 w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto
+                       rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between mb-1">
+          <div>
+            <p className="text-sm font-medium text-slate-700">
+              Bút toán công nợ — {target.ten}
+            </p>
+            <p className="text-xs text-slate-500">
+              {rows.length} dòng · số dư {fmtVND(tong)}
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
+        </div>
+
+        <ErrorNote msg={error} />
+
+        {loading ? (
+          <p className="text-sm text-slate-400 py-6 text-center">Đang tải...</p>
+        ) : (
+          <div className="mt-3 space-y-1.5">
+            {rows.map((r) => (
+              <div key={r.id} className="border border-slate-100 rounded-xl p-2.5">
+                {edit?.id === r.id ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      <input type="date" value={edit.entry_date || ""}
+                        onChange={(e) => setEdit({ ...edit, entry_date: e.target.value })}
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+                      <input type="text" inputMode="numeric" value={edit.amount}
+                        onChange={(e) => setEdit({ ...edit, amount: e.target.value })}
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-sm w-32 text-right tabular-nums" />
+                    </div>
+                    <input type="text" value={edit.note || ""} placeholder="Nội dung"
+                      onChange={(e) => setEdit({ ...edit, note: e.target.value })}
+                      className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+                    <input type="text" value={edit.contract_no || ""} placeholder="Ghi chú"
+                      onChange={(e) => setEdit({ ...edit, contract_no: e.target.value })}
+                      className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm" />
+                    <div className="flex gap-2">
+                      <button onClick={luuSua}
+                        className="rounded-xl px-3 py-1 text-xs bg-brand-600 text-white hover:bg-brand-700">
+                        Lưu
+                      </button>
+                      <button onClick={() => setEdit(null)}
+                        className="rounded-xl px-3 py-1 text-xs text-slate-500 hover:bg-slate-50">
+                        Hủy
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-700 break-words">
+                        {clean(r.note) || r.entry_type}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {fmtDate(r.entry_date)} · {r.entry_type}
+                        {r.contract_no ? ` · ${clean(r.contract_no)}` : ""}
+                        {r.is_bad_debt ? " · nợ khó đòi" : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-medium tabular-nums text-slate-800">
+                        {fmtVND(r.amount)}
+                      </span>
+                      {r.sua_duoc && (
+                        <button onClick={() => setEdit({ ...r, amount: String(r.amount) })}
+                          className="text-xs rounded-lg px-2 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200">
+                          Sửa
+                        </button>
+                      )}
+                      <button onClick={() => xoa(r)}
+                        className="text-xs rounded-lg px-2 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100">
+                        Xóa
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {rows.length === 0 && (
+              <p className="text-sm text-slate-400 py-6 text-center">Không có bút toán nào</p>
+            )}
+          </div>
+        )}
+
+        <p className="text-xs text-slate-400 mt-3">
+          Chỉ dòng nhập đầu kỳ mới sửa được. Bút toán phát sinh từ bán hàng hay
+          thanh toán thì xóa được nhưng không sửa — muốn điều chỉnh hãy xóa rồi
+          ghi lại, hoặc sửa ở chứng từ gốc.
+        </p>
+      </Card>
+    </div>
   );
 }
 
@@ -679,6 +850,7 @@ function SheetCustomerDebt({ employee }) {
   const [tu, setTu] = useState("");
   const [pay, setPay] = useState(null);
   const [xem, setXem] = useState(null);
+  const [butToan, setButToan] = useState(null);
   const [nhom, setNhom] = useState("");
 
   const load = useCallback(async () => {
@@ -714,6 +886,13 @@ function SheetCustomerDebt({ employee }) {
           className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
           Chi tiết
         </button>
+        {r.partner_id && ["ke_toan", "quan_ly", "chu"].includes(employee.role) && (
+          <button onClick={() => setButToan({ partner_id: r.partner_id, ten: r.khach,
+                                              account: "receivable" })}
+            className="text-xs rounded-xl px-2.5 py-1 ml-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap">
+            Sửa/Xóa
+          </button>
+        )}
       ) },
   ];
 
@@ -785,6 +964,11 @@ function SheetCustomerDebt({ employee }) {
             <span className="font-semibold text-slate-800">{fmtVND(tongTonNo)}</span>
           </p>
         </>
+      )}
+
+      {butToan && (
+        <LedgerEntriesBox employee={employee} target={butToan}
+          onClose={() => setButToan(null)} onChanged={load} />
       )}
 
       {xem && (
@@ -879,6 +1063,7 @@ function SheetPartnerDebt({ employee }) {
   const [tu, setTu] = useState("");
   const [pay, setPay] = useState(null);
   const [xem, setXem] = useState(null);
+  const [butToan, setButToan] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -910,6 +1095,13 @@ function SheetPartnerDebt({ employee }) {
           className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
           Chi tiết
         </button>
+        {r.partner_id && ["ke_toan", "quan_ly", "chu"].includes(employee.role) && (
+          <button onClick={() => setButToan({ partner_id: r.partner_id, ten: r.doi_tac,
+                                              account: "payable" })}
+            className="text-xs rounded-xl px-2.5 py-1 ml-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap">
+            Sửa/Xóa
+          </button>
+        )}
       ) },
   ];
 
@@ -951,6 +1143,11 @@ function SheetPartnerDebt({ employee }) {
           </p>
         )}
       </Card>
+
+      {butToan && (
+        <LedgerEntriesBox employee={employee} target={butToan}
+          onClose={() => setButToan(null)} onChanged={load} />
+      )}
 
       {xem && (
         <DetailBox target={xem} columns={chiTietCols} onClose={() => setXem(null)}
