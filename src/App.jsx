@@ -25,6 +25,40 @@ const ROLE_LABELS = {
   chu: "Chủ (đối soát 3 đơn vị)",
 };
 
+/* ---------------------------------------------------------------------- */
+/* Nut xoa dung o cuoi dong                                                */
+/*                                                                         */
+/* Xoa mot chung tu keo theo nhieu thu: don ban go ca thanh toan, cong no  */
+/* va tra may ve kho. Ham ben CSDL lo phan do. O day chi hoi cho chac va   */
+/* bat nhap ly do - ly do duoc luu cung ban sao day du cua dong bi xoa.    */
+/* ---------------------------------------------------------------------- */
+function DeleteRowButton({ rpc, id, label, extra, onDone }) {
+  const [busy, setBusy] = useState(false);
+
+  const run = async () => {
+    const ly_do = prompt(
+      `Xóa ${label}?\n\n` +
+      (extra ? extra + "\n\n" : "") +
+      `Bản sao đầy đủ được lưu lại kèm lý do, xóa nhầm thì còn đường lấy lại.\n\n` +
+      `Nhập lý do xóa:`
+    );
+    if (ly_do === null) return;
+    if (!ly_do.trim()) { alert("Phải nhập lý do xóa."); return; }
+    setBusy(true);
+    const { error } = await supabase.rpc(rpc, { ...id, p_reason: ly_do.trim() });
+    setBusy(false);
+    if (error) { alert(error.message); return; }
+    onDone?.();
+  };
+
+  return (
+    <button onClick={run} disabled={busy} title="Xóa"
+      className="text-slate-300 hover:text-rose-600 disabled:opacity-40 transition p-1">
+      <Trash2 size={14} />
+    </button>
+  );
+}
+
 function classNames(...a) {
   return a.filter(Boolean).join(" ");
 }
@@ -2462,6 +2496,15 @@ function OrderRow({ order, employee, onDeleted, onReconciled }) {
               onDone={() => { setShowCollect(false); setDetail(null); onDeleted(); }}
             />
           )}
+          {["ke_toan", "quan_ly", "chu"].includes(employee.role) && (
+            <DeleteRowButton
+              rpc="admin_delete_sales_order"
+              id={{ p_order_id: order.id }}
+              label={`đơn ${order.order_code}`}
+              extra="Máy sẽ quay lại kho, các lần thanh toán và công nợ của đơn này cũng bị gỡ."
+              onDone={onDeleted}
+            />
+          )}
           {loadingDetail ? <Loader2 size={14} className="animate-spin inline text-slate-300" /> : (
             <ChevronDown size={15} className={classNames("inline text-slate-300 transition-transform", expanded && "rotate-180")} onClick={loadDetail} />
           )}
@@ -4335,9 +4378,20 @@ function PurchaseModule({ employee }) {
 
   const totalDebt = purchases.reduce((s, p) => s + Math.max(0, Number(p.purchase_price || 0) - Number(p.paid_amount ?? p.purchase_price ?? 0)), 0);
 
+  /* Xoa phieu nhap phai go CA may da nhap va cong no NCC.
+     Ban cu chi xoa dong phieu, de lai may mo coi trong kho. */
   const remove = async (p) => {
-    if (!confirm(`Xóa phiếu thu mua "${p.purchase_code}"? Máy đã nhập kho sẽ không tự động bị xóa.`)) return;
-    const { error } = await supabase.from("purchase_orders").delete().eq("id", p.id);
+    const ly_do = prompt(
+      `Xóa phiếu thu mua ${p.purchase_code}?\n\n` +
+      `Máy đã nhập và công nợ nhà cung cấp của phiếu này cũng bị gỡ theo.\n` +
+      `Bản sao đầy đủ được lưu lại kèm lý do.\n\n` +
+      `Nhập lý do xóa:`
+    );
+    if (ly_do === null) return;
+    if (!ly_do.trim()) { alert("Phải nhập lý do xóa."); return; }
+    const { error } = await supabase.rpc("admin_delete_purchase_order", {
+      p_purchase_id: p.id, p_reason: ly_do.trim(),
+    });
     if (error) { alert(error.message); return; }
     load();
   };
@@ -7995,9 +8049,17 @@ function OtherExpenseTab({ employee, rows, loading, onChanged }) {
     setShowForm(false); onChanged();
   };
 
+  /* Di qua ham ben CSDL de moi lan xoa deu luu vet kem ban sao day du */
   const remove = async (r) => {
-    if (!confirm(`Xóa chi phí ${r.expense_code} — ${fmtVND(r.amount)}?`)) return;
-    const { error: err } = await supabase.from("expenses").delete().eq("id", r.id);
+    const ly_do = prompt(
+      `Xóa chi phí ${r.expense_code} — ${fmtVND(r.amount)}?\n\n` +
+      `Bản sao đầy đủ được lưu lại kèm lý do.\n\nNhập lý do xóa:`
+    );
+    if (ly_do === null) return;
+    if (!ly_do.trim()) { alert("Phải nhập lý do xóa."); return; }
+    const { error: err } = await supabase.rpc("admin_delete_expense", {
+      p_expense_id: r.id, p_reason: ly_do.trim(),
+    });
     if (err) { alert(err.message); return; }
     onChanged();
   };
