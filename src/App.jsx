@@ -7732,92 +7732,6 @@ function PayPartnerBulkModal({ partner, total, onClose, onDone }) {
               <span className="text-xs font-medium text-slate-600 mb-1.5 block">Tài khoản chuyển tiền *</span>
               <BankSelect banks={banks} value={bankId} onChange={setBankId} className="w-full !text-sm !px-3 !py-2 !rounded-lg" />
             </div>
-            {/* Tach BEN NHAN TIEN khoi DON VI LAM, giong man Nhap may.
-                De trong ca hai thi giu cach cu: treo no cho don vi lam
-                cua tung hang muc. */}
-            <div className="border border-slate-200 rounded-xl p-3 space-y-3">
-              <p className="text-xs font-medium text-slate-600">Thanh toán chi phí spa</p>
-
-              <label className="block">
-                <span className="text-xs text-slate-500 mb-1 block">
-                  Bên nhận tiền <span className="text-slate-400">(để trống = treo nợ cho đơn vị làm ở từng hạng mục)</span>
-                </span>
-                <select value={creditor}
-                  onChange={(e) => {
-                    if (e.target.value === "__them") { setThemNCC("creditor"); return; }
-                    setCreditor(e.target.value);
-                  }}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
-                  <option value="">— theo từng hạng mục —</option>
-                  {suppliers.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  <option value="__them">+ Thêm đơn vị...</option>
-                </select>
-              </label>
-
-              <div>
-                <span className="text-xs text-slate-500 mb-1 block">Hình thức</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {[["", "Treo nợ"], ["cash", "Tiền mặt"], ["bank_transfer", "Chuyển khoản"]].map(([v, l]) => (
-                    <button type="button" key={v || "debt"}
-                      onClick={() => { setPayMethod(v); if (v !== "bank_transfer") setBankId(""); if (!v) setPaid(""); }}
-                      className={classNames("rounded-xl px-3 py-1.5 text-sm border transition",
-                        payMethod === v
-                          ? "bg-brand-600 text-white border-brand-600"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {payMethod === "bank_transfer" && (
-                <label className="block">
-                  <span className="text-xs text-slate-500 mb-1 block">Tài khoản chi *</span>
-                  <select value={bankId} onChange={(e) => setBankId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
-                    <option value="">— chọn —</option>
-                    {banks.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.short_label || [b.bank_name, b.account_number ? "..." + String(b.account_number).slice(-4) : null].filter(Boolean).join(" ")}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              {payMethod && (
-                <label className="block">
-                  <span className="text-xs text-slate-500 mb-1 block">
-                    Số tiền trả <span className="text-slate-400">(để trống = trả hết {fmtVND(total)})</span>
-                  </span>
-                  <input type="text" inputMode="numeric" value={paid}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/\D/g, "");
-                      setPaid(raw ? Number(raw).toLocaleString("vi-VN") : "");
-                    }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition" />
-                  {paid.trim() && Number(paid.replace(/\D/g, "")) < total && (
-                    <p className="text-[11px] text-amber-700 mt-1">
-                      Còn treo nợ {fmtVND(total - Number(paid.replace(/\D/g, "")))}
-                      {creditor ? "" : " — cần chọn bên nhận tiền để ghi khoản treo này"}
-                    </p>
-                  )}
-                </label>
-              )}
-            </div>
-
-            {themNCC !== null && (
-              <QuickSupplierModal
-                onClose={() => setThemNCC(null)}
-                onSaved={(v) => {
-                  setSuppliers((xs) => xs.some((y) => y.id === v.id) ? xs : [...xs, v]);
-                  if (themNCC === "creditor") setCreditor(v.id);
-                  else setItem(themNCC, "vendor_id", v.id);
-                  setThemNCC(null);
-                }}
-              />
-            )}
-
             <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
             {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
             <div className="flex gap-2">
@@ -8938,7 +8852,7 @@ function DevicePickerInline({ employee, value, onPick, canSeeCost }) {
 /* ---------------------------------------------------------------------- */
 /* Them doi tac spa ngay trong phieu - khong phai bo do sang man khac      */
 /* ---------------------------------------------------------------------- */
-function QuickSupplierModal({ onClose, onSaved }) {
+function QuickSupplierModal({ employee, onClose, onSaved }) {
   const [ten, setTen] = useState("");
   const [sdt, setSdt] = useState("");
   const [ghiChu, setGhiChu] = useState("");
@@ -8968,10 +8882,13 @@ function QuickSupplierModal({ onClose, onSaved }) {
   const luu = async () => {
     if (!ten.trim()) { setErr("Nhập tên đơn vị"); return; }
     setSaving(true); setErr("");
+    /* Ghi dung nhung cot ma man Nha cung cap van ghi. Bang suppliers
+       KHONG co cot ghi chu, va store_id / created_by la bat buoc. */
     const { data, error } = await supabase.from("suppliers").insert({
-      name: ten.trim(),
+      name: [ten.trim(), ghiChu.trim() ? `(${ghiChu.trim()})` : ""].filter(Boolean).join(" "),
       phone: sdt.trim() || null,
-      note: ghiChu.trim() || null,
+      store_id: employee?.store_id || null,
+      created_by: employee?.id || null,
     }).select().maybeSingle();
     setSaving(false);
     if (error) { setErr(error.message); return; }
@@ -8994,7 +8911,8 @@ function QuickSupplierModal({ onClose, onSaved }) {
             onChange={(e) => setTen(e.target.value)} autoFocus />
           <TextField label="Số điện thoại" value={sdt} inputMode="numeric"
             onChange={(e) => setSdt(e.target.value.replace(/\D/g, ""))} />
-          <TextField label="Ghi chú" value={ghiChu} onChange={(e) => setGhiChu(e.target.value)} />
+          <TextField label="Ghi chú" value={ghiChu} onChange={(e) => setGhiChu(e.target.value)}
+            placeholder="thợ ngoài, nhân viên spa..." />
         </div>
 
         {trung.length > 0 && (
@@ -9181,6 +9099,93 @@ function SpaServiceModal({ employee, onClose, onDone }) {
                   <span>Giá vốn mới</span><span>{fmtVND(before + total)}</span>
                 </div>
               </div>
+            )}
+
+            {/* Tach BEN NHAN TIEN khoi DON VI LAM, giong man Nhap may.
+                De trong ca hai thi giu cach cu: treo no cho don vi lam
+                cua tung hang muc. */}
+            <div className="border border-slate-200 rounded-xl p-3 space-y-3">
+              <p className="text-xs font-medium text-slate-600">Thanh toán chi phí spa</p>
+
+              <label className="block">
+                <span className="text-xs text-slate-500 mb-1 block">
+                  Bên nhận tiền <span className="text-slate-400">(để trống = treo nợ cho đơn vị làm ở từng hạng mục)</span>
+                </span>
+                <select value={creditor}
+                  onChange={(e) => {
+                    if (e.target.value === "__them") { setThemNCC("creditor"); return; }
+                    setCreditor(e.target.value);
+                  }}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
+                  <option value="">— theo từng hạng mục —</option>
+                  {suppliers.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  <option value="__them">+ Thêm đơn vị...</option>
+                </select>
+              </label>
+
+              <div>
+                <span className="text-xs text-slate-500 mb-1 block">Hình thức</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[["", "Treo nợ"], ["cash", "Tiền mặt"], ["bank_transfer", "Chuyển khoản"]].map(([v, l]) => (
+                    <button type="button" key={v || "debt"}
+                      onClick={() => { setPayMethod(v); if (v !== "bank_transfer") setBankId(""); if (!v) setPaid(""); }}
+                      className={classNames("rounded-xl px-3 py-1.5 text-sm border transition",
+                        payMethod === v
+                          ? "bg-brand-600 text-white border-brand-600"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {payMethod === "bank_transfer" && (
+                <label className="block">
+                  <span className="text-xs text-slate-500 mb-1 block">Tài khoản chi *</span>
+                  <select value={bankId} onChange={(e) => setBankId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
+                    <option value="">— chọn —</option>
+                    {banks.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.short_label || [b.bank_name, b.account_number ? "..." + String(b.account_number).slice(-4) : null].filter(Boolean).join(" ")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {payMethod && (
+                <label className="block">
+                  <span className="text-xs text-slate-500 mb-1 block">
+                    Số tiền trả <span className="text-slate-400">(để trống = trả hết {fmtVND(total)})</span>
+                  </span>
+                  <input type="text" inputMode="numeric" value={paid}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      setPaid(raw ? Number(raw).toLocaleString("vi-VN") : "");
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition" />
+                  {paid.trim() && Number(paid.replace(/\D/g, "")) < total && (
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      Còn treo nợ {fmtVND(total - Number(paid.replace(/\D/g, "")))}
+                      {creditor ? "" : " — cần chọn bên nhận tiền để ghi khoản treo này"}
+                    </p>
+                  )}
+                </label>
+              )}
+            </div>
+
+            {themNCC !== null && (
+              <QuickSupplierModal
+                employee={employee}
+                onClose={() => setThemNCC(null)}
+                onSaved={(v) => {
+                  setSuppliers((xs) => xs.some((y) => y.id === v.id) ? xs : [...xs, v]);
+                  if (themNCC === "creditor") setCreditor(v.id);
+                  else setItem(themNCC, "vendor_id", v.id);
+                  setThemNCC(null);
+                }}
+              />
             )}
 
             <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
