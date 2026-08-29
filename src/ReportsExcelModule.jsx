@@ -880,19 +880,22 @@ function SheetCustomerDebt({ employee }) {
       render: (r) => fmtVND(r.ton_no), raw: (r) => Number(r.ton_no || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
     { key: "tt", label: "", sticky: "right", raw: () => "", render: (r) => (
-        <button onClick={() => setXem({ ten: r.khach, sdt: r.sdt, partner_id: r.partner_id,
-                                        con_no: r.ton_no, chi_tiet: r.chi_tiet,
-                                        tonKey: "ton_no", account: "receivable" })}
-          className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
-          Chi tiết
-        </button>
-        {r.partner_id && ["ke_toan", "quan_ly", "chu"].includes(employee.role) && (
-          <button onClick={() => setButToan({ partner_id: r.partner_id, ten: r.khach,
-                                              account: "receivable" })}
-            className="text-xs rounded-xl px-2.5 py-1 ml-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap">
-            Sửa/Xóa
+        /* render chi tra ve duoc MOT the, nen hai nut phai boc trong mot the bao */
+        <div className="flex gap-1.5 whitespace-nowrap">
+          <button onClick={() => setXem({ ten: r.khach, sdt: r.sdt, partner_id: r.partner_id,
+                                          con_no: r.ton_no, chi_tiet: r.chi_tiet,
+                                          tonKey: "ton_no", account: "receivable" })}
+            className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition">
+            Chi tiết
           </button>
-        )}
+          {r.partner_id && ["ke_toan", "quan_ly", "chu"].includes(employee.role) && (
+            <button onClick={() => setButToan({ partner_id: r.partner_id, ten: r.khach,
+                                                account: "receivable" })}
+              className="text-xs rounded-xl px-2.5 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+              Sửa/Xóa
+            </button>
+          )}
+        </div>
       ) },
   ];
 
@@ -1089,19 +1092,22 @@ function SheetPartnerDebt({ employee }) {
       render: (r) => fmtVND(r.no_con_lai), raw: (r) => Number(r.no_con_lai || 0) },
     { key: "ngay_tra", label: "Ngày trả", render: (r) => fmtDate(r.ngay_tra) },
     { key: "tt", label: "", sticky: "right", raw: () => "", render: (r) => (
-        <button onClick={() => setXem({ ten: r.doi_tac, sdt: r.sdt, partner_id: r.partner_id,
-                                        con_no: r.no_con_lai, chi_tiet: r.chi_tiet,
-                                        tonKey: "no_con_lai", account: "payable" })}
-          className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition whitespace-nowrap">
-          Chi tiết
-        </button>
-        {r.partner_id && ["ke_toan", "quan_ly", "chu"].includes(employee.role) && (
-          <button onClick={() => setButToan({ partner_id: r.partner_id, ten: r.doi_tac,
-                                              account: "payable" })}
-            className="text-xs rounded-xl px-2.5 py-1 ml-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 transition whitespace-nowrap">
-            Sửa/Xóa
+        /* render chi tra ve duoc MOT the, nen hai nut phai boc trong mot the bao */
+        <div className="flex gap-1.5 whitespace-nowrap">
+          <button onClick={() => setXem({ ten: r.doi_tac, sdt: r.sdt, partner_id: r.partner_id,
+                                          con_no: r.no_con_lai, chi_tiet: r.chi_tiet,
+                                          tonKey: "no_con_lai", account: "payable" })}
+            className="text-xs rounded-xl px-2.5 py-1 bg-brand-50 text-brand-700 hover:bg-brand-100 transition">
+            Chi tiết
           </button>
-        )}
+          {r.partner_id && ["ke_toan", "quan_ly", "chu"].includes(employee.role) && (
+            <button onClick={() => setButToan({ partner_id: r.partner_id, ten: r.doi_tac,
+                                                account: "payable" })}
+              className="text-xs rounded-xl px-2.5 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+              Sửa/Xóa
+            </button>
+          )}
+        </div>
       ) },
   ];
 
