@@ -380,7 +380,7 @@ function SheetCashBook({ employee }) {
         </div>
       )}
 
-      <AssetBlock a={assets} />
+      <AssetBlock a={assets} employee={employee} date={date} onSaved={load} />
     </div>
   );
 }
@@ -405,12 +405,140 @@ function AssetLine({ label, value, qty, sub, minus, strong }) {
   );
 }
 
-function AssetBlock({ a }) {
+/* ---------------------------------------------------------------------- */
+/* Sua so du dau ky                                                        */
+/*                                                                         */
+/* Chi ba dong nay do NGUOI NHAP: ton tien mat, ton ngan hang, von gop.    */
+/* Cac dong con lai trong khoi tai san deu duoc cong tu du lieu ben duoi   */
+/* nen khong sua thang o day duoc.                                         */
+/*                                                                         */
+/* Bang so du dau ky CHI SUA, KHONG XOA - day la moc tinh Lai tam tinh     */
+/* cua ca ky, xoa mat thi khong con goc de so sanh.                        */
+/* ---------------------------------------------------------------------- */
+function EditOpeningBox({ a, employee, date, onClose, onDone }) {
+  const ky = periodStart(date);
+  const so = (v) => (Number(v || 0) ? Number(v).toLocaleString("vi-VN") : "");
+
+  const [cash, setCash] = useState(so(a.cash_close));
+  const [bank, setBank] = useState(so(a.bank_close));
+  const [von, setVon]   = useState(so(a.capital_opening));
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", esc);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  const num = (v) => Number(String(v).replace(/\D/g, "") || 0);
+
+  const luu = async () => {
+    setSaving(true); setError("");
+    const { error: e } = await supabase.rpc("edit_opening_balance", {
+      p_store_id: employee.store_id,
+      p_period_start: ky,
+      p_cash_opening: num(cash),
+      p_bank_opening: num(bank),
+      p_capital_opening: num(von),
+      p_note: note.trim() || null,
+    });
+    setSaving(false);
+    if (e) { setError(e.message); return; }
+    onDone();
+  };
+
+  const O = ({ label, value, onChange, hint }) => (
+    <label className="block">
+      <span className="text-xs text-slate-500 mb-1 block">{label}</span>
+      <input type="text" inputMode="numeric" value={value}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/\D/g, "");
+          onChange(raw ? Number(raw).toLocaleString("vi-VN") : "");
+        }}
+        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-right tabular-nums" />
+      {hint && <span className="text-[11px] text-slate-400 mt-1 block">{hint}</span>}
+    </label>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center
+                    bg-slate-900/40 backdrop-blur-[2px] p-0 sm:p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <Card className="p-4 w-full sm:max-w-md rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between mb-1">
+          <p className="text-sm font-medium text-slate-700">Sửa số dư đầu kỳ</p>
+          <button onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">
+          Kỳ bắt đầu {fmtDate(ky)} · chỉ ba dòng dưới đây do người nhập
+        </p>
+
+        <div className="space-y-3">
+          <O label="Tồn tiền mặt đầu kỳ" value={cash} onChange={setCash} />
+          <O label="Tồn ngân hàng đầu kỳ" value={bank} onChange={setBank} />
+          <O label="Vốn góp đầu kỳ" value={von} onChange={setVon}
+            hint="Mốc để tính Lãi tạm tính. Sửa số này là đổi lãi của cả kỳ." />
+          <label className="block">
+            <span className="text-xs text-slate-500 mb-1 block">Ghi chú</span>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+          </label>
+        </div>
+
+        <div className="mt-3 bg-slate-50 rounded-xl px-3 py-2 text-xs text-slate-600">
+          Lãi tạm tính sau khi sửa:{" "}
+          <span className="font-medium text-slate-800 tabular-nums">
+            {fmtVND(Number(a.total_assets || 0)
+              - Number(a.cash_close || 0) - Number(a.bank_close || 0)
+              + num(cash) + num(bank) - num(von))}
+          </span>
+        </div>
+
+        <ErrorNote msg={error} />
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={luu} disabled={saving}
+            className="rounded-xl px-4 py-2 text-sm bg-brand-600 text-white hover:bg-brand-700 transition disabled:opacity-50">
+            {saving ? "Đang lưu..." : "Lưu"}
+          </button>
+          <button onClick={onClose}
+            className="rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 transition">
+            Hủy
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function AssetBlock({ a, employee, date, onSaved }) {
+  const [sua, setSua] = useState(false);
   if (!a) return null;
   const lai = Number(a.profit_estimate || 0);
   return (
     <Card className="p-4">
-      <p className="text-sm font-medium text-slate-700 mb-2">TÀI SẢN CUỐI NGÀY</p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-medium text-slate-700">TÀI SẢN CUỐI NGÀY</p>
+        {employee && ["ke_toan", "quan_ly", "chu"].includes(employee.role) && (
+          <button onClick={() => setSua(true)}
+            className="text-xs rounded-xl px-2.5 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+            Sửa số dư đầu kỳ
+          </button>
+        )}
+      </div>
+
+      {sua && (
+        <EditOpeningBox a={a} employee={employee} date={date}
+          onClose={() => setSua(false)}
+          onDone={() => { setSua(false); onSaved?.(); }} />
+      )}
       <div className="text-sm">
         <AssetLine label="Tồn tiền mặt" value={a.cash_close} />
         <AssetLine label="Tồn ngân hàng" value={a.bank_close} />
@@ -437,7 +565,9 @@ function AssetBlock({ a }) {
       </div>
       <p className="text-xs text-slate-400 mt-2">
         Lãi tạm tính = Tổng tài sản − Vốn góp đầu kỳ. Ba dòng máy rời nhau, cộng lại
-        bằng {fmtVND(a.stock_value)} ({a.stock_qty} cây).
+        bằng {fmtVND(a.stock_value)} ({a.stock_qty} cây). Các dòng máy tồn, khách nợ,
+        nợ NCC và lợi nhuận chưa chia được cộng từ dữ liệu bên dưới — sai thì sửa ở
+        chỗ phát sinh, không sửa thẳng tại đây.
       </p>
     </Card>
   );
