@@ -6478,7 +6478,7 @@ function InstallmentTracking({ employee }) {
                       </p>
                       {r.original_imei ? (
                         <p className="text-[11px] text-slate-500 doc-code" title="IMEI gốc — dùng để đối chiếu với đơn vị trả góp">
-                          {r.original_imei}
+                          {imei5(r.original_imei)}
                         </p>
                       ) : r.imei ? (
                         <p className="text-[11px] text-slate-500 doc-code">{r.imei}</p>
@@ -7520,7 +7520,7 @@ function CustomerReceivablePanel({ partner }) {
                   {[r.model, r.storage, r.color].filter(Boolean).join(" ")}
                 </td>
                 <td className="px-2 py-1.5 text-slate-600 doc-code">
-                  {r.original_imei || r.imei || "—"}
+                  {imei5(r.original_imei || r.imei) || "—"}
                 </td>
                 <td className="px-2 py-1.5 text-right text-slate-600 whitespace-nowrap">{fmtVND(r.total_amount)}</td>
                 <td className="px-2 py-1.5 text-right text-slate-500 whitespace-nowrap">{fmtVND(r.paid_amount)}</td>
@@ -7628,7 +7628,7 @@ function PartnerPayablePanel({ partner, onPaid }) {
                     <>
                       <p className="text-slate-700">{[r.model, r.storage, r.color].filter(Boolean).join(" ")}</p>
                       {(r.original_imei || r.imei) && (
-                        <p className="text-[10px] text-slate-500 doc-code">{r.original_imei || r.imei}</p>
+                        <p className="text-[10px] text-slate-500 doc-code">{imei5(r.original_imei || r.imei)}</p>
                       )}
                     </>
                   ) : r.screen_quantity ? (
@@ -7742,10 +7742,15 @@ function PayPartnerBulkModal({ partner, total, onClose, onDone }) {
                 <span className="text-xs text-slate-500 mb-1 block">
                   Bên nhận tiền <span className="text-slate-400">(để trống = treo nợ cho đơn vị làm ở từng hạng mục)</span>
                 </span>
-                <select value={creditor} onChange={(e) => setCreditor(e.target.value)}
+                <select value={creditor}
+                  onChange={(e) => {
+                    if (e.target.value === "__them") { setThemNCC("creditor"); return; }
+                    setCreditor(e.target.value);
+                  }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-500 transition">
                   <option value="">— theo từng hạng mục —</option>
                   {suppliers.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  <option value="__them">+ Thêm đơn vị...</option>
                 </select>
               </label>
 
@@ -7800,6 +7805,18 @@ function PayPartnerBulkModal({ partner, total, onClose, onDone }) {
                 </label>
               )}
             </div>
+
+            {themNCC !== null && (
+              <QuickSupplierModal
+                onClose={() => setThemNCC(null)}
+                onSaved={(v) => {
+                  setSuppliers((xs) => xs.some((y) => y.id === v.id) ? xs : [...xs, v]);
+                  if (themNCC === "creditor") setCreditor(v.id);
+                  else setItem(themNCC, "vendor_id", v.id);
+                  setThemNCC(null);
+                }}
+              />
+            )}
 
             <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
             {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
@@ -8884,7 +8901,7 @@ function DevicePickerInline({ employee, value, onPick, canSeeCost }) {
             {[value.model, value.storage, value.color].filter(Boolean).join(" ")}
           </p>
           <p className="text-xs text-slate-500 doc-code">
-            {value.original_imei || value.imei}
+            {imei5(value.original_imei || value.imei)}
             {canSeeCost && <span className="font-sans"> · giá vốn {fmtVND(value.cost_price)}</span>}
           </p>
         </div>
@@ -8908,7 +8925,7 @@ function DevicePickerInline({ employee, value, onPick, canSeeCost }) {
           <button key={d.id} onClick={() => onPick(d)} className="w-full text-left px-3 py-2 hover:bg-slate-50">
             <p className="text-sm text-slate-700">{[d.model, d.storage, d.color].filter(Boolean).join(" ")}</p>
             <p className="text-xs text-slate-500 doc-code">
-              {d.original_imei || d.imei}
+              {imei5(d.original_imei || d.imei)}
               {canSeeCost && <span className="font-sans"> · {fmtVND(d.cost_price)}</span>}
             </p>
           </button>
@@ -8918,11 +8935,105 @@ function DevicePickerInline({ employee, value, onPick, canSeeCost }) {
   );
 }
 
+/* ---------------------------------------------------------------------- */
+/* Them doi tac spa ngay trong phieu - khong phai bo do sang man khac      */
+/* ---------------------------------------------------------------------- */
+function QuickSupplierModal({ onClose, onSaved }) {
+  const [ten, setTen] = useState("");
+  const [sdt, setSdt] = useState("");
+  const [ghiChu, setGhiChu] = useState("");
+  const [trung, setTrung] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  /* Canh bao truoc khi tao trung ten - mot don vi hai ho so thi cong no chia doi */
+  useEffect(() => {
+    const q = ten.trim();
+    if (q.length < 2) { setTrung([]); return; }
+    let song = true;
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from("suppliers").select("id, name, phone")
+        .ilike("name", `%${q}%`).limit(5);
+      if (song) setTrung(data || []);
+    }, 300);
+    return () => { song = false; clearTimeout(t); };
+  }, [ten]);
+
+  useEffect(() => {
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+
+  const luu = async () => {
+    if (!ten.trim()) { setErr("Nhập tên đơn vị"); return; }
+    setSaving(true); setErr("");
+    const { data, error } = await supabase.from("suppliers").insert({
+      name: ten.trim(),
+      phone: sdt.trim() || null,
+      note: ghiChu.trim() || null,
+    }).select().maybeSingle();
+    setSaving(false);
+    if (error) { setErr(error.message); return; }
+    if (!data) { setErr("Đã lưu nhưng không đọc lại được. Bấm Hủy rồi chọn lại trong danh sách."); return; }
+    onSaved(data);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <Card className="p-4 w-full sm:max-w-md rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-sm font-semibold text-slate-800">Thêm đơn vị spa</p>
+          <button type="button" onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-lg leading-none px-1">×</button>
+        </div>
+
+        <div className="space-y-3">
+          <TextField label="Tên đơn vị / người làm *" value={ten}
+            onChange={(e) => setTen(e.target.value)} autoFocus />
+          <TextField label="Số điện thoại" value={sdt} inputMode="numeric"
+            onChange={(e) => setSdt(e.target.value.replace(/\D/g, ""))} />
+          <TextField label="Ghi chú" value={ghiChu} onChange={(e) => setGhiChu(e.target.value)} />
+        </div>
+
+        {trung.length > 0 && (
+          <div className="mt-3 bg-amber-50 rounded-xl p-3">
+            <p className="text-xs text-amber-800 mb-2">
+              Đã có đơn vị tên gần giống. Chọn lại để tránh một người thành hai hồ sơ, công nợ bị chia đôi:
+            </p>
+            {trung.map((v) => (
+              <button type="button" key={v.id} onClick={() => onSaved(v)}
+                className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-amber-100 text-sm">
+                <span className="font-medium text-slate-700">{v.name}</span>
+                {v.phone && <span className="text-xs text-slate-500"> · {v.phone}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {err && <p className="text-xs text-rose-600 mt-3">{err}</p>}
+
+        <div className="flex gap-2 mt-4">
+          <button type="button" onClick={luu} disabled={saving}
+            className="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50">
+            {saving ? "Đang lưu..." : "Lưu và chọn"}
+          </button>
+          <button type="button" onClick={onClose}
+            className="text-slate-500 hover:bg-slate-50 rounded-xl px-3 py-2 text-sm">Hủy</button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function SpaServiceModal({ employee, onClose, onDone }) {
   const [device, setDevice] = useState(null);
   const [items, setItems] = useState([{ item_type: "battery", description: "", cost: "", vendor_id: "" }]);
   const [suppliers, setSuppliers] = useState([]);
   const [banks, setBanks] = useState([]);
+  /* i = chi so hang muc dang them don vi; "creditor" = o ben nhan tien */
+  const [themNCC, setThemNCC] = useState(null);
   /* Ben nhan tien - de trong thi treo no cho don vi lam cua tung hang muc */
   const [creditor, setCreditor] = useState("");
   const [payMethod, setPayMethod] = useState("");   // "" = treo no
@@ -9039,10 +9150,15 @@ function SpaServiceModal({ employee, onClose, onDone }) {
                         className="w-full rounded-lg border border-slate-300 pl-2 pr-6 py-2 text-sm text-right tabular outline-none focus:ring-2 focus:ring-brand-400/40" />
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">đ</span>
                     </div>
-                    <select value={x.vendor_id} onChange={(e) => setItem(i, "vendor_id", e.target.value)}
+                    <select value={x.vendor_id}
+                      onChange={(e) => {
+                        if (e.target.value === "__them") { setThemNCC(i); return; }
+                        setItem(i, "vendor_id", e.target.value);
+                      }}
                       className="col-span-2 rounded-lg border border-slate-300 px-1 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-400/40">
                       <option value="">Tự làm</option>
                       {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      <option value="__them">+ Thêm đơn vị...</option>
                     </select>
                     <button onClick={() => delItem(i)} disabled={items.length === 1}
                       className="col-span-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 py-2">
